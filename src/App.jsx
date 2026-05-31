@@ -27,6 +27,26 @@ function showToast(message, type = 'success') {
   }, 2400);
 }
 
+// ==================== GROK API CONFIG ====================
+const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
+const GROK_MODEL = 'grok-3';
+
+const WARRANTY_STORY_SYSTEM_PROMPT = `Act as a senior Mercedes-Benz master technician with 18 years experience writing warranty stories that always pass review.
+Strict rules you must follow:
+
+Always structure every story using the 3 C's: Customer Concern, Cause, and Correction
+Every story must state that a battery charger was installed and maintained above 12.5 volts throughout testing
+Every story must state that an Xentry Quick Test was performed and reference any relevant codes found
+Always mention that all testing, Guided Tests, and data were reviewed in Xentry under the vehicle’s VIN in the cloud-based server
+When Xentry images or Guided Test results are provided, specifically reference the exact component locations, wiring circuits, pin numbers, and test results shown in those images
+Include specific technical details — SDS codes, Guided Test names, voltage readings, pin numbers, road test miles in and out, chassis ear results, wiring checks, etc.
+All tech stories must have a clear cause. State it directly.
+Write in natural first-person technician language. Sound like a real tech who did the work.
+Vary sentence structure and phrasing between every repair line on the same vehicle.
+Punch times must logically match the work described.
+
+Vehicle information: Customer concern for this line: All repairs on this RO: Current repair line: Xentry test data and images: Write only the warranty story for this specific line. Make it sound completely human.`;
+
 // ==================== STORY GENERATOR (Exact rules from prompt) ====================
 function buildWarrantyStory(ro, line) {
   const v = ro.vehicle;
@@ -117,6 +137,92 @@ function buildWarrantyStory(ro, line) {
   return story.replace(/\s{2,}/g, ' ').trim();
 }
 
+// ==================== REAL GROK API STORY GENERATOR ====================
+async function generateStoryWithGrok(ro, line, apiKey) {
+  if (!apiKey) {
+    throw new Error('NO_API_KEY');
+  }
+
+  const v = ro.vehicle || {};
+  const vehicleInfo = [
+    v.year,
+    v.model,
+    v.vin ? `VIN: ${v.vin}` : '',
+    v.mileageIn ? `Mileage In: ${v.mileageIn}` : '',
+    v.mileageOut ? `Mileage Out: ${v.mileageOut}` : ''
+  ].filter(Boolean).join(' | ');
+
+  const allRepairs = (ro.repairLines || [])
+    .map((l, i) => `Line ${l.lineNumber || i + 1}: ${l.description}`)
+    .join('\n');
+
+  const currentLineText = `Line ${line.lineNumber}: ${line.description}`;
+  const customerConcern = line.customerConcern || line.description || 'Not specified';
+  const techNotes = line.technicianNotes || 'None provided';
+
+  // Format extracted Xentry data nicely
+  const data = line.extractedData || {};
+  let xentryDataText = 'No Xentry diagnostic images or test data provided for this line.';
+  if (data.codes?.length || data.guidedTests?.length || data.measurements?.length || data.components?.length) {
+    xentryDataText = [
+      data.codes?.length ? `SDS / DTC Codes: ${data.codes.join(', ')}` : '',
+      data.guidedTests?.length ? `Guided Tests Performed: ${data.guidedTests.join(' | ')}` : '',
+      data.measurements?.length ? `Key Measurements: ${data.measurements.map(m => `${m.label}: ${m.value}`).join('; ')}` : '',
+      data.components?.length ? `Components: ${data.components.join(' | ')}` : '',
+      data.circuits?.length ? `Circuits / Pins Referenced: ${data.circuits.join(', ')}` : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  const userPrompt = `Vehicle information: ${vehicleInfo || 'Not provided'}
+
+All repairs on this RO:
+${allRepairs || 'Only this line'}
+
+Current repair line: ${currentLineText}
+
+Customer concern for this line: ${customerConcern}
+
+Technician notes / observations: ${techNotes}
+
+Xentry test data and images:
+${xentryDataText}
+
+Write only the warranty story for this specific line following all the rules in the system prompt. Make it sound completely human and natural.`;
+
+  const response = await fetch(GROK_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: GROK_MODEL,
+      messages: [
+        { role: 'system', content: WARRANTY_STORY_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.75,
+      max_tokens: 900
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    if (response.status === 401) throw new Error('INVALID_API_KEY');
+    if (response.status === 429) throw new Error('RATE_LIMIT');
+    throw new Error(`API_ERROR: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  const story = data.choices?.[0]?.message?.content?.trim();
+
+  if (!story) {
+    throw new Error('EMPTY_RESPONSE');
+  }
+
+  return story;
+}
+
 // ==================== XENTRY IMAGE ANALYSIS ====================
 function extractXentryDataFromText(ocrText, existing = {}) {
   const result = {
@@ -182,6 +288,11 @@ function App() {
   const [ocrProgress, setOcrProgress] = useState(0);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
+  // Grok API Key (stored only locally)
+  const [apiKey, setApiKey] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
   // Load from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('benztech_current_ro');
@@ -192,6 +303,10 @@ function App() {
         setView('ro');
       } catch (e) {}
     }
+
+    // Load Grok API key
+    const savedKey = localStorage.getItem('benztech_grok_api_key');
+    if (savedKey) setApiKey(savedKey);
   }, []);
 
   // PWA install prompt
@@ -602,34 +717,77 @@ function App() {
   };
 
   // ==================== WARRANTY STORIES ====================
-  const generateWarrantyStoryForCurrentLine = () => {
+  const generateWarrantyStoryForCurrentLine = async () => {
     const line = getCurrentLine();
     if (!line || !currentRO) return;
 
-    const story = buildWarrantyStory(currentRO, line);
-    updateRO(ro => ({
-      ...ro,
-      repairLines: ro.repairLines.map(l =>
-        l.id === currentLineId ? { ...l, warrantyStory: story } : l
-      )
-    }));
-    haptic('success');
-    showToast('Warranty story generated');
+    if (!apiKey) {
+      setShowSettings(true);
+      showToast('Please add your Grok API key in Settings first', 'error');
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const story = await generateStoryWithGrok(currentRO, line, apiKey);
+      updateRO(ro => ({
+        ...ro,
+        repairLines: ro.repairLines.map(l =>
+          l.id === currentLineId ? { ...l, warrantyStory: story } : l
+        )
+      }));
+      haptic('success');
+      showToast('Real warranty story generated with Grok');
+    } catch (err) {
+      console.error(err);
+      if (err.message === 'NO_API_KEY' || err.message === 'INVALID_API_KEY') {
+        showToast('Invalid or missing Grok API key. Check Settings.', 'error');
+        setShowSettings(true);
+      } else if (err.message === 'RATE_LIMIT') {
+        showToast('Rate limit reached. Please wait a moment and try again.', 'error');
+      } else {
+        showToast('Failed to generate story with Grok. Using template fallback.', 'error');
+        // Fallback to old template generator
+        const fallback = buildWarrantyStory(currentRO, line);
+        updateRO(ro => ({
+          ...ro,
+          repairLines: ro.repairLines.map(l =>
+            l.id === currentLineId ? { ...l, warrantyStory: fallback } : l
+          )
+        }));
+      }
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const regenerateStory = () => {
+  const regenerateStory = async () => {
     const line = getCurrentLine();
     if (!line || !currentRO) return;
 
-    const updatedLine = { ...line, _regenSeed: Date.now() };
-    const story = buildWarrantyStory(currentRO, updatedLine);
-    updateRO(ro => ({
-      ...ro,
-      repairLines: ro.repairLines.map(l =>
-        l.id === currentLineId ? { ...updatedLine, warrantyStory: story } : l
-      )
-    }));
-    showToast('New variation generated');
+    if (!apiKey) {
+      setShowSettings(true);
+      showToast('Add your Grok API key in Settings to regenerate with AI', 'error');
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const updatedLine = { ...line, _regenSeed: Date.now() };
+      const story = await generateStoryWithGrok(currentRO, updatedLine, apiKey);
+      updateRO(ro => ({
+        ...ro,
+        repairLines: ro.repairLines.map(l =>
+          l.id === currentLineId ? { ...updatedLine, warrantyStory: story } : l
+        )
+      }));
+      haptic('success');
+      showToast('New AI-generated variation');
+    } catch (err) {
+      showToast('Grok regeneration failed. Try again.', 'error');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const copyStoryToClipboard = () => {
@@ -644,23 +802,64 @@ function App() {
     });
   };
 
-  const generateAllStories = () => {
+  const generateAllStories = async () => {
     if (!currentRO) return;
+
+    if (!apiKey) {
+      setShowSettings(true);
+      showToast('Add your Grok API key in Settings to generate real stories', 'error');
+      return;
+    }
+
+    if (!confirm(`Generate real AI stories for all ${currentRO.repairLines.length} lines using Grok? This may take 10-30 seconds.`)) {
+      return;
+    }
+
+    setIsGenerating(true);
     let count = 0;
-    const updatedLines = currentRO.repairLines.map((line, index) => {
-      const l = { ...line, _regenSeed: 9000 + (index * 137) };
-      l.warrantyStory = buildWarrantyStory(currentRO, l);
-      count++;
-      return l;
-    });
+    const updatedLines = [];
+
+    for (const [index, line] of currentRO.repairLines.entries()) {
+      try {
+        const l = { ...line, _regenSeed: 9000 + (index * 137) };
+        l.warrantyStory = await generateStoryWithGrok(currentRO, l, apiKey);
+        updatedLines.push(l);
+        count++;
+      } catch (err) {
+        // Fallback for this line
+        const fallback = buildWarrantyStory(currentRO, line);
+        updatedLines.push({ ...line, warrantyStory: fallback });
+      }
+    }
+
     const updated = { ...currentRO, repairLines: updatedLines };
     saveRO(updated);
+    setIsGenerating(false);
     haptic('success');
-    showToast(`${count} warranty stories generated`);
+    showToast(`${count} real AI warranty stories generated with Grok`);
   };
 
   // ==================== RENDER HELPERS ====================
   const currentLine = getCurrentLine();
+
+  // ==================== API KEY HANDLERS ====================
+  const saveApiKey = (newKey) => {
+    const trimmed = newKey.trim();
+    setApiKey(trimmed);
+    if (trimmed) {
+      localStorage.setItem('benztech_grok_api_key', trimmed);
+      showToast('Grok API key saved locally');
+    } else {
+      localStorage.removeItem('benztech_grok_api_key');
+    }
+    setShowSettings(false);
+  };
+
+  const clearApiKey = () => {
+    setApiKey('');
+    localStorage.removeItem('benztech_grok_api_key');
+    showToast('API key cleared');
+  };
 
   const renderRepairLinesList = () => {
     if (!currentRO?.repairLines?.length) {
@@ -708,6 +907,15 @@ function App() {
   if (view === 'home') {
     return (
       <div className="app-container mx-auto min-h-dvh flex flex-col bg-[#0a0a0a] text-[#f5f5f7]">
+        <header className="ios-header sticky top-0 z-50 safe-top px-5 h-14 flex items-center justify-end">
+          <button onClick={() => setShowSettings(true)} className="w-9 h-9 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 002.572 1.065c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-2.572-1.065c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </header>
+
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
           <div className="mb-8">
             <div className="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-[#1f1f22] to-[#111113] border border-[#3a3a3c] flex items-center justify-center mb-4 shadow-2xl">
@@ -745,6 +953,7 @@ function App() {
 
         {/* Toast container */}
         <div id="toast-root" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[460px] px-4" />
+        {showSettings && <SettingsModal />}
       </div>
     );
   }
@@ -762,7 +971,15 @@ function App() {
               <div className="font-bold text-[17px] tracking-[-0.3px]">{currentRO.roNumber}</div>
               <div className="text-[12px] text-[#8e8e93] -mt-0.5">{[currentRO.vehicle.year, currentRO.vehicle.model].filter(Boolean).join(' ') || 'Vehicle details pending'}</div>
             </div>
-            <button onClick={() => editVehicleInfo()} className="px-3 py-1.5 text-xs font-bold rounded-full bg-[#2c2c2e] active:bg-[#38383a]">EDIT</button>
+            <div className="flex items-center gap-x-2">
+              <button onClick={() => editVehicleInfo()} className="px-3 py-1.5 text-xs font-bold rounded-full bg-[#2c2c2e] active:bg-[#38383a]">EDIT</button>
+              <button onClick={() => setShowSettings(true)} className="w-9 h-9 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]" title="Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 002.572 1.065c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-2.572-1.065c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -802,12 +1019,17 @@ function App() {
         </div>
 
         <div className="px-5 pt-2 pb-5 safe-bottom border-t border-[#38383a] bg-[#0a0a0a]">
-          <button onClick={generateAllStories} className="w-full h-14 rounded-2xl flex items-center justify-center gap-x-2 bg-[#2c2c2e] active:bg-[#38383a] text-sm font-semibold border border-[#3a3a3c]">
-            GENERATE ALL WARRANTY STORIES
+          <button 
+            onClick={generateAllStories} 
+            disabled={isGenerating}
+            className="w-full h-14 rounded-2xl flex items-center justify-center gap-x-2 bg-[#2c2c2e] active:bg-[#38383a] text-sm font-semibold border border-[#3a3a3c] disabled:opacity-70"
+          >
+            {isGenerating ? 'GENERATING WITH GROK...' : 'GENERATE ALL WARRANTY STORIES'}
           </button>
         </div>
 
         <div id="toast-root" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[460px] px-4" />
+        {showSettings && <SettingsModal />}
       </div>
     );
   }
@@ -822,7 +1044,14 @@ function App() {
               <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3.25"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
               <span className="font-bold">Back</span>
             </button>
-            <div className="flex-1 text-center pr-12">
+            <div className="flex-1 text-center pr-8 relative">
+              <button onClick={() => setShowSettings(true)} className="absolute right-4 top-3 w-8 h-8 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]" title="API Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.25">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 002.572 1.065c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-2.572-1.065c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
               <div className="font-mono text-[#0a84ff] text-sm">LINE {currentLine.lineNumber}</div>
               <div className="text-base leading-none font-semibold">{currentLine.description}</div>
             </div>
@@ -891,8 +1120,12 @@ function App() {
               <input type="text" value={currentLine.punchTime || '1.0'} onChange={(e) => updatePunchTime(e.target.value)} className="ios-input w-20 text-center py-1 text-sm font-mono" />
             </div>
 
-            <button onClick={generateWarrantyStoryForCurrentLine} className="w-full h-[58px] rounded-[18px] flex items-center justify-center gap-x-3 bg-gradient-to-r from-[#0a84ff] to-[#0077e6] text-white font-extrabold text-[15.5px] tracking-[-0.2px] shadow-[0_4px_18px_rgba(10,132,255,0.4)] active:scale-[0.985]">
-              GENERATE WARRANTY STORY
+            <button 
+              onClick={generateWarrantyStoryForCurrentLine} 
+              disabled={isGenerating}
+              className="w-full h-[58px] rounded-[18px] flex items-center justify-center gap-x-3 bg-gradient-to-r from-[#0a84ff] to-[#0077e6] text-white font-extrabold text-[15.5px] tracking-[-0.2px] shadow-[0_4px_18px_rgba(10,132,255,0.4)] active:scale-[0.985] disabled:opacity-70 disabled:cursor-wait"
+            >
+              {isGenerating ? 'GENERATING WITH GROK...' : 'GENERATE WARRANTY STORY'}
             </button>
           </div>
 
@@ -912,12 +1145,82 @@ function App() {
         </div>
 
         <div id="toast-root" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[460px] px-4" />
+        {showSettings && <SettingsModal />}
       </div>
     );
   }
 
+  // ==================== SETTINGS MODAL ====================
+  const SettingsModal = () => (
+    <div className="fixed inset-0 z-[110] bg-black/80 flex items-end" onClick={() => setShowSettings(false)}>
+      <div 
+        className="w-full max-w-[460px] mx-auto bg-[#1c1c1e] rounded-t-3xl p-6 pb-8 safe-bottom"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center mb-6 px-1">
+          <div className="font-bold text-2xl tracking-tight">Settings</div>
+          <button onClick={() => setShowSettings(false)} className="text-[#0a84ff] font-semibold text-lg">Done</button>
+        </div>
+
+        <div className="space-y-5">
+          {/* Grok API Key */}
+          <div>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <div>
+                <div className="font-semibold text-[15px]">Grok API Key</div>
+                <div className="text-xs text-[#8e8e93]">Stored only in your browser</div>
+              </div>
+              {apiKey && (
+                <div className="text-[10px] px-2 py-0.5 rounded bg-[#0a3c1f] text-[#30d158] font-medium">CONNECTED</div>
+              )}
+            </div>
+            
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="xai-..."
+              className="ios-input w-full font-mono text-sm tracking-wider"
+            />
+            
+            <div className="flex gap-x-3 mt-3">
+              <button 
+                onClick={() => saveApiKey(apiKey)}
+                className="flex-1 h-12 rounded-2xl bg-[#0a84ff] active:bg-[#0066cc] font-semibold text-sm"
+              >
+                SAVE KEY
+              </button>
+              {apiKey && (
+                <button 
+                  onClick={clearApiKey}
+                  className="px-6 h-12 rounded-2xl bg-[#2c2c2e] active:bg-[#3a3a3c] font-semibold text-sm text-[#ff9f0a]"
+                >
+                  CLEAR
+                </button>
+              )}
+            </div>
+            
+            <div className="mt-3 text-[11px] text-[#8e8e93] leading-snug px-1">
+              Get your free Grok API key at <span className="text-[#0a84ff]">console.grok.com</span> or xAI developer portal.
+              The key never leaves your device.
+            </div>
+          </div>
+
+          <div className="border-t border-[#38383a] pt-4 text-xs text-[#8e8e93] px-1">
+            BenzTech uses the Grok API to generate high-quality, review-passing Mercedes-Benz warranty stories following your exact master technician prompt.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   // Fallback
-  return <div className="p-8 text-center">Loading BenzTech...</div>;
+  return (
+    <>
+      <div className="p-8 text-center">Loading BenzTech...</div>
+      {showSettings && <SettingsModal />}
+    </>
+  );
 }
 
 export default App;

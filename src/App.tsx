@@ -37,6 +37,9 @@ interface RepairOrder {
     name: string;
   };
   complaints: string[];
+  // RO-level Xentry saved data / Quick Test images (scanned on second page after RO)
+  xentryImages?: Array<{ id: string; dataUrl: string; name: string }>;
+  xentryOcrTexts?: string[];
   repairLines: RepairLine[];
   createdAt?: string;
 }
@@ -98,7 +101,12 @@ async function generateWarrantyStoryWithGrok(
 
   // Include raw OCR from diagnostic photos for more accurate AI analysis
   const rawXentryOcr = (line.xentryOcrTexts && line.xentryOcrTexts.length > 0)
-    ? '\nRaw OCR from Xentry photos:\n' + line.xentryOcrTexts.join('\n---\n')
+    ? '\nRaw OCR from Xentry photos (per line):\n' + line.xentryOcrTexts.join('\n---\n')
+    : '';
+
+  // RO-level Xentry saved data (scanned on the RO review / second page) - critical for initial QT / saved data
+  const roRawXentryOcr = (ro.xentryOcrTexts && ro.xentryOcrTexts.length > 0)
+    ? '\nRO-level Xentry Saved Data / Quick Test OCR (from RO page scan):\n' + ro.xentryOcrTexts.join('\n---\n')
     : '';
 
   const selectedTemplate = STORY_TEMPLATES[Math.floor(Math.random() * STORY_TEMPLATES.length)];
@@ -120,6 +128,7 @@ Technician notes: ${line.technicianNotes || 'None'}
 Xentry test data and images:
 ${xentryText}
 ${rawXentryOcr}
+${roRawXentryOcr}
 ${historyContext}
 
 MANDATORY REQUIREMENTS - Your story MUST explicitly include all of these (use the example in system prompt as gold standard for depth):
@@ -324,27 +333,90 @@ function App() {
     input.click();
   };
 
-  // Helper to parse complaints A. B. C. etc from RO OCR text
+  // Helper to parse complaints A. B. C. etc from RO OCR text - robust for real Mercedes RO forms
   function extractComplaints(text: string): string[] {
-    const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 3);
+    if (!text || text.trim().length < 8) return [];
     const comps: string[] = [];
-    let capturing = false;
+    const rawLines = text.split(/[\n\r]+/);
+    const lines = rawLines.map(l => l.trim()).filter(l => l.length > 4);
+    let inComplaintSection = false;
+    const stopHeaders = /vin|ro\s*#|mileage|technician|tech|date|repair order|vehicle id|work order|parts|correction|cause|authorized/i;
+
     for (const line of lines) {
-      if (/customer\s*concern|complaint|concerns?/i.test(line)) {
-        capturing = true;
+      const lower = line.toLowerCase();
+      if (/customer\s*(complaint|concern|cc)|complaints?\s*:|concerns?\s*:|c\.?c\.?\s*[:\-]/i.test(line)) {
+        inComplaintSection = true;
         continue;
       }
-      if (capturing) {
-        const match = line.match(/^([A-Z]\.?\s*|\d+\.?\s*|-?\s*)(.+)$/);
-        if (match && match[2].length > 5) {
-          comps.push(`${match[1].trim()} ${match[2].trim()}`.trim());
-        } else if (comps.length === 0 && line.length > 15 && !/vin|ro\s*#|mileage|tech|date/i.test(line)) {
+      if (inComplaintSection && stopHeaders.test(line)) {
+        break;
+      }
+      if (inComplaintSection || comps.length === 0) {
+        // Lettered A. B) C : etc
+        let m = line.match(/^([A-Z])[\.\)\:\s\-–—]+\s*(.+)$/);
+        if (m && m[2]) {
+          const c = m[2].trim();
+          if (c.length > 6 && !/^(vin|mile|km|ro|date|tech|name|model|customer)/i.test(c)) {
+            comps.push(c);
+            continue;
+          }
+        }
+        // Numbered 1. 01) etc
+        m = line.match(/^(\d{1,2})[\.\)\:\s\-]+\s*(.+)$/);
+        if (m && m[2]) {
+          const c = m[2].trim();
+          if (c.length > 6 && !/^(vin|mile|km|ro|date|tech|name|model|customer)/i.test(c)) {
+            comps.push(c);
+            continue;
+          }
+        }
+        // Bullets
+        m = line.match(/^[\-\•\*]\s*(.+)$/);
+        if (m && m[1]) {
+          const c = m[1].trim();
+          if (c.length > 8 && !stopHeaders.test(c) && !/^(vin|mile|km|ro|date|tech|name|model)/i.test(c)) {
+            comps.push(c);
+            continue;
+          }
+        }
+        // Plain line in section
+        if (inComplaintSection && line.length > 12 && !stopHeaders.test(line) && !/^\d{1,2}[\.\)]?\s*$/.test(line)) {
           comps.push(line);
         }
-        if (comps.length > 0 && /vehicle|vin|mileage|technician|ro\s*#/i.test(line)) break;
       }
     }
-    return comps.length > 0 ? comps.slice(0, 8) : (text ? [text.slice(0, 300)] : ['Enter customer concerns manually']);
+
+    // Global regex fallback for patterns anywhere in OCR (no section header)
+    if (comps.length === 0) {
+      const patterns = [
+        /([A-Z])\.\s*([A-Za-z][^\n]{10,180})/g,
+        /([0-9]{1,2})[\.\)]\s*([A-Za-z][^\n]{10,180})/g,
+        /(?:Customer\s*)?Complaint[s]?:?\s*([A-Za-z][^\n]{10,250})/gi,
+        /Concern[s]?:?\s*([A-Za-z][^\n]{10,250})/gi,
+        /C\.?C\.?\s*[:\-]?\s*([A-Za-z][^\n]{10,250})/gi
+      ];
+      patterns.forEach(p => {
+        let match;
+        while ((match = p.exec(text)) !== null) {
+          const cand = (match[2] || match[1]).trim().replace(/[\s\-–—]+$/, '');
+          if (cand.length > 8 && !/vin|mileage|ro\s*#|date|tech|customer name/i.test(cand)) {
+            comps.push(cand);
+          }
+        }
+      });
+    }
+
+    // Dedupe (by first ~30 lower chars) + clean + limit
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const c of comps) {
+      const key = c.toLowerCase().slice(0, 30);
+      if (!seen.has(key) && c.length > 6) {
+        seen.add(key);
+        unique.push(c);
+      }
+    }
+    return unique.slice(0, 10);
   }
 
   function extractVehicleDetails(text: string) {
@@ -369,6 +441,8 @@ function App() {
       vehicle,
       customer: { name: '' },
       complaints,
+      xentryImages: [],
+      xentryOcrTexts: [],
       createdAt: new Date().toISOString(),
       repairLines: [{
         id: 'line-1',
@@ -423,6 +497,8 @@ function App() {
       vehicle: { vin: '', year: '', model: '', mileageIn: '', mileageOut: '' },
       customer: { name: '' },
       complaints: ['Enter customer concerns from RO'],
+      xentryImages: [],
+      xentryOcrTexts: [],
       createdAt: new Date().toISOString(),
       repairLines: [{
         id: 'line-1',
@@ -495,6 +571,93 @@ function App() {
       setIsProcessingOCR(false);
       setOcrProgress(0);
       alert(`${files.length} diagnostic photo(s) added and analyzed.`);
+    };
+    input.click();
+  };
+
+  // RO-level Xentry Saved Data scan (called from second page / renderRO)
+  // Stores images+OCR on the RO, and also merges parsed data + OCR texts into the *first* repair line
+  // so the line's story generator sees the initial Quick Test / saved data.
+  const addROXentryPhotos = async () => {
+    if (!currentRO) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.setAttribute('capture', 'environment');
+
+    input.onchange = async (e) => {
+      const files = Array.from((e.target as HTMLInputElement).files || []);
+      if (files.length === 0 || !currentRO) return;
+
+      setIsProcessingOCR(true);
+      setOcrProgress(0);
+
+      const latestROAtClick = allROs.find(r => r.id === currentRO?.id) || currentRO;
+
+      // RO level accumulators
+      let roUpdatedImgs: Array<{ id: string; dataUrl: string; name: string }> = [...(latestROAtClick.xentryImages || [])];
+      let roUpdatedOcr: string[] = [...(latestROAtClick.xentryOcrTexts || [])];
+
+      // Also merge into first repair line so extracted data flows to stories
+      const firstLine = latestROAtClick.repairLines[0];
+      let lineUpdatedExtracted: ExtractedData = { ...(firstLine?.extractedData || { codes: [], guidedTests: [], measurements: [], components: [], circuits: [] }) };
+      let lineUpdatedOcr: string[] = [...(firstLine?.xentryOcrTexts || [])];
+      const newImgsForRO: Array<{ id: string; dataUrl: string; name: string }> = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const dataUrl = await fileToDataUrl(file);
+        const imgEntry = { id: 'rox-' + Date.now() + i, dataUrl, name: file.name || `xentry-${i+1}.jpg` };
+        newImgsForRO.push(imgEntry);
+
+        try {
+          const worker = await Tesseract.createWorker('eng', 1, {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                setOcrProgress(Math.round(((i + m.progress) / files.length) * 100));
+              }
+            }
+          });
+          const { data: { text } } = await worker.recognize(file);
+          await worker.terminate();
+
+          const diag = parseDiagnosticText(text);
+          lineUpdatedExtracted = mergeExtracted(lineUpdatedExtracted, diag);
+          lineUpdatedOcr = [...lineUpdatedOcr, text];
+          roUpdatedOcr = [...roUpdatedOcr, text];
+        } catch (err) {
+          console.warn('RO Xentry OCR failed for one image', err);
+        }
+      }
+
+      roUpdatedImgs = [...roUpdatedImgs, ...newImgsForRO];
+
+      if (!latestROAtClick) return;
+
+      // Update first line with merged data + ocr
+      let updatedLines = latestROAtClick.repairLines;
+      if (firstLine) {
+        updatedLines = latestROAtClick.repairLines.map((l, idx) =>
+          idx === 0 ? {
+            ...l,
+            xentryImages: [...(l.xentryImages || []), ...newImgsForRO],
+            xentryOcrTexts: lineUpdatedOcr,
+            extractedData: lineUpdatedExtracted
+          } : l
+        );
+      }
+
+      const updatedRO: RepairOrder = {
+        ...latestROAtClick,
+        xentryImages: roUpdatedImgs,
+        xentryOcrTexts: roUpdatedOcr,
+        repairLines: updatedLines
+      };
+      saveRO(updatedRO);
+      setIsProcessingOCR(false);
+      setOcrProgress(0);
+      alert(`${files.length} Xentry saved data photo(s) added and analyzed.`);
     };
     input.click();
   };
@@ -674,10 +837,49 @@ function App() {
         </div>
 
         <div className="ios-card p-4 mb-6">
-          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-2">CUSTOMER CONCERNS (from RO)</div>
-          {currentRO.complaints.map((c, idx) => (
-            <div key={idx} className="text-sm leading-snug mb-1 border-l-2 border-[#0a84ff] pl-2">{c}</div>
-          ))}
+          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-2">CUSTOMER COMPLAINTS (A, B, C... from RO scan)</div>
+          {currentRO.complaints && currentRO.complaints.length > 0 ? (
+            currentRO.complaints.map((c, idx) => (
+              <div key={idx} className="text-sm leading-snug mb-1 border-l-2 border-[#0a84ff] pl-2">{c}</div>
+            ))
+          ) : (
+            <div className="text-sm text-[#8e8e93]">No complaints extracted. Edit line details or rescan RO.</div>
+          )}
+        </div>
+
+        {/* XENTRY SAVED DATA IMAGE SCAN section on the second (RO review) page */}
+        <div className="ios-card p-4 mb-6">
+          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-1">XENTRY SAVED DATA IMAGE SCAN</div>
+          <p className="text-[10px] text-[#8e8e93] mb-2 leading-snug">Capture XENTRY Quick Test, saved data, adaptations, Guided Test results, etc. These photos + OCR power accurate 3Cs warranty stories.</p>
+          <button
+            onClick={addROXentryPhotos}
+            disabled={isProcessingOCR}
+            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm mb-2"
+          >
+            <Camera size={18} />
+            {isProcessingOCR ? `ANALYZING XENTRY... ${ocrProgress}%` : 'SCAN / ADD XENTRY SAVED DATA'}
+          </button>
+          {currentRO.xentryImages && currentRO.xentryImages.length > 0 && (
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {currentRO.xentryImages.map((img, idx) => (
+                <img 
+                  key={idx} 
+                  src={img.dataUrl} 
+                  className="w-full h-16 object-cover rounded border border-[#38383a]" 
+                  alt={img.name}
+                  onClick={() => window.open(img.dataUrl)}
+                />
+              ))}
+            </div>
+          )}
+          {currentRO.repairLines[0]?.extractedData && (currentRO.repairLines[0].extractedData.codes.length > 0 || currentRO.repairLines[0].extractedData.guidedTests.length > 0 || currentRO.repairLines[0].extractedData.measurements.length > 0) && (
+            <div className="text-[10px] bg-[#1c1c1e] p-2 rounded">
+              <div className="font-semibold mb-0.5">Extracted from Xentry scans:</div>
+              {currentRO.repairLines[0].extractedData.codes.length > 0 && <div>Codes: {currentRO.repairLines[0].extractedData.codes.join(', ')}</div>}
+              {currentRO.repairLines[0].extractedData.guidedTests.length > 0 && <div>Guided: {currentRO.repairLines[0].extractedData.guidedTests.slice(0, 2).join(' | ')}</div>}
+              {currentRO.repairLines[0].extractedData.measurements.length > 0 && <div>Meas: {currentRO.repairLines[0].extractedData.measurements.slice(0,1).map(m => `${m.label}=${m.value}`).join('; ')}</div>}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between mb-3 px-1">

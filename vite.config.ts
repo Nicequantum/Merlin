@@ -33,5 +33,10 @@ export default defineConfig({
   ],
   server: {
     port: 5173
+  },
+  build: {
+    // Force esbuild minifier (avoids terser/serialize-javascript crypto issues in some envs)
+    minify: 'esbuild',
+    sourcemap: false
   }
 })

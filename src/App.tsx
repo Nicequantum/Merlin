@@ -590,8 +590,8 @@ function App() {
 
         <div className="pt-12">
           <div className="text-center mb-6">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#0a84ff] to-[#0066cc] flex items-center justify-center mb-3">
-              <span className="text-white text-3xl font-bold">★</span>
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#0a84ff] to-[#0066cc] flex items-center justify-center mb-3 p-1">
+              <img src="/logo.svg" alt="Maybach Tech logo" className="w-full h-full" />
             </div>
             <h1 className="text-3xl font-semibold tracking-tighter">Maybach Tech</h1>
             <p className="text-[#8e8e93] text-sm">Maybach Tech • Warranty Stories</p>
@@ -871,7 +871,10 @@ function App() {
       {/* Global header for non-main screens */}
       {view !== 'home' && view !== 'settings' && (
         <header className="ios-header h-14 px-4 flex items-center justify-between sticky top-0 z-50">
-          <div className="font-semibold tracking-tight">Maybach Tech</div>
+          <div className="flex items-center gap-2 font-semibold tracking-tight">
+            <img src="/logo.svg" alt="Maybach Tech" className="w-6 h-6" />
+            Maybach Tech
+          </div>
           <button onClick={() => setView('settings')} className="p-2 text-[#8e8e93]">
             <Settings size={20} />
           </button>

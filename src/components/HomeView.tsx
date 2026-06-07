@@ -1,5 +1,5 @@
 import { Camera, Plus, Settings } from 'lucide-react';
-import type { ImageAttachment, RepairOrder } from '../types';
+import type { PendingImage, RepairOrder } from '../types';
 
 interface HomeViewProps {
   technicianName?: string;
@@ -7,7 +7,7 @@ interface HomeViewProps {
   filteredROs: RepairOrder[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
-  pendingROImages: ImageAttachment[];
+  pendingROImages: PendingImage[];
   isProcessingOCR: boolean;
   ocrProgress: number;
   onAddROPhoto: () => void;
@@ -87,10 +87,10 @@ export function HomeView({
               {pendingROImages.map((img, idx) => (
                 <div key={img.id} className="relative group">
                   <img
-                    src={img.dataUrl}
+                    src={img.previewUrl}
                     className="w-full h-16 object-cover rounded border border-[#38383a] cursor-pointer"
                     alt={img.name}
-                    onClick={() => window.open(img.dataUrl)}
+                    onClick={() => window.open(img.previewUrl)}
                   />
                   <button
                     onClick={(e) => {

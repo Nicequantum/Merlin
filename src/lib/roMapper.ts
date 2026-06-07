@@ -10,6 +10,40 @@ function parseJson<T>(raw: string, fallback: T): T {
   }
 }
 
+function parseImageUrls(raw: string): ImageAttachment[] {
+  const parsed = parseJson<unknown>(raw, []);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((item) => {
+      if (typeof item === 'string') {
+        return { id: `img-${item.slice(-12)}`, url: item, name: 'image.jpg' };
+      }
+      if (item && typeof item === 'object') {
+        const record = item as Record<string, unknown>;
+        const url = typeof record.url === 'string' ? record.url : typeof record.dataUrl === 'string' && record.dataUrl.startsWith('http') ? record.dataUrl : null;
+        if (!url) return null;
+        return {
+          id: typeof record.id === 'string' ? record.id : `img-${Date.now()}`,
+          url,
+          name: typeof record.name === 'string' ? record.name : 'image.jpg',
+        };
+      }
+      return null;
+    })
+    .filter((img): img is ImageAttachment => img !== null);
+}
+
+export function sanitizeImageAttachments(images?: ImageAttachment[]): ImageAttachment[] {
+  return (images || [])
+    .filter((img) => img.url && img.url.startsWith('http'))
+    .map((img) => ({ id: img.id, url: img.url, name: img.name }));
+}
+
+export function imageUrlsToJson(images?: ImageAttachment[]): string {
+  return JSON.stringify(sanitizeImageAttachments(images));
+}
+
 export function dbToRepairOrder(ro: DbRO & { repairLines: DbLine[] }): RepairOrder {
   return {
     id: ro.id,
@@ -25,11 +59,9 @@ export function dbToRepairOrder(ro: DbRO & { repairLines: DbLine[] }): RepairOrd
     },
     customer: { name: decryptPII(ro.customerNameEncrypted) },
     complaints: parseJson<string[]>(ro.complaints, []),
-    xentryImages: parseJson<ImageAttachment[]>(ro.xentryImages, []),
+    xentryImages: parseImageUrls(ro.xentryImageUrls),
     xentryOcrTexts: parseJson<string[]>(ro.xentryOcrTexts, []),
-    repairLines: ro.repairLines
-      .sort((a, b) => a.lineNumber - b.lineNumber)
-      .map(dbToRepairLine),
+    repairLines: ro.repairLines.sort((a, b) => a.lineNumber - b.lineNumber).map(dbToRepairLine),
     createdAt: ro.createdAt.toISOString(),
     technicianId: ro.technicianId,
     technicianName: undefined,
@@ -43,7 +75,7 @@ export function dbToRepairLine(line: DbLine): RepairLine {
     description: line.description,
     customerConcern: line.customerConcern,
     technicianNotes: line.technicianNotes,
-    xentryImages: parseJson<ImageAttachment[]>(line.xentryImages, []),
+    xentryImages: parseImageUrls(line.xentryImageUrls),
     xentryOcrTexts: parseJson<string[]>(line.xentryOcrTexts, []),
     extractedData: parseJson<ExtractedData>(line.extractedData, {
       codes: [],
@@ -86,7 +118,7 @@ export function repairOrderToDbFields(input: RepairOrderInput) {
     mileageOut: input.vehicle.mileageOut,
     customerNameEncrypted: encryptPII(input.customer.name),
     complaints: JSON.stringify(input.complaints),
-    xentryImages: JSON.stringify(input.xentryImages || []),
+    xentryImageUrls: imageUrlsToJson(input.xentryImages),
     xentryOcrTexts: JSON.stringify(input.xentryOcrTexts || []),
   };
 }
@@ -97,7 +129,7 @@ export function repairLineToDbFields(line: RepairLine) {
     description: line.description,
     customerConcern: line.customerConcern,
     technicianNotes: line.technicianNotes,
-    xentryImages: JSON.stringify(line.xentryImages || []),
+    xentryImageUrls: imageUrlsToJson(line.xentryImages),
     xentryOcrTexts: JSON.stringify(line.xentryOcrTexts || []),
     extractedData: JSON.stringify(line.extractedData || {}),
     warrantyStory: line.warrantyStory ?? null,

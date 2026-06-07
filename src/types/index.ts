@@ -8,8 +8,15 @@ export interface ExtractedData {
 
 export interface ImageAttachment {
   id: string;
-  dataUrl: string;
+  url: string;
   name: string;
+}
+
+export interface PendingImage {
+  id: string;
+  previewUrl: string;
+  name: string;
+  file: File;
 }
 
 export interface RepairLine {

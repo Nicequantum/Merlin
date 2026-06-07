@@ -4,9 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { preprocessImageForOCR, runOCR } from '@/services/ocr';
-import type { AppView, ExtractedData, ImageAttachment, RepairLine, RepairOrder } from '@/types';
+import type { AppView, ExtractedData, ImageAttachment, PendingImage, RepairLine, RepairOrder } from '@/types';
 import { emptyExtractedData, mergeExtracted, parseDiagnosticText } from '@/utils/diagnosticParser';
-import { dataUrlToFile, fileToDataUrl } from '@/utils/fileHelpers';
 import { getSuggestions } from '@/utils/mercedesKb';
 import { createManualRepairOrder, createNewRepairLine } from '@/utils/repairOrderFactory';
 import {
@@ -17,6 +16,7 @@ import {
   sanitizeComplaints,
   sanitizeVehicle,
 } from '@/utils/roExtractor';
+import { uploadFileAsAttachment, uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
   onOcrStart: () => void;
@@ -30,7 +30,7 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
   const [currentLineId, setCurrentLineId] = useState<string | null>(null);
   const [allROs, setAllROs] = useState<RepairOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [pendingROImages, setPendingROImages] = useState<ImageAttachment[]>([]);
+  const [pendingROImages, setPendingROImages] = useState<PendingImage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -75,7 +75,7 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
             return [saved, ...prev];
           });
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Failed to save RO');
+          toast.error(e instanceof Error ? e.message : 'Failed to save repair order');
         }
       } else {
         setCurrentRO(null);
@@ -118,30 +118,27 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
     setView('ro');
   }, []);
 
-  const createROFromText = useCallback(
-    async (text: string) => {
-      const roNumber = extractRoNumberFromText(text);
-      const vehicle = sanitizeVehicle(extractVehicleDetails(text));
-      const complaints = sanitizeComplaints(extractComplaints(text));
-      const custName = extractCustomerName(text);
-      try {
-        const { repairOrder } = await api.createRepairOrder({
-          fromExtraction: true,
-          roNumber,
-          vehicle,
-          customerName: custName,
-          complaints,
-        } as never);
-        setAllROs((prev) => [repairOrder, ...prev]);
-        setCurrentRO(repairOrder);
-        setView('ro');
-        toast.success('Repair order created from scan');
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to create RO');
-      }
-    },
-    []
-  );
+  const createROFromText = useCallback(async (text: string) => {
+    const roNumber = extractRoNumberFromText(text);
+    const vehicle = sanitizeVehicle(extractVehicleDetails(text));
+    const complaints = sanitizeComplaints(extractComplaints(text));
+    const custName = extractCustomerName(text);
+    try {
+      const { repairOrder } = await api.createRepairOrder({
+        fromExtraction: true,
+        roNumber,
+        vehicle,
+        customerName: custName,
+        complaints,
+      } as never);
+      setAllROs((prev) => [repairOrder, ...prev]);
+      setCurrentRO(repairOrder);
+      setView('ro');
+      toast.success('Repair order created from scan');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create repair order');
+    }
+  }, []);
 
   const createROFromExtracted = useCallback(
     async (extracted: { vehicle: RepairOrder['vehicle']; complaints: string[]; customerName: string; roNumber?: string }) => {
@@ -158,7 +155,7 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
         setView('ro');
         toast.success('Repair order created from scan');
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to create RO');
+        toast.error(e instanceof Error ? e.message : 'Failed to create repair order');
       }
     },
     []
@@ -170,18 +167,15 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
     input.accept = 'image/*';
     input.setAttribute('capture', 'environment');
     input.multiple = true;
-    input.onchange = async (e) => {
+    input.onchange = (e) => {
       const files = Array.from((e.target as HTMLInputElement).files || []);
       if (files.length === 0) return;
-      const newImgs: ImageAttachment[] = [];
-      for (const file of files) {
-        const dataUrl = await fileToDataUrl(file);
-        newImgs.push({
-          id: 'roimg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-          dataUrl,
-          name: file.name || `page-${newImgs.length + 1}.jpg`,
-        });
-      }
+      const newImgs: PendingImage[] = files.map((file, i) => ({
+        id: 'roimg-' + Date.now() + '-' + i,
+        previewUrl: URL.createObjectURL(file),
+        name: file.name || `page-${i + 1}.jpg`,
+        file,
+      }));
       setPendingROImages((prev) => [...prev, ...newImgs]);
     };
     input.click();
@@ -191,18 +185,23 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
     if (pendingROImages.length === 0) return;
     onOcrStart();
     try {
-      const dataUrls = pendingROImages.map((img) => img.dataUrl);
+      setOcrProgress(10);
+      const attachments = await uploadFilesAsAttachments(
+        pendingROImages.map((img) => img.file),
+        'roimg'
+      );
+      const imageUrls = attachments.map((a) => a.url);
+
       try {
-        setOcrProgress(20);
-        const extracted = await api.extractRO(dataUrls);
+        setOcrProgress(40);
+        const extracted = await api.extractRO(imageUrls);
         setOcrProgress(90);
         await createROFromExtracted(extracted);
       } catch {
         let combinedText = '';
         for (let i = 0; i < pendingROImages.length; i++) {
           const img = pendingROImages[i];
-          const file = await dataUrlToFile(img.dataUrl, img.name);
-          const preprocessed = await preprocessImageForOCR(file);
+          const preprocessed = await preprocessImageForOCR(img.file);
           const text = await runOCR(preprocessed, (p) =>
             setOcrProgress(Math.round((i / pendingROImages.length) * 80 + (p / pendingROImages.length) * 80 * 0.2))
           );
@@ -211,6 +210,8 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
         setOcrProgress(95);
         await createROFromText(combinedText);
       }
+
+      pendingROImages.forEach((img) => URL.revokeObjectURL(img.previewUrl));
       setPendingROImages([]);
     } catch (error) {
       console.error('Multi-image RO extraction error', error);
@@ -229,7 +230,7 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
       setView('ro');
       toast.success('Manual repair order created');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create RO');
+      toast.error(e instanceof Error ? e.message : 'Failed to create repair order');
     }
   }, []);
 
@@ -386,10 +387,11 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
       let updatedExtracted = existingExtracted;
       let updatedOcrTexts = existingOcr;
       const newImgs: ImageAttachment[] = [];
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const dataUrl = await fileToDataUrl(file);
-        newImgs.push({ id: 'ximg-' + Date.now() + i, dataUrl, name: file.name });
+        const attachment = await uploadFileAsAttachment(file, 'ximg');
+        newImgs.push(attachment);
         try {
           const pre = await preprocessImageForOCR(file);
           const text = await runOCR(pre, (p) => setOcrProgress(Math.round(((i + p) / files.length) * 100)));
@@ -400,6 +402,7 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
           console.warn('Xentry OCR failed for one image', err);
         }
       }
+
       return { newImgs, updatedExtracted, updatedOcrTexts, allImages: [...existingImages, ...newImgs] };
     },
     [setOcrProgress]
@@ -422,25 +425,30 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
           onOcrFinish();
           return;
         }
-        const result = await processXentryImages(
-          files,
-          lineForExtract.xentryImages || [],
-          lineForExtract.xentryOcrTexts || [],
-          lineForExtract.extractedData || emptyExtractedData()
-        );
-        const updatedLines = latestRO.repairLines.map((l) =>
-          l.id === lineId
-            ? { ...l, xentryImages: result.allImages, xentryOcrTexts: result.updatedOcrTexts, extractedData: result.updatedExtracted }
-            : l
-        );
-        const updated = { ...latestRO, repairLines: updatedLines };
-        await saveRO(updated);
-        onOcrFinish();
-        const updatedLine = updatedLines.find((l) => l.id === lineId);
-        if (updatedLine && (!updatedLine.technicianNotes || updatedLine.technicianNotes.trim().length < 5)) {
-          setTimeout(() => applySmartDefaultsToLine(lineId), 60);
+        try {
+          const result = await processXentryImages(
+            files,
+            lineForExtract.xentryImages || [],
+            lineForExtract.xentryOcrTexts || [],
+            lineForExtract.extractedData || emptyExtractedData()
+          );
+          const updatedLines = latestRO.repairLines.map((l) =>
+            l.id === lineId
+              ? { ...l, xentryImages: result.allImages, xentryOcrTexts: result.updatedOcrTexts, extractedData: result.updatedExtracted }
+              : l
+          );
+          const updated = { ...latestRO, repairLines: updatedLines };
+          await saveRO(updated);
+          const updatedLine = updatedLines.find((l) => l.id === lineId);
+          if (updatedLine && (!updatedLine.technicianNotes || updatedLine.technicianNotes.trim().length < 5)) {
+            setTimeout(() => applySmartDefaultsToLine(lineId), 60);
+          }
+          toast.success(`${files.length} diagnostic photo(s) analyzed`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
+        } finally {
+          onOcrFinish();
         }
-        toast.success(`${files.length} diagnostic photo(s) analyzed`);
       };
       input.click();
     },
@@ -463,34 +471,39 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
         onOcrFinish();
         return;
       }
-      const firstLine = latestRO.repairLines[0];
-      const result = await processXentryImages(
-        files,
-        latestRO.xentryImages || [],
-        latestRO.xentryOcrTexts || [],
-        firstLine?.extractedData || emptyExtractedData()
-      );
-      let updatedLines = latestRO.repairLines;
-      if (firstLine) {
-        updatedLines = latestRO.repairLines.map((l, idx) =>
-          idx === 0
-            ? {
-                ...l,
-                xentryImages: [...(l.xentryImages || []), ...result.newImgs],
-                xentryOcrTexts: result.updatedOcrTexts,
-                extractedData: result.updatedExtracted,
-              }
-            : l
+      try {
+        const firstLine = latestRO.repairLines[0];
+        const result = await processXentryImages(
+          files,
+          latestRO.xentryImages || [],
+          latestRO.xentryOcrTexts || [],
+          firstLine?.extractedData || emptyExtractedData()
         );
+        let updatedLines = latestRO.repairLines;
+        if (firstLine) {
+          updatedLines = latestRO.repairLines.map((l, idx) =>
+            idx === 0
+              ? {
+                  ...l,
+                  xentryImages: [...(l.xentryImages || []), ...result.newImgs],
+                  xentryOcrTexts: result.updatedOcrTexts,
+                  extractedData: result.updatedExtracted,
+                }
+              : l
+          );
+        }
+        await saveRO({
+          ...latestRO,
+          xentryImages: result.allImages,
+          xentryOcrTexts: result.updatedOcrTexts,
+          repairLines: updatedLines,
+        });
+        toast.success(`${files.length} Xentry photo(s) analyzed`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
+      } finally {
+        onOcrFinish();
       }
-      await saveRO({
-        ...latestRO,
-        xentryImages: result.allImages,
-        xentryOcrTexts: result.updatedOcrTexts,
-        repairLines: updatedLines,
-      });
-      onOcrFinish();
-      toast.success(`${files.length} Xentry photo(s) analyzed`);
     };
     input.click();
   }, [currentRO, getLatestRO, processXentryImages, saveRO, onOcrStart, onOcrFinish]);

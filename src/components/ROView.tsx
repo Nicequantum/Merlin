@@ -196,10 +196,10 @@ export function ROView({
             {ro.xentryImages.map((img, idx) => (
               <img
                 key={idx}
-                src={img.dataUrl}
+                src={img.url}
                 className="w-full h-16 object-cover rounded border border-[#38383a]"
                 alt={img.name}
-                onClick={() => window.open(img.dataUrl)}
+                onClick={() => window.open(img.url)}
               />
             ))}
           </div>

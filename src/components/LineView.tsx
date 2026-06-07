@@ -132,10 +132,10 @@ export function LineView({
               {line.xentryImages.map((img, idx) => (
                 <img
                   key={idx}
-                  src={img.dataUrl}
+                  src={img.url}
                   className="w-full h-16 object-cover rounded border border-[#38383a]"
                   alt={img.name}
-                  onClick={() => window.open(img.dataUrl)}
+                  onClick={() => window.open(img.url)}
                 />
               ))}
             </div>
@@ -190,7 +190,12 @@ export function LineView({
             {storyLen > WARRANTY_STORY_MAX_CHARS && (
               <div className="text-[10px] text-[#ff3b30] mb-2">Exceeds recommended DMS character limit — edit before submission.</div>
             )}
-            <div className="whitespace-pre-line text-[14.5px] leading-relaxed mb-5">{line.warrantyStory}</div>
+            <textarea
+              value={line.warrantyStory}
+              onChange={(e) => onUpdateLine({ warrantyStory: e.target.value })}
+              className="w-full bg-[#1c1c1e] rounded p-3 text-[14.5px] leading-relaxed mb-3 min-h-[200px] resize-y"
+              placeholder="Edit warranty story before DMS submission..."
+            />
             <div className="flex gap-2 flex-wrap">
               <button onClick={handleCopy} className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm">
                 <Copy size={16} /> COPY FORMATTED

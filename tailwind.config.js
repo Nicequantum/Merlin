@@ -1,8 +1,9 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
@@ -11,8 +12,8 @@ export default {
         'benz-surface': '#1c1c1e',
         'benz-surface-2': '#2c2c2e',
         'benz-accent': '#0a84ff',
-      }
+      },
     },
   },
   plugins: [],
-}
+};

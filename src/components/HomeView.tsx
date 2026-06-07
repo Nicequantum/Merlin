@@ -2,6 +2,8 @@ import { Camera, Plus, Settings } from 'lucide-react';
 import type { ImageAttachment, RepairOrder } from '../types';
 
 interface HomeViewProps {
+  technicianName?: string;
+  dealershipName?: string;
   filteredROs: RepairOrder[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
@@ -19,6 +21,8 @@ interface HomeViewProps {
 }
 
 export function HomeView({
+  technicianName,
+  dealershipName,
   filteredROs,
   searchTerm,
   onSearchChange,
@@ -50,7 +54,9 @@ export function HomeView({
             <img src="/icon-512.png" alt="Benz Tech - Mercedes-Benz" className="w-full h-full rounded-2xl" />
           </div>
           <h1 className="text-3xl font-semibold tracking-tighter">Benz Tech</h1>
-          <p className="text-[#8e8e93] text-sm">Mercedes-Benz Technician • Warranty Story Assistant</p>
+            <p className="text-[#8e8e93] text-sm">
+              {dealershipName || 'Mercedes-Benz Dealership'} • {technicianName || 'Technician'}
+            </p>
         </div>
 
         <div className="flex gap-2 mb-4">
@@ -139,10 +145,10 @@ export function HomeView({
               >
                 <div>
                   <div className="font-semibold text-sm">{ro.roNumber}</div>
-                  <div className="text-xs text-[#8e8e93]">
-                    {[ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ')} • {ro.repairLines.length}{' '}
-                    lines
-                  </div>
+                    <div className="text-xs text-[#8e8e93]">
+                      {[ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ')} • {ro.repairLines.length} lines
+                      {ro.technicianName ? ` • ${ro.technicianName}` : ''}
+                    </div>
                   <div className="text-[10px] text-[#8e8e93] mt-0.5">{ro.complaints[0]?.slice(0, 60)}...</div>
                   <div className="text-[9px] text-[#666]">{ro.createdAt ? new Date(ro.createdAt).toLocaleDateString() : ''}</div>
                 </div>

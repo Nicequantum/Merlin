@@ -29,6 +29,7 @@ export interface VehicleInfo {
   year: string;
   make: string;
   model: string;
+  engine?: string;
   mileageIn: string;
   mileageOut: string;
 }
@@ -45,6 +46,8 @@ export interface RepairOrder {
   xentryOcrTexts?: string[];
   repairLines: RepairLine[];
   createdAt?: string;
+  technicianId?: string;
+  technicianName?: string;
 }
 
 export type AppView = 'home' | 'ro' | 'line' | 'settings';
@@ -61,3 +64,17 @@ export interface MercedesSuggestions {
   tests: Array<{ label: string; spec: string; note?: string }>;
   bandNote: string;
 }
+
+export interface TechnicianSession {
+  technicianId: string;
+  email: string;
+  name: string;
+  role: string;
+  dealershipId: string;
+  dealershipName: string;
+  consentAt: string | null;
+}
+
+export const CONSENT_VERSION = '2026-06-07-v1';
+export const WARRANTY_STORY_MAX_CHARS = 2500;
+export const WARRANTY_STORY_WARN_CHARS = 2200;

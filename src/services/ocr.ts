@@ -189,11 +189,11 @@ export async function runOCR(imageSource: Blob | File, onProgress?: (p: number) 
   const {
     data: { text },
   } = await worker.recognize(imageSource as File, {
-    tessedit_pageseg_mode: '6' as never,
-    tessedit_oem: '3' as never,
+    tessedit_pageseg_mode: '6',
+    tessedit_oem: '3',
     tessedit_char_whitelist:
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,:;/-_()[]#%&*+=@\'" \n',
-  });
+  } as Record<string, string>);
   await worker.terminate();
   return text;
 }

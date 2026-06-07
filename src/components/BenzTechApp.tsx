@@ -1,30 +1,67 @@
-import { AppHeader } from './components/AppHeader';
-import { HomeView } from './components/HomeView';
-import { LineView } from './components/LineView';
-import { ROView } from './components/ROView';
-import { SettingsView } from './components/SettingsView';
-import { useApiKey } from './hooks/useApiKey';
-import { useOcrProgress } from './hooks/useOcrProgress';
-import { useRepairOrders } from './hooks/useRepairOrders';
+'use client';
 
-function App() {
-  const apiKeyState = useApiKey();
+import { useState } from 'react';
+import { AppHeader } from '@/components/AppHeader';
+import { ConsentModal } from '@/components/ConsentModal';
+import { HomeView } from '@/components/HomeView';
+import { LineView } from '@/components/LineView';
+import { LoginView } from '@/components/LoginView';
+import { ROView } from '@/components/ROView';
+import { SettingsView } from '@/components/SettingsView';
+import { useOcrProgress } from '@/hooks/useOcrProgress';
+import { useRepairOrders } from '@/hooks/useRepairOrders';
+import { useSession } from '@/hooks/useSession';
+
+export function BenzTechApp() {
+  const { session, loading: sessionLoading, login, logout, acceptConsent } = useSession();
   const ocr = useOcrProgress();
   const ro = useRepairOrders({
-    apiKey: apiKeyState.apiKey,
     onOcrStart: ocr.startOcr,
     onOcrFinish: ocr.finishOcr,
     setOcrProgress: ocr.setOcrProgress,
   });
+  const [consentLoading, setConsentLoading] = useState(false);
+
+  if (sessionLoading || ro.loading) {
+    return (
+      <div className="app-container flex items-center justify-center min-h-dvh text-[#8e8e93] text-sm">
+        Loading Benz Tech...
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <LoginView onLogin={login} />;
+  }
+
+  if (!session.consentAt) {
+    return (
+      <ConsentModal
+        loading={consentLoading}
+        onAccept={async () => {
+          setConsentLoading(true);
+          try {
+            await acceptConsent();
+          } finally {
+            setConsentLoading(false);
+          }
+        }}
+      />
+    );
+  }
 
   const goToSettings = () => ro.setView('settings');
 
   return (
     <div className="app-container">
-      {ro.view !== 'home' && ro.view !== 'settings' && <AppHeader onOpenSettings={goToSettings} />}
+      {ro.view !== 'home' && ro.view !== 'settings' && (
+        <AppHeader dealershipName={session.dealershipName} technicianName={session.name} onOpenSettings={goToSettings} />
+      )}
 
       {ro.view === 'home' && (
         <HomeView
+          technicianName={session.name}
+          dealershipName={session.dealershipName}
           filteredROs={ro.filteredROs}
           searchTerm={ro.searchTerm}
           onSearchChange={ro.setSearchTerm}
@@ -54,6 +91,7 @@ function App() {
           onAddComplaint={ro.addComplaint}
           onEditComplaint={ro.editComplaint}
           onRemoveComplaint={ro.removeComplaint}
+          onDecodeVin={ro.decodeVinForRO}
           onAddROXentryPhotos={ro.addROXentryPhotos}
           onAddRepairLine={ro.addRepairLine}
           onOpenLine={(lineId) => {
@@ -73,7 +111,6 @@ function App() {
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}
           isGenerating={ro.isGenerating}
-          hasApiKey={!!apiKeyState.apiKey}
           onBack={() => {
             const latest = ro.getLatestRO(ro.currentRO);
             if (latest) ro.setCurrentRO(latest);
@@ -82,35 +119,17 @@ function App() {
           onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
           onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
           onApplySmartDefaults={() => ro.applySmartDefaultsToLine(ro.currentLine!.id)}
-          onGenerateStory={() =>
-            ro.generateStory(
-              ro.currentLine!.id,
-              apiKeyState.apiKey,
-              apiKeyState.hasEncryptedKey,
-              apiKeyState.isUnlocked,
-              goToSettings
-            )
-          }
-          onCopyStory={ro.copyStory}
+          onGenerateStory={() => ro.generateStory(ro.currentLine!.id)}
         />
       )}
 
       {ro.view === 'settings' && (
         <SettingsView
-          apiKey={apiKeyState.apiKey}
-          passphrase={apiKeyState.passphrase}
-          hasEncryptedKey={apiKeyState.hasEncryptedKey}
-          isUnlocked={apiKeyState.isUnlocked}
+          session={session}
           onBack={() => ro.setView(ro.currentRO ? 'ro' : 'home')}
-          onApiKeyChange={apiKeyState.setApiKey}
-          onPassphraseChange={apiKeyState.setPassphrase}
-          onUnlock={() => apiKeyState.unlock(apiKeyState.passphrase)}
-          onSaveKey={() => apiKeyState.saveKey(apiKeyState.apiKey, apiKeyState.passphrase)}
-          onClearKeys={apiKeyState.clearKeys}
+          onLogout={logout}
         />
       )}
     </div>
   );
 }
-
-export default App;

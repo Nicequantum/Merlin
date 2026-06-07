@@ -1,23 +1,31 @@
-import { RO_EXTRACTION_PROMPT } from '../prompts/roExtraction';
+import { RO_EXTRACTION_PROMPT } from '@/prompts/roExtraction';
 import {
   SYSTEM_PROMPT,
   WARRANTY_STORY_TEMPERATURE,
   buildWarrantyStoryUserMessage,
-} from '../prompts/warrantyStory';
-import type { RepairLine, RepairOrder, StructuredROExtraction } from '../types';
-import { parseStructuredROText } from '../utils/roExtractor';
+} from '@/prompts/warrantyStory';
+import type { RepairLine, RepairOrder } from '@/types';
+import { parseStructuredROText } from '@/utils/roExtractor';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
+function getApiKey(): string {
+  const key = process.env.GROK_API_KEY;
+  if (!key) throw new Error('GROK_API_KEY is not configured on the server');
+  return key;
+}
+
 async function grokChat(
-  messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }>,
-  apiKey: string,
+  messages: Array<{
+    role: string;
+    content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+  }>,
   options: { temperature: number; max_tokens: number }
 ): Promise<string> {
   const response = await fetch(GROK_API_URL, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${getApiKey()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -37,11 +45,10 @@ async function grokChat(
   return apiResponse.choices?.[0]?.message?.content?.trim() || '';
 }
 
-export async function generateWarrantyStoryWithGrok(
+export async function generateWarrantyStory(
   ro: RepairOrder,
   line: RepairLine,
-  apiKey: string,
-  historyContext: string = ''
+  historyContext = ''
 ): Promise<string> {
   const userMessage = buildWarrantyStoryUserMessage(ro, line, historyContext);
   const story = await grokChat(
@@ -49,18 +56,13 @@ export async function generateWarrantyStoryWithGrok(
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userMessage },
     ],
-    apiKey,
     { temperature: WARRANTY_STORY_TEMPERATURE, max_tokens: 900 }
   );
   return story || 'No story generated.';
 }
 
-export async function extractVehicleAndComplaintsWithGrok(
-  imageDataUrls: string[],
-  apiKey: string
-): Promise<StructuredROExtraction> {
+export async function extractROFromImages(imageDataUrls: string[]) {
   const imageContents = imageDataUrls.map((url) => ({ type: 'image_url', image_url: { url } }));
-
   const extractedText = await grokChat(
     [
       {
@@ -68,9 +70,7 @@ export async function extractVehicleAndComplaintsWithGrok(
         content: [{ type: 'text', text: RO_EXTRACTION_PROMPT }, ...imageContents],
       },
     ],
-    apiKey,
     { temperature: 0.05, max_tokens: 700 }
   );
-
   return parseStructuredROText(extractedText);
 }

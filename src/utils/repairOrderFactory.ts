@@ -24,7 +24,7 @@ export function createRepairOrderFromScan(params: {
   return {
     id: 'ro-' + Date.now(),
     roNumber: params.roNumber,
-    vehicle: params.vehicle,
+    vehicle: { ...params.vehicle, engine: params.vehicle.engine || '' },
     customer: { name: params.customerName },
     complaints: params.complaints,
     xentryImages: [],
@@ -38,7 +38,7 @@ export function createManualRepairOrder(): RepairOrder {
   return {
     id: 'ro-' + Date.now(),
     roNumber: `R-${Date.now().toString().slice(-6)}`,
-    vehicle: { vin: '', year: '', make: '', model: '', mileageIn: '', mileageOut: '' },
+    vehicle: { vin: '', year: '', make: '', model: '', engine: '', mileageIn: '', mileageOut: '' },
     customer: { name: '' },
     complaints: ['Enter customer concern / symptom here (will label as A.)'],
     xentryImages: [],

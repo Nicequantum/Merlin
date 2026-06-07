@@ -1,6 +1,11 @@
-import { ArrowLeft, Camera, Copy, RefreshCw } from 'lucide-react';
-import type { RepairLine, RepairOrder } from '../types';
-import { getSuggestions } from '../utils/mercedesKb';
+'use client';
+
+import { ArrowLeft, Camera, Copy, Download, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
+import type { RepairLine, RepairOrder } from '@/types';
+import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
+import { getSuggestions } from '@/utils/mercedesKb';
+import { copyFormattedStory, exportWarrantyStoryPdf } from '@/utils/pdfExport';
 
 interface LineViewProps {
   ro: RepairOrder;
@@ -8,16 +13,20 @@ interface LineViewProps {
   isProcessingOCR: boolean;
   ocrProgress: number;
   isGenerating: boolean;
-  hasApiKey: boolean;
   onBack: () => void;
   onUpdateLine: (updates: Partial<RepairLine>) => void;
   onAddXentryPhotos: () => void;
   onApplySmartDefaults: () => void;
   onGenerateStory: () => void;
-  onCopyStory: (story: string) => void;
 }
 
 const letter = (i: number) => String.fromCharCode(65 + i);
+
+function charCountColor(len: number): string {
+  if (len > WARRANTY_STORY_MAX_CHARS) return 'text-[#ff3b30]';
+  if (len > WARRANTY_STORY_WARN_CHARS) return 'text-[#ff9f0a]';
+  return 'text-[#8e8e93]';
+}
 
 export function LineView({
   ro,
@@ -25,17 +34,36 @@ export function LineView({
   isProcessingOCR,
   ocrProgress,
   isGenerating,
-  hasApiKey,
   onBack,
   onUpdateLine,
   onAddXentryPhotos,
   onApplySmartDefaults,
   onGenerateStory,
-  onCopyStory,
 }: LineViewProps) {
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
   const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} mi` : '';
   const suggestions = getSuggestions(ro);
+  const storyLen = line.warrantyStory?.length ?? 0;
+
+  const handleCopy = async () => {
+    if (!line.warrantyStory) return;
+    try {
+      await copyFormattedStory(ro, line);
+      toast.success('Copied with RO header formatting');
+    } catch {
+      toast.error('Clipboard copy failed');
+    }
+  };
+
+  const handlePdf = () => {
+    if (!line.warrantyStory) return;
+    try {
+      exportWarrantyStoryPdf(ro, line);
+      toast.success('PDF downloaded');
+    } catch {
+      toast.error('PDF export failed');
+    }
+  };
 
   return (
     <div className="px-5 pt-4 pb-10">
@@ -48,7 +76,7 @@ export function LineView({
           {vehicleSummary} {mileageStr ? `• ${mileageStr}` : ''}{' '}
           {ro.vehicle.vin ? `• VIN ${ro.vehicle.vin.slice(0, 10)}...` : ''}
         </div>
-        {ro.customer?.name && <div className="text-[#8e8e93]">Customer: {ro.customer.name}</div>}
+        {ro.vehicle.engine && <div className="text-[#8e8e93]">Engine: {ro.vehicle.engine}</div>}
         {ro.complaints && ro.complaints.length > 0 && (
           <div className="mt-1.5 text-[10px] text-[#8e8e93]">
             Complaints:{' '}
@@ -97,9 +125,7 @@ export function LineView({
             <Camera size={18} />
             {isProcessingOCR ? `ANALYZING PHOTOS... ${ocrProgress}%` : 'ADD XENTRY TESTS / FAULT CODES / GUIDED / WIRING / CONTINUITY'}
           </button>
-          <p className="text-[10px] text-[#8e8e93] -mt-1 mb-2">
-            Photos analyzed with OCR. Only extracted data is used in warranty stories.
-          </p>
+          <p className="text-[10px] text-[#8e8e93] -mt-1 mb-2">Photos analyzed with OCR. Only extracted data is used in warranty stories.</p>
 
           {line.xentryImages && line.xentryImages.length > 0 && (
             <div className="grid grid-cols-4 gap-2 mb-2">
@@ -148,31 +174,32 @@ export function LineView({
         </div>
 
         <div>
-          <button
-            onClick={onGenerateStory}
-            disabled={isGenerating || !hasApiKey}
-            className="primary-btn w-full h-14 text-base disabled:opacity-60"
-          >
+          <button onClick={onGenerateStory} disabled={isGenerating} className="primary-btn w-full h-14 text-base disabled:opacity-60">
             {isGenerating ? 'GENERATING WITH GROK...' : 'GENERATE WARRANTY STORY (ONE-CLICK)'}
           </button>
-          {!hasApiKey && (
-            <p className="text-center text-xs text-[#ff9f0a] mt-2">Add xAI Grok API key in Settings (gear) to generate.</p>
-          )}
         </div>
 
         {line.warrantyStory && (
           <div className="story-card p-5 mt-2">
-            <div className="text-xs uppercase tracking-[1px] text-[#8e8e93] mb-3">WARRANTY STORY — 3 C&apos;s • AUDIT-SAFE</div>
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-xs uppercase tracking-[1px] text-[#8e8e93]">WARRANTY STORY — 3 C&apos;s • AUDIT-SAFE</div>
+              <div className={`text-[10px] font-mono ${charCountColor(storyLen)}`}>
+                {storyLen} / {WARRANTY_STORY_MAX_CHARS}
+              </div>
+            </div>
+            {storyLen > WARRANTY_STORY_MAX_CHARS && (
+              <div className="text-[10px] text-[#ff3b30] mb-2">Exceeds recommended DMS character limit — edit before submission.</div>
+            )}
             <div className="whitespace-pre-line text-[14.5px] leading-relaxed mb-5">{line.warrantyStory}</div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => onCopyStory(line.warrantyStory!)}
-                className="flex-1 secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
-              >
-                <Copy size={16} /> COPY
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={handleCopy} className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm">
+                <Copy size={16} /> COPY FORMATTED
+              </button>
+              <button onClick={handlePdf} className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm">
+                <Download size={16} /> EXPORT PDF
               </button>
               <button onClick={onGenerateStory} className="secondary-btn h-11 px-5 flex items-center gap-2 text-sm">
-                <RefreshCw size={16} /> REGENERATE
+                <RefreshCw size={16} /> REGEN
               </button>
             </div>
           </div>

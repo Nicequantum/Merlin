@@ -7,11 +7,12 @@ interface ROViewProps {
   ocrProgress: number;
   onDone: () => void;
   onUpdateRONumber: (value: string) => void;
-  onUpdateVehicle: (field: keyof RepairOrder['vehicle'], value: string) => void;
+  onUpdateVehicle: (field: 'vin' | 'year' | 'make' | 'model' | 'engine' | 'mileageIn' | 'mileageOut', value: string) => void;
   onUpdateCustomer: (value: string) => void;
   onAddComplaint: () => void;
   onEditComplaint: (index: number, value: string) => void;
   onRemoveComplaint: (index: number) => void;
+  onDecodeVin: () => void;
   onAddROXentryPhotos: () => void;
   onAddRepairLine: () => void;
   onOpenLine: (lineId: string) => void;
@@ -31,6 +32,7 @@ export function ROView({
   onAddComplaint,
   onEditComplaint,
   onRemoveComplaint,
+  onDecodeVin,
   onAddROXentryPhotos,
   onAddRepairLine,
   onOpenLine,
@@ -102,16 +104,36 @@ export function ROView({
           </div>
         </div>
 
-        <div className="mb-3">
-          <label className="text-[10px] text-[#8e8e93] block mb-0.5">VIN</label>
-          <input
-            value={ro.vehicle.vin}
-            onChange={(e) => onUpdateVehicle('vin', e.target.value.toUpperCase())}
-            placeholder="W1Nxxxx..."
-            maxLength={17}
-            className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm font-mono tracking-[1px]"
-          />
-        </div>
+          <div className="mb-3">
+            <label className="text-[10px] text-[#8e8e93] block mb-0.5">VIN</label>
+            <div className="flex gap-2">
+              <input
+                value={ro.vehicle.vin}
+                onChange={(e) => onUpdateVehicle('vin', e.target.value.toUpperCase())}
+                placeholder="W1Nxxxx..."
+                maxLength={17}
+                className="flex-1 bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm font-mono tracking-[1px]"
+              />
+              <button
+                onClick={onDecodeVin}
+                disabled={ro.vehicle.vin.length < 17}
+                className="secondary-btn px-3 text-[10px] font-semibold whitespace-nowrap disabled:opacity-50"
+              >
+                DECODE VIN
+              </button>
+            </div>
+            <p className="text-[9px] text-[#666] mt-1">NHTSA vPIC — auto-fills year, make, model, engine</p>
+          </div>
+
+          <div className="mb-3">
+            <label className="text-[10px] text-[#8e8e93] block mb-0.5">ENGINE</label>
+            <input
+              value={ro.vehicle.engine || ''}
+              onChange={(e) => onUpdateVehicle('engine', e.target.value)}
+              placeholder="3.0L 6-cyl (from VIN decode)"
+              className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm"
+            />
+          </div>
 
         <div className="mb-4">
           <label className="text-[10px] text-[#8e8e93] block mb-0.5">CUSTOMER NAME</label>

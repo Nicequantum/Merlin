@@ -1,82 +1,100 @@
 import { z } from 'zod';
+import { sanitizeIdentifier, sanitizeText, sanitizeTextArray, sanitizeVin } from './sanitize';
+
+const safeText = (max: number) => z.string().max(max).transform(sanitizeText);
+const safeTextOptional = (max: number) => z.string().max(max).transform(sanitizeText).optional();
+const safeId = (max: number) => z.string().max(max).transform(sanitizeIdentifier);
+const safeIdOptional = (max: number) => z.string().max(max).transform(sanitizeIdentifier).optional();
 
 export const loginSchema = z.object({
-  email: z.string().email().max(255),
+  email: z.string().email().max(255).transform((v) => v.toLowerCase().trim()),
   password: z.string().min(1).max(128),
 });
 
 export const vinSchema = z.object({
-  vin: z.string().trim().min(11).max(17),
+  vin: z.string().trim().min(11).max(17).transform(sanitizeVin),
 });
 
 export const imagePathnamesSchema = z.object({
-  imagePathnames: z.array(z.string().min(3).max(512)).min(1).max(10),
+  imagePathnames: z
+    .array(z.string().min(3).max(512).transform(sanitizeIdentifier))
+    .min(1)
+    .max(10),
 });
 
-const imageAttachmentSchema = z.object({
-  id: z.string().max(64),
-  pathname: z.string().min(3).max(512).optional(),
-  url: z.string().min(1).max(512).optional(),
-  name: z.string().max(255),
-}).refine((img) => Boolean(img.pathname || img.url), {
-  message: 'Image attachment requires pathname or url',
-});
+const imageAttachmentSchema = z
+  .object({
+    id: z.string().max(64).transform(sanitizeIdentifier),
+    pathname: z.string().min(3).max(512).transform(sanitizeIdentifier).optional(),
+    url: z.string().min(1).max(512).optional(),
+    name: z.string().max(255).transform(sanitizeText),
+  })
+  .refine((img) => Boolean(img.pathname || img.url), {
+    message: 'Image attachment requires pathname or url',
+  });
 
 const vehicleSchema = z.object({
-  vin: z.string().max(17).optional(),
-  year: z.string().max(10).optional(),
-  make: z.string().max(64).optional(),
-  model: z.string().max(64).optional(),
-  engine: z.string().max(64).optional(),
-  mileageIn: z.string().max(16).optional(),
-  mileageOut: z.string().max(16).optional(),
+  vin: z.string().max(17).transform(sanitizeVin).optional(),
+  year: safeTextOptional(10),
+  make: safeTextOptional(64),
+  model: safeTextOptional(64),
+  engine: safeTextOptional(64),
+  mileageIn: safeTextOptional(16),
+  mileageOut: safeTextOptional(16),
 });
 
 const extractedDataSchema = z.object({
-  codes: z.array(z.string()).optional(),
-  guidedTests: z.array(z.string()).optional(),
-  measurements: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
-  components: z.array(z.string()).optional(),
-  circuits: z.array(z.string()).optional(),
+  codes: z.array(safeText(128)).optional(),
+  guidedTests: z.array(safeText(2000)).optional(),
+  measurements: z
+    .array(
+      z.object({
+        label: safeText(200),
+        value: safeText(200),
+      })
+    )
+    .optional(),
+  components: z.array(safeText(500)).optional(),
+  circuits: z.array(safeText(500)).optional(),
 });
 
 const repairLineSchema = z.object({
-  id: z.string().optional(),
+  id: safeIdOptional(64),
   lineNumber: z.number().int().positive().optional(),
-  description: z.string().max(500).optional(),
-  customerConcern: z.string().max(2000).optional(),
-  technicianNotes: z.string().max(10000).optional(),
+  description: safeTextOptional(500),
+  customerConcern: safeTextOptional(2000),
+  technicianNotes: safeTextOptional(10000),
   xentryImages: z.array(imageAttachmentSchema).max(20).optional(),
-  xentryOcrTexts: z.array(z.string().max(50000)).max(20).optional(),
+  xentryOcrTexts: z.array(safeText(50000)).max(20).optional(),
   extractedData: extractedDataSchema.optional(),
-  warrantyStory: z.string().max(5000).optional(),
+  warrantyStory: safeTextOptional(5000),
 });
 
 export const createRepairOrderSchema = z.object({
   fromExtraction: z.boolean().optional(),
-  roNumber: z.string().max(32).optional(),
+  roNumber: safeIdOptional(32),
   vehicle: vehicleSchema.optional(),
-  customer: z.object({ name: z.string().max(200).optional() }).optional(),
-  customerName: z.string().max(200).optional(),
-  complaints: z.array(z.string().max(2000)).max(20).optional(),
+  customer: z.object({ name: safeTextOptional(200) }).optional(),
+  customerName: safeTextOptional(200),
+  complaints: z.array(safeText(2000)).max(20).transform(sanitizeTextArray).optional(),
   xentryImages: z.array(imageAttachmentSchema).max(20).optional(),
-  xentryOcrTexts: z.array(z.string().max(50000)).max(20).optional(),
+  xentryOcrTexts: z.array(safeText(50000)).max(20).optional(),
   repairLines: z.array(repairLineSchema).max(50).optional(),
 });
 
 export const updateRepairOrderSchema = z.object({
-  roNumber: z.string().max(32).optional(),
+  roNumber: safeIdOptional(32),
   vehicle: vehicleSchema.optional(),
-  customer: z.object({ name: z.string().max(200).optional() }).optional(),
-  complaints: z.array(z.string().max(2000)).max(20).optional(),
+  customer: z.object({ name: safeTextOptional(200) }).optional(),
+  complaints: z.array(safeText(2000)).max(20).transform(sanitizeTextArray).optional(),
   xentryImages: z.array(imageAttachmentSchema).max(20).optional(),
-  xentryOcrTexts: z.array(z.string().max(50000)).max(20).optional(),
+  xentryOcrTexts: z.array(safeText(50000)).max(20).optional(),
   repairLines: z.array(repairLineSchema).max(50).optional(),
 });
 
 export const createUserSchema = z.object({
-  email: z.string().email().max(255),
-  name: z.string().min(1).max(100),
+  email: z.string().email().max(255).transform((v) => v.toLowerCase().trim()),
+  name: safeText(100),
   password: z.string().min(8).max(128),
   role: z.enum(['technician', 'manager']).default('technician'),
 });
@@ -86,7 +104,7 @@ export const updateUserSchema = z.object({
 });
 
 export const storyEditSchema = z.object({
-  warrantyStory: z.string().max(5000),
+  warrantyStory: safeText(5000),
 });
 
 export const changePasswordSchema = z.object({
@@ -99,8 +117,8 @@ export const resetPasswordSchema = z.object({
 });
 
 export const auditLogQuerySchema = z.object({
-  technicianId: z.string().max(64).optional(),
-  action: z.string().max(64).optional(),
+  technicianId: safeIdOptional(64),
+  action: safeIdOptional(64),
   from: z.string().max(40).optional(),
   to: z.string().max(40).optional(),
   format: z.enum(['json', 'csv']).default('json'),

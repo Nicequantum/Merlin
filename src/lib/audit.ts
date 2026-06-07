@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from './db';
 import { AUDIT_GENESIS_HASH, computeAuditEntryHash } from './auditChain';
 import { logger } from './logger';
@@ -42,7 +43,7 @@ export async function writeAuditLog(input: AuditLogInput): Promise<void> {
       });
 
       const previousHash = last?.entryHash || AUDIT_GENESIS_HASH;
-      const id = crypto.randomUUID();
+      const id = randomUUID();
       const entryHash = computeAuditEntryHash({
         id,
         action: input.action,

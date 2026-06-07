@@ -11,6 +11,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:studio": "prisma studio",
+    "test": "tsx --test tests/**/*.test.ts",
+    "test:integration": "tsx --test tests/integration/**/*.test.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

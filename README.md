@@ -141,13 +141,26 @@ For live scanning demos, configure `GROK_API_KEY` and `BLOB_READ_WRITE_TOKEN`.
 | `GET /api/audit-logs/summary` | Manager | Audit stats + chain verification |
 | `GET /api/audit-logs` | Manager | Filtered log list or CSV export |
 
-## Current Limitations (read before production)
+## Current Limitations
 
-1. **xAI data processing:** RO text, VIN, and diagnostic images are sent to Grok for extraction and story generation. A business DPA with xAI is required before processing real customer data.
-2. **Partial encryption:** OCR text, technician notes, and warranty stories remain plaintext in PostgreSQL. A DB breach could expose operational content even when PII fields are encrypted.
-3. **Hash chain scope:** Verifies append-only integrity per dealership. A privileged DBA could rewrite the full table — pair with backups, access controls, and regular CSV exports.
-4. **Human review required:** AI-generated warranty stories are drafts. Technicians must verify every story before Mercedes-Benz warranty submission.
-5. **Rate limiting fallback:** Without Vercel KV, rate limits are per-instance only (weaker on multi-node deployments).
+> **Do not process real customer data until the pending xAI business account and Data Processing Agreement (DPA) are finalized.**
+
+| Limitation | Impact | Mitigation |
+|------------|--------|------------|
+| **Pending xAI DPA** | RO text, VINs, diagnostic images, and OCR content are sent to xAI Grok for extraction and warranty story generation. Without a signed DPA, this is not approved for production customer data. | Complete xAI business onboarding; update consent language; restrict production to synthetic/demo data until signed. |
+| **Partial encryption** | OCR text, technician notes, and warranty stories remain plaintext in PostgreSQL. | Encrypt additional fields in a future release; restrict DB access; enable backups with encryption at rest. |
+| **Hash chain scope** | Audit log chain verifies append-only integrity per dealership, but a privileged DBA could rewrite the full table. | Pair with CSV exports, least-privilege DB access, and off-site backup retention. |
+| **Human review required** | AI-generated warranty stories are drafts only. | Technicians and managers must verify every story before Mercedes-Benz warranty submission. |
+| **Rate limiting fallback** | Without Vercel KV, rate limits are per-instance only on multi-node deployments. | Configure `KV_REST_API_URL` and `KV_REST_API_TOKEN` in production. |
+
+### Pre-production checklist
+
+- [ ] xAI business account active and DPA executed
+- [ ] All seed/default passwords rotated
+- [ ] `npm run db:migrate:deploy` run against production database
+- [ ] `GET /api/health` returns `"status": "ok"` (or acceptable `"degraded"` with documented gaps)
+- [ ] `npm test` passes in CI/staging
+- [ ] `DEMO_MODE=false` if demo seeding should be disabled
 
 ## Project Structure
 
@@ -169,6 +182,8 @@ src/services/          # Client-side OCR (Tesseract.js)
 | `npm run db:migrate` | Create/apply migrations (dev) |
 | `npm run db:migrate:deploy` | Apply migrations (production) |
 | `npm run db:seed` | Seed dealership + demo accounts |
+| `npm test` | Run unit + integration tests |
+| `npm run test:integration` | Run integration tests only |
 
 ## License
 

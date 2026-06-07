@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { prisma } from './db';
 import { logger } from './logger';
 
-const SESSION_COOKIE = 'benz_tech_session';
+export const SESSION_COOKIE = 'benz_tech_session';
 const SESSION_MAX_AGE = 60 * 60 * 12; // 12 hours
 
 export interface SessionPayload {
@@ -60,9 +60,33 @@ export async function setSessionCookie(token: string): Promise<void> {
   });
 }
 
+function sessionCookieOptions(maxAge: number) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    maxAge,
+    path: '/',
+    ...(maxAge === 0 ? { expires: new Date(0) } : {}),
+  };
+}
+
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE);
+  cookieStore.set(SESSION_COOKIE, '', sessionCookieOptions(0));
+}
+
+/** Build a Set-Cookie header that fully expires the session in the response. */
+export function buildSessionClearCookieHeader(): string {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT${secure}`;
+}
+
+export async function destroySession(technicianId?: string): Promise<void> {
+  if (technicianId) {
+    await revokeTechnicianSessions(technicianId);
+  }
+  await clearSessionCookie();
 }
 
 async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<SessionPayload | null> {

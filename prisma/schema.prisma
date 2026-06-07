@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -13,6 +13,7 @@ model Dealership {
   createdAt    DateTime      @default(now())
   technicians  Technician[]
   repairOrders RepairOrder[]
+  auditLogs    AuditLog[]
 }
 
 model Technician {
@@ -21,6 +22,7 @@ model Technician {
   name           String
   passwordHash   String
   role           String        @default("technician")
+  isActive       Boolean       @default(true)
   dealershipId   String
   dealership     Dealership    @relation(fields: [dealershipId], references: [id])
   consentAt      DateTime?
@@ -28,6 +30,10 @@ model Technician {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   repairOrders   RepairOrder[]
+  auditLogs      AuditLog[]
+
+  @@index([dealershipId])
+  @@index([isActive])
 }
 
 model RepairOrder {
@@ -47,7 +53,7 @@ model RepairOrder {
   customerNameEncrypted String       @default("")
   complaints            String       @default("[]")
   xentryOcrTexts        String       @default("[]")
-  xentryImages          String       @default("[]")
+  xentryImageUrls       String       @default("[]")
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
   repairLines           RepairLine[]
@@ -58,19 +64,38 @@ model RepairOrder {
 }
 
 model RepairLine {
-  id              String      @id @default(cuid())
-  repairOrderId   String
-  repairOrder     RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
-  lineNumber      Int
-  description     String
-  customerConcern String      @default("")
-  technicianNotes String      @default("")
-  xentryImages    String      @default("[]")
-  xentryOcrTexts  String      @default("[]")
-  extractedData   String      @default("{}")
-  warrantyStory   String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id               String      @id @default(cuid())
+  repairOrderId    String
+  repairOrder      RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
+  lineNumber       Int
+  description      String
+  customerConcern  String      @default("")
+  technicianNotes  String      @default("")
+  xentryImageUrls  String      @default("[]")
+  xentryOcrTexts   String      @default("[]")
+  extractedData    String      @default("{}")
+  warrantyStory    String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   @@index([repairOrderId])
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  action       String
+  entityType   String?
+  entityId     String?
+  technicianId String?
+  technician   Technician? @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  dealershipId String
+  dealership   Dealership  @relation(fields: [dealershipId], references: [id])
+  metadata     String      @default("{}")
+  ipAddress    String?
+  createdAt    DateTime    @default(now())
+
+  @@index([dealershipId])
+  @@index([technicianId])
+  @@index([action])
+  @@index([createdAt])
 }

@@ -59,10 +59,11 @@ export async function GET(request: Request) {
         metadata: parseMetadata(log.metadata),
         ipAddress: log.ipAddress,
         createdAt: log.createdAt.toISOString(),
+        entryHash: log.entryHash || null,
       }));
 
       if (format === 'csv') {
-        const header = ['id', 'action', 'technicianName', 'entityType', 'entityId', 'ipAddress', 'createdAt', 'metadata'];
+        const header = ['id', 'action', 'technicianName', 'entityType', 'entityId', 'ipAddress', 'createdAt', 'entryHash', 'metadata'];
         const rows = entries.map((entry) =>
           [
             entry.id,
@@ -72,6 +73,7 @@ export async function GET(request: Request) {
             entry.entityId,
             entry.ipAddress,
             entry.createdAt,
+            entry.entryHash,
             JSON.stringify(entry.metadata),
           ]
             .map(toCsvValue)

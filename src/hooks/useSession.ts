@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import type { TechnicianSession } from '@/types';
 
 export function useSession() {
@@ -12,8 +12,12 @@ export function useSession() {
     try {
       const { session: s } = await api.me();
       setSession(s);
-    } catch {
-      setSession(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setSession(null);
+      } else {
+        setSession(null);
+      }
     } finally {
       setLoading(false);
     }

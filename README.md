@@ -1,29 +1,47 @@
-# Benz Tech v3 — Dealership Warranty Platform
+# Benz Tech — Dealership Warranty Documentation Platform
 
-Professional full-stack Mercedes-Benz warranty documentation platform for authorized dealerships. Technicians scan repair orders, capture XENTRY diagnostic evidence, and generate audit-safe warranty stories — with all data secured on the server.
+Benz Tech helps authorized Mercedes-Benz dealership service teams create audit-safe warranty stories from repair order data, XENTRY diagnostic evidence, and technician notes. Built for Fixed Operations leadership who need visibility, accountability, and controlled AI assistance — not another clipboard app.
 
-## What Dealerships Get
+## Who This Is For
 
-- **Server-secured AI** — Grok API runs server-side; credentials never touch technician browsers
-- **Encrypted customer PII** — Customer names encrypted at rest (AES-256-GCM); not stored in localStorage
-- **Multi-technician accounts** — Per-tech login; managers see all dealership ROs
-- **Audit-safe warranty stories** — Facts-only AI prompt with `[NOT DOCUMENTED]` / `[NOT PROVIDED]` placeholders
-- **VIN decoder** — NHTSA vPIC auto-fills year, make, model, engine
-- **Professional output** — Character counter, formatted clipboard copy, PDF export
-- **Compliance** — Mandatory data consent on first login; session-based auth
+| Role | What you get |
+|------|----------------|
+| **Technician** | Scan ROs, capture diagnostics, generate draft warranty stories, export to clipboard/PDF |
+| **Service Manager** | Dealership-wide RO visibility, user administration, audit log with hash-chain integrity, CSV export |
+| **Fixed Ops Director** | Pilot-ready platform with encrypted PII, session controls, structured logging, and health monitoring |
 
-## Tech Stack
+## Architecture Overview
 
-- **Frontend:** Next.js 15, React 19, Tailwind CSS
-- **Backend:** Next.js API Routes
-- **Database:** Prisma ORM (SQLite dev / PostgreSQL production)
-- **Auth:** JWT sessions (httpOnly cookies) + bcrypt passwords
-- **AI:** xAI Grok (server-side)
-- **OCR:** Tesseract.js (client-side preprocessing — no PII leaves device for OCR)
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Browser (React 19 + Next.js 15)                          │
+│  • Tesseract OCR preprocessing (client-side)                │
+│  • No API keys in browser                                   │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ HTTPS + httpOnly session cookie
+┌──────────────────────────▼──────────────────────────────────┐
+│  Next.js API Routes                                         │
+│  • JWT sessions with server-side version revocation         │
+│  • Zod validation + rate limiting (Vercel KV)               │
+│  • Structured JSON logging                                  │
+└─────┬──────────┬────────────┬────────────┬──────────────────┘
+      │          │            │            │
+      ▼          ▼            ▼            ▼
+ PostgreSQL  Vercel Blob   xAI Grok    NHTSA vPIC
+ (Prisma)    (private)     (server)    (VIN decode)
+```
+
+### Security controls
+
+- **Encrypted at rest (AES-256-GCM):** customer name, VIN, RO complaints, per-line customer concerns
+- **Private diagnostic images:** stored in Vercel Blob; served only through session-gated `/api/images` proxy
+- **Session revocation:** password change, manager reset, deactivation, and logout increment `sessionVersion` — stale cookies stop working immediately
+- **Audit hash chain:** each log entry is SHA-256 linked to the prior entry per dealership (tamper-evident, not tamper-proof)
+- **Audit-safe AI prompts:** warranty stories use `[NOT DOCUMENTED]` / `[NOT PROVIDED]` instead of fabricated test data
 
 ## Quick Start (Development)
 
-### 1. Clone & install
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/Nicequantum/Benz-Tech-v2.git
@@ -38,30 +56,35 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env`:
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SESSION_SECRET` | Yes | `openssl rand -base64 32` |
+| `ENCRYPTION_KEY` | Yes | `openssl rand -hex 32` (64 hex chars) |
+| `GROK_API_KEY` | For AI | xAI key — server-side only |
+| `BLOB_READ_WRITE_TOKEN` | For uploads | Vercel Blob private storage |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Production | Vercel KV for distributed rate limiting |
+| `DEMO_MODE` | Optional | `true` (default) enables Load Demo Data button |
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | `file:./dev.db` for SQLite, or PostgreSQL URL for production |
-| `SESSION_SECRET` | Random 32+ char string for session signing |
-| `ENCRYPTION_KEY` | 64 hex chars (32 bytes) for PII encryption |
-| `GROK_API_KEY` | Your xAI API key from [console.x.ai](https://console.x.ai) |
+### 3. Database setup (migrations)
 
-Generate secrets:
-
-```bash
-openssl rand -base64 32   # SESSION_SECRET
-openssl rand -hex 32      # ENCRYPTION_KEY
-```
-
-### 3. Initialize database
+**Fresh database:**
 
 ```bash
-npm run db:push
+npm run db:migrate:deploy
 npm run db:seed
 ```
 
-### 4. Run
+**Existing database created with `db push`:**
+
+```bash
+npx prisma migrate resolve --applied 20250607120000_init
+npm run db:migrate:deploy
+```
+
+> Use `npm run db:migrate` during development to create new migrations. Do not use `prisma db push` in production.
+
+### 4. Run locally
 
 ```bash
 npm run dev
@@ -69,62 +92,83 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-**Demo accounts** (created by seed):
+**Demo accounts** (from seed):
 
 | Email | Password | Role |
 |-------|----------|------|
-| `tech@dealership.com` | `changeme123` | Technician |
 | `admin@dealership.com` | `changeme123` | Manager |
+| `tech@dealership.com` | `changeme123` | Technician |
 
-## Production Deployment
+Change these passwords before any shared or production deployment.
 
-1. Use **PostgreSQL** — update `DATABASE_URL` and change `provider` in `prisma/schema.prisma` to `postgresql`
-2. Set all environment variables on your host (Vercel, Railway, etc.)
-3. Run `npx prisma db push` or migrations against production DB
-4. Run `npm run db:seed` once to create dealership + admin accounts (or provision via your own process)
-5. `npm run build && npm start`
+## Production Deployment (Vercel)
+
+1. Connect the repo and select branch `v2.3-dealership`
+2. Add a **PostgreSQL** database (Vercel Postgres, Neon, or Supabase)
+3. Set all environment variables from `.env.example`
+4. Build command: `npm run build` (runs `prisma generate` automatically)
+5. Deploy, then run migrations against production:
+
+```bash
+npx prisma migrate deploy
+```
+
+6. Seed once (or provision accounts manually):
+
+```bash
+npm run db:seed
+```
+
+7. Verify health: `GET /api/health` should return `"status": "ok"` or `"degraded"` (missing optional keys)
+
+## Demo Workflow (for ownership presentations)
+
+1. Sign in as **manager** (`admin@dealership.com`)
+2. Tap **Load Demo Data** — creates 3 synthetic repair orders (no real customer PII)
+3. Open a demo RO → review vehicle, complaints, and pre-written warranty story
+4. Open **Audit Log** — show hash-chain integrity banner and CSV export
+5. Open **Settings** — show user admin and password controls
+
+For live scanning demos, configure `GROK_API_KEY` and `BLOB_READ_WRITE_TOKEN`.
+
+## API Endpoints
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/health` | Public | Service health and dependency checks |
+| `POST /api/demo/seed` | Session | Load synthetic demo repair orders |
+| `GET /api/dashboard/summary` | Session | Manager/tech dashboard metrics |
+| `GET /api/audit-logs/summary` | Manager | Audit stats + chain verification |
+| `GET /api/audit-logs` | Manager | Filtered log list or CSV export |
+
+## Current Limitations (read before production)
+
+1. **xAI data processing:** RO text, VIN, and diagnostic images are sent to Grok for extraction and story generation. A business DPA with xAI is required before processing real customer data.
+2. **Partial encryption:** OCR text, technician notes, and warranty stories remain plaintext in PostgreSQL. A DB breach could expose operational content even when PII fields are encrypted.
+3. **Hash chain scope:** Verifies append-only integrity per dealership. A privileged DBA could rewrite the full table — pair with backups, access controls, and regular CSV exports.
+4. **Human review required:** AI-generated warranty stories are drafts. Technicians must verify every story before Mercedes-Benz warranty submission.
+5. **Rate limiting fallback:** Without Vercel KV, rate limits are per-instance only (weaker on multi-node deployments).
 
 ## Project Structure
 
 ```
-src/
-├── app/                  # Next.js App Router + API routes
-│   ├── api/
-│   │   ├── auth/         # Login, logout, session
-│   │   ├── consent/      # Data consent acceptance
-│   │   ├── repair-orders/# CRUD, OCR extract, story generation
-│   │   └── vin/          # NHTSA VIN decoder
-│   ├── layout.tsx
-│   └── page.tsx
-├── components/           # UI views
-├── hooks/                # Client state hooks
-├── lib/                  # Server: auth, db, encryption, grok, vin
-├── prompts/              # Audit-safe AI prompts
-├── services/             # Client OCR (Tesseract)
-├── types/
-└── utils/
-prisma/
-├── schema.prisma
-└── seed.ts
+prisma/migrations/     # Versioned schema migrations (use migrate deploy)
+src/app/api/           # REST API routes
+src/components/        # UI views (ManagerDashboard, AuditLogView, etc.)
+src/lib/               # Auth, encryption, audit chain, logging, demo data
+src/prompts/           # Audit-safe AI prompt templates
+src/services/          # Client-side OCR (Tesseract.js)
 ```
 
-## Workflow
+## Scripts
 
-1. **Sign in** with technician credentials
-2. **Accept** data & privacy consent (first login)
-3. **Scan RO** — add 2–3 page photos → Process All (server-side Grok vision + local OCR fallback)
-4. **Review RO** — edit vehicle fields, decode VIN, manage A/B/C complaints
-5. **Open repair line** — add XENTRY photos, technician notes, apply reference defaults
-6. **Generate story** — server-side Grok with audit-safe prompt
-7. **Export** — copy formatted text or download PDF
-
-## Security Notes
-
-- Customer names are encrypted before database storage
-- API keys exist only in server environment variables
-- Sessions expire after 12 hours
-- Technicians only see their own ROs; managers see the full dealership
-- Warranty stories never fabricate test data — missing info uses explicit placeholders
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Local development server |
+| `npm run build` | Production build |
+| `npm run db:migrate` | Create/apply migrations (dev) |
+| `npm run db:migrate:deploy` | Apply migrations (production) |
+| `npm run db:seed` | Seed dealership + demo accounts |
 
 ## License
 

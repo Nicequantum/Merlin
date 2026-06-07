@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/audit';
-import { clearSessionCookie, getSession } from '@/lib/auth';
+import { clearSessionCookie, getSession, revokeTechnicianSessions } from '@/lib/auth';
 import { handleRouteError } from '@/lib/errors';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 
@@ -10,9 +10,9 @@ export async function POST(request: Request) {
 
   try {
     const session = await getSession();
-    await clearSessionCookie();
 
     if (session) {
+      await revokeTechnicianSessions(session.technicianId);
       await writeAuditLog({
         action: 'auth.logout',
         dealershipId: session.dealershipId,
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       });
     }
 
+    await clearSessionCookie();
     return NextResponse.json({ ok: true });
   } catch (error) {
     return handleRouteError(error, 'auth.logout');

@@ -1,6 +1,6 @@
 import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
-import { hashPassword, verifyPassword } from '@/lib/auth';
+import { clearSessionCookie, hashPassword, revokeTechnicianSessions, verifyPassword } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -32,6 +32,8 @@ export async function POST(request: Request) {
         data: { passwordHash },
       });
 
+      await revokeTechnicianSessions(session.technicianId);
+
       await writeAuditLog({
         action: 'auth.password_change',
         dealershipId: session.dealershipId,
@@ -41,7 +43,8 @@ export async function POST(request: Request) {
         ipAddress: getRequestIp(request),
       });
 
-      return { ok: true };
+      await clearSessionCookie();
+      return { ok: true, requiresReauth: true };
     },
     { rateLimitKey: 'auth.change-password', rateLimit: { limit: 5, windowMs: 60_000 } }
   );

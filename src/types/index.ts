@@ -93,6 +93,54 @@ export interface AuditLogEntry {
   metadata: Record<string, unknown>;
   ipAddress: string | null;
   createdAt: string;
+  entryHash?: string | null;
+}
+
+export interface AuditChainInfo {
+  enabled: true;
+  description: string;
+  hashedEntries: number;
+  legacyEntries: number;
+  valid: boolean;
+  brokenAt: number | null;
+  headHash: string | null;
+  limitations: string[];
+}
+
+export interface AuditDashboardSummary {
+  totalEntries: number;
+  last24Hours: number;
+  last7Days: number;
+  actionCounts: Array<{ action: string; count: number }>;
+  recentActivity: Array<{
+    id: string;
+    action: string;
+    technicianName: string | null;
+    createdAt: string;
+  }>;
+  chain: AuditChainInfo;
+}
+
+export interface DashboardSummary {
+  role: string;
+  stats: {
+    totalRepairOrders: number;
+    warrantyStories: number;
+    activeTechnicians: number;
+    auditEventsThisWeek: number;
+  };
+  recentRepairOrders: Array<{
+    id: string;
+    roNumber: string;
+    year: string;
+    make: string;
+    model: string;
+    technicianName: string;
+    lineCount: number;
+    hasStories: boolean;
+    updatedAt: string;
+  }>;
+  audit: AuditDashboardSummary | null;
 }
 
 export const CONSENT_VERSION = '2026-06-07-v1';
@@ -114,4 +162,5 @@ export const AUDIT_ACTIONS = [
   'user.reactivate',
   'user.password_reset',
   'image.upload',
+  'demo.seed',
 ] as const;

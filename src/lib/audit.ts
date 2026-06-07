@@ -1,4 +1,6 @@
 import { prisma } from './db';
+import { AUDIT_GENESIS_HASH, computeAuditEntryHash } from './auditChain';
+import { logger } from './logger';
 
 export type AuditAction =
   | 'auth.login'
@@ -14,7 +16,8 @@ export type AuditAction =
   | 'user.deactivate'
   | 'user.reactivate'
   | 'user.password_reset'
-  | 'image.upload';
+  | 'image.upload'
+  | 'demo.seed';
 
 interface AuditLogInput {
   action: AuditAction;
@@ -28,18 +31,52 @@ interface AuditLogInput {
 
 export async function writeAuditLog(input: AuditLogInput): Promise<void> {
   try {
-    await prisma.auditLog.create({
-      data: {
+    const metadata = JSON.stringify(input.metadata ?? {});
+    const createdAt = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      const last = await tx.auditLog.findFirst({
+        where: { dealershipId: input.dealershipId },
+        orderBy: { createdAt: 'desc' },
+        select: { entryHash: true },
+      });
+
+      const previousHash = last?.entryHash || AUDIT_GENESIS_HASH;
+      const id = crypto.randomUUID();
+      const entryHash = computeAuditEntryHash({
+        id,
         action: input.action,
+        entityType: input.entityType ?? null,
+        entityId: input.entityId ?? null,
+        technicianId: input.technicianId ?? null,
         dealershipId: input.dealershipId,
-        technicianId: input.technicianId,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        metadata: JSON.stringify(input.metadata ?? {}),
-        ipAddress: input.ipAddress,
-      },
+        metadata,
+        ipAddress: input.ipAddress ?? null,
+        createdAt: createdAt.toISOString(),
+        previousHash,
+      });
+
+      await tx.auditLog.create({
+        data: {
+          id,
+          action: input.action,
+          dealershipId: input.dealershipId,
+          technicianId: input.technicianId,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          metadata,
+          ipAddress: input.ipAddress,
+          previousHash,
+          entryHash,
+          createdAt,
+        },
+      });
     });
   } catch (error) {
-    console.error('[audit]', error);
+    logger.error('audit.write_failed', {
+      action: input.action,
+      dealershipId: input.dealershipId,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
   }
 }

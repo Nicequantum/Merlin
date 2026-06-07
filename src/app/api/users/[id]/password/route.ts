@@ -1,6 +1,6 @@
 import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
-import { hashPassword } from '@/lib/auth';
+import { hashPassword, revokeTechnicianSessions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -31,6 +31,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         where: { id },
         data: { passwordHash },
       });
+
+      await revokeTechnicianSessions(user.id);
 
       await writeAuditLog({
         action: 'user.password_reset',

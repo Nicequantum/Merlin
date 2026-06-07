@@ -552,6 +552,7 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
     currentLine,
     allROs,
     loading,
+    refreshList,
     searchTerm,
     setSearchTerm,
     pendingROImages,

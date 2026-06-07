@@ -1,4 +1,5 @@
 import { apiError, RATE_LIMIT_ERROR } from './errors';
+import { logger } from './logger';
 
 interface RateLimitEntry {
   count: number;
@@ -57,7 +58,7 @@ async function checkKvRateLimit(key: string, config: RateLimitConfig): Promise<R
   return null;
 }
 
-function isKvConfigured(): boolean {
+export function isKvConfigured(): boolean {
   return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 }
 
@@ -73,7 +74,9 @@ export async function checkRateLimit(
     try {
       return await checkKvRateLimit(key, config);
     } catch (error) {
-      console.error('[rate-limit] KV error, falling back to memory', error);
+      logger.warn('rate_limit.kv_fallback', {
+        error: error instanceof Error ? error.message : 'unknown',
+      });
     }
   }
 

@@ -58,7 +58,12 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs }: Set
     e.preventDefault();
     setChangingPassword(true);
     try {
-      await api.changePassword(currentPassword, newPassword);
+      const result = await api.changePassword(currentPassword, newPassword);
+      if (result.requiresReauth) {
+        toast.success('Password updated — please sign in again');
+        await onLogout();
+        return;
+      }
       toast.success('Password updated');
       setCurrentPassword('');
       setNewPassword('');

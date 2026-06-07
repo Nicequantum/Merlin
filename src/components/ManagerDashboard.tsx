@@ -1,0 +1,219 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Activity,
+  Camera,
+  ClipboardList,
+  Database,
+  Plus,
+  ScrollText,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Users,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/lib/api';
+import type { DashboardSummary, RepairOrder, TechnicianSession } from '@/types';
+
+interface ManagerDashboardProps {
+  session: TechnicianSession;
+  allROs: RepairOrder[];
+  filteredROs: RepairOrder[];
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  onOpenRO: (ro: RepairOrder) => void;
+  onOpenSettings: () => void;
+  onOpenAuditLogs: () => void;
+  onSeedDemo: () => Promise<void>;
+  seedingDemo: boolean;
+  onAddROPhoto: () => void;
+  onCreateManualRO: () => void;
+  isProcessingOCR: boolean;
+  ocrProgress: number;
+  children: React.ReactNode;
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  accent = 'text-[#0a84ff]',
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  accent?: string;
+}) {
+  return (
+    <div className="stat-card p-4">
+      <div className={`flex items-center gap-2 text-xs uppercase tracking-wider text-[#8e8e93] mb-2 ${accent}`}>
+        {icon}
+        {label}
+      </div>
+      <div className="text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+export function ManagerDashboard({
+  session,
+  allROs,
+  filteredROs,
+  searchTerm,
+  onSearchChange,
+  onOpenRO,
+  onOpenSettings,
+  onOpenAuditLogs,
+  onSeedDemo,
+  seedingDemo,
+  onAddROPhoto,
+  onCreateManualRO,
+  isProcessingOCR,
+  ocrProgress,
+  children,
+}: ManagerDashboardProps) {
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadSummary = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getDashboardSummary();
+      setSummary(data);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load dashboard');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary]);
+
+  const chain = summary?.audit?.chain;
+
+  return (
+    <div className="px-4 pt-2 pb-8">
+      <div className="flex items-start justify-between pt-4 mb-5">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[#0a84ff] font-semibold">Manager Dashboard</p>
+          <h1 className="text-2xl font-semibold tracking-tight mt-1">{session.dealershipName}</h1>
+          <p className="text-xs text-[#8e8e93] mt-1">Signed in as {session.name}</p>
+        </div>
+        <button onClick={onOpenSettings} className="p-2 text-[#8e8e93] touch-target" aria-label="Settings">
+          <Settings size={22} />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="ios-card p-6 text-sm text-[#8e8e93] mb-4">Loading dealership metrics...</div>
+      ) : summary ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <StatCard label="Repair Orders" value={summary.stats.totalRepairOrders} icon={<ClipboardList size={14} />} />
+            <StatCard
+              label="Warranty Stories"
+              value={summary.stats.warrantyStories}
+              icon={<Sparkles size={14} />}
+              accent="text-[#30d158]"
+            />
+            <StatCard label="Active Techs" value={summary.stats.activeTechnicians} icon={<Users size={14} />} />
+            <StatCard
+              label="Audit Events (7d)"
+              value={summary.stats.auditEventsThisWeek}
+              icon={<Activity size={14} />}
+              accent="text-[#ff9f0a]"
+            />
+          </div>
+
+          <div className="ios-card p-4 mb-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={16} className={chain?.valid ? 'text-[#30d158]' : 'text-[#ff9f0a]'} />
+                <div>
+                  <div className="font-semibold text-sm">Audit Chain Integrity</div>
+                  <div className="text-[10px] text-[#8e8e93]">SHA-256 hash chain per dealership</div>
+                </div>
+              </div>
+              <span className={`status-pill ${chain?.valid ? 'bg-[#30d158]/15 text-[#30d158]' : 'bg-[#ff9f0a]/15 text-[#ff9f0a]'}`}>
+                {chain?.valid ? 'VALID' : 'REVIEW'}
+              </span>
+            </div>
+            <p className="text-xs text-[#8e8e93] leading-relaxed mb-3">
+              {chain?.description}
+              {chain && chain.legacyEntries > 0
+                ? ` ${chain.legacyEntries} legacy entr${chain.legacyEntries === 1 ? 'y' : 'ies'} pre-date the hash chain.`
+                : ''}
+            </p>
+            <button onClick={onOpenAuditLogs} className="secondary-btn w-full h-10 text-xs font-semibold flex items-center justify-center gap-2">
+              <ScrollText size={14} /> VIEW AUDIT LOG & EXPORT
+            </button>
+          </div>
+
+          {summary.recentRepairOrders.length > 0 && (
+            <div className="ios-card p-4 mb-4">
+              <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-3">Recent Shop Activity</div>
+              <div className="space-y-2">
+                {summary.recentRepairOrders.map((ro) => (
+                  <button
+                    key={ro.id}
+                    onClick={() => {
+                      const full = allROs.find((r) => r.id === ro.id);
+                      if (full) onOpenRO(full);
+                    }}
+                    className="w-full text-left bg-[#1c1c1e] rounded-lg px-3 py-2"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">{ro.roNumber}</span>
+                      {ro.hasStories && <span className="text-[10px] text-[#30d158]">✓ story</span>}
+                    </div>
+                    <div className="text-[10px] text-[#8e8e93]">
+                      {[ro.year, ro.make, ro.model].filter(Boolean).join(' ')} · {ro.technicianName}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : null}
+
+      <div className="flex gap-2 mb-2">
+        <button
+          onClick={onAddROPhoto}
+          disabled={isProcessingOCR}
+          className="primary-btn flex-1 h-11 flex items-center justify-center gap-2 text-xs font-semibold disabled:opacity-60"
+        >
+          <Camera size={16} />
+          {isProcessingOCR ? `${ocrProgress}%` : 'SCAN RO'}
+        </button>
+        <button onClick={onCreateManualRO} className="secondary-btn flex-1 h-11 flex items-center justify-center gap-2 text-xs font-semibold">
+          <Plus size={16} /> MANUAL RO
+        </button>
+      </div>
+      <button
+        onClick={onSeedDemo}
+        disabled={seedingDemo || isProcessingOCR}
+        className="secondary-btn w-full h-10 mb-4 flex items-center justify-center gap-2 text-xs font-semibold disabled:opacity-60"
+      >
+        <Database size={14} />
+        {seedingDemo ? 'LOADING DEMO DATA...' : 'LOAD DEMO DATA'}
+      </button>
+
+      <div className="mb-3">
+        <input
+          type="text"
+          placeholder="Search repair orders (RO#, model, VIN)..."
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="w-full bg-[#1c1c1e] border border-[#38383a] rounded-xl px-4 py-2.5 text-sm placeholder-[#8e8e93]"
+        />
+      </div>
+
+      {children}
+    </div>
+  );
+}

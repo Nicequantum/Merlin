@@ -1,5 +1,6 @@
 import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
+import { revokeTechnicianSessions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -41,6 +42,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           createdAt: true,
         },
       });
+
+      if (!parsed.data.isActive) {
+        await revokeTechnicianSessions(updated.id);
+      }
 
       await writeAuditLog({
         action: parsed.data.isActive ? 'user.reactivate' : 'user.deactivate',

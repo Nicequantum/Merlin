@@ -1,14 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { toast } from 'sonner';
 import { AppHeader } from '@/components/AppHeader';
 import { ConsentModal } from '@/components/ConsentModal';
 import { HomeView } from '@/components/HomeView';
 import { LineView } from '@/components/LineView';
 import { LoginView } from '@/components/LoginView';
+import { LoadingScreen } from '@/components/LoadingScreen';
+import { ManagerDashboard } from '@/components/ManagerDashboard';
 import { ROView } from '@/components/ROView';
 import { AuditLogView } from '@/components/AuditLogView';
 import { SettingsView } from '@/components/SettingsView';
+import { api } from '@/lib/api';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useSession } from '@/hooks/useSession';
@@ -22,13 +26,27 @@ export function BenzTechApp() {
     setOcrProgress: ocr.setOcrProgress,
   });
   const [consentLoading, setConsentLoading] = useState(false);
+  const [seedingDemo, setSeedingDemo] = useState(false);
 
-  if (sessionLoading || ro.loading) {
-    return (
-      <div className="app-container flex items-center justify-center min-h-dvh text-[#8e8e93] text-sm">
-        Loading Benz Tech...
-      </div>
-    );
+  const handleSeedDemo = useCallback(async () => {
+    setSeedingDemo(true);
+    try {
+      const result = await api.seedDemoData();
+      await ro.refreshList();
+      toast.success(result.message);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load demo data');
+    } finally {
+      setSeedingDemo(false);
+    }
+  }, [ro]);
+
+  if (sessionLoading) {
+    return <LoadingScreen label="Starting Benz Tech" sublabel="Verifying your session..." />;
+  }
+
+  if (ro.loading) {
+    return <LoadingScreen label="Loading repair orders" sublabel="Syncing dealership data..." />;
   }
 
   if (!session) {
@@ -52,6 +70,56 @@ export function BenzTechApp() {
   }
 
   const goToSettings = () => ro.setView('settings');
+  const isManager = session.role === 'manager';
+
+  const roListSection =
+    ro.filteredROs.length === 0 ? (
+      <div className="text-center py-8 text-[#8e8e93]">
+        <p className="text-sm">No repair orders match your search.</p>
+        <p className="text-xs mt-1">Scan a repair order or load demo data to get started.</p>
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {ro.filteredROs.map((item) => (
+          <div
+            key={item.id}
+            onClick={() => ro.openRO(item)}
+            className="ios-card p-3 active:bg-[#252528] cursor-pointer flex justify-between items-center"
+          >
+            <div>
+              <div className="font-semibold text-sm flex items-center gap-2">
+                {item.roNumber}
+                {item.roNumber.startsWith('DEMO-') && (
+                  <span className="status-pill bg-[#0a84ff]/15 text-[#0a84ff]">DEMO</span>
+                )}
+              </div>
+              <div className="text-xs text-[#8e8e93]">
+                {[item.vehicle.year, item.vehicle.make, item.vehicle.model].filter(Boolean).join(' ')} •{' '}
+                {item.repairLines.length} lines
+                {item.technicianName ? ` • ${item.technicianName}` : ''}
+              </div>
+              {item.complaints[0] && (
+                <div className="text-[10px] text-[#8e8e93] mt-0.5">{item.complaints[0].slice(0, 72)}...</div>
+              )}
+            </div>
+            <div className="text-right">
+              {item.repairLines.some((l) => l.warrantyStory) && (
+                <div className="text-[10px] text-[#30d158]">✓ stories</div>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  ro.deleteRO(item.id);
+                }}
+                className="text-[10px] text-[#ff9f0a] mt-1"
+              >
+                DEL
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
 
   return (
     <div className="app-container">
@@ -59,7 +127,28 @@ export function BenzTechApp() {
         <AppHeader dealershipName={session.dealershipName} technicianName={session.name} onOpenSettings={goToSettings} />
       )}
 
-      {ro.view === 'home' && (
+      {ro.view === 'home' && isManager && (
+        <ManagerDashboard
+          session={session}
+          allROs={ro.allROs}
+          filteredROs={ro.filteredROs}
+          searchTerm={ro.searchTerm}
+          onSearchChange={ro.setSearchTerm}
+          onOpenRO={ro.openRO}
+          onOpenSettings={goToSettings}
+          onOpenAuditLogs={() => ro.setView('audit')}
+          onSeedDemo={handleSeedDemo}
+          seedingDemo={seedingDemo}
+          onAddROPhoto={ro.addROPhoto}
+          onCreateManualRO={ro.createManualRO}
+          isProcessingOCR={ocr.isProcessingOCR}
+          ocrProgress={ocr.ocrProgress}
+        >
+          {roListSection}
+        </ManagerDashboard>
+      )}
+
+      {ro.view === 'home' && !isManager && (
         <HomeView
           technicianName={session.name}
           dealershipName={session.dealershipName}
@@ -77,6 +166,8 @@ export function BenzTechApp() {
           onOpenRO={ro.openRO}
           onDeleteRO={ro.deleteRO}
           onOpenSettings={goToSettings}
+          onSeedDemo={handleSeedDemo}
+          seedingDemo={seedingDemo}
         />
       )}
 
@@ -129,15 +220,12 @@ export function BenzTechApp() {
           session={session}
           onBack={() => ro.setView(ro.currentRO ? 'ro' : 'home')}
           onLogout={logout}
-          onOpenAuditLogs={session.role === 'manager' ? () => ro.setView('audit') : undefined}
+          onOpenAuditLogs={isManager ? () => ro.setView('audit') : undefined}
         />
       )}
 
       {ro.view === 'audit' && (
-        <AuditLogView
-          session={session}
-          onBack={() => ro.setView('settings')}
-        />
+        <AuditLogView session={session} onBack={() => ro.setView(isManager ? 'home' : 'settings')} />
       )}
     </div>
   );

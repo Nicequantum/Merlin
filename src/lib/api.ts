@@ -1,4 +1,11 @@
-import type { AuditLogEntry, RepairOrder, StructuredROExtraction, TechnicianSession } from '@/types';
+import type {
+  AuditDashboardSummary,
+  AuditLogEntry,
+  DashboardSummary,
+  RepairOrder,
+  StructuredROExtraction,
+  TechnicianSession,
+} from '@/types';
 
 export interface TechnicianUser {
   id: string;
@@ -8,6 +15,15 @@ export interface TechnicianUser {
   isActive: boolean;
   createdAt: string;
   consentAt?: string | null;
+}
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -22,7 +38,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Request failed. Please try again.');
+    throw new ApiError(body.error || 'Request failed. Please try again.', res.status);
   }
 
   return res.json();
@@ -37,7 +53,7 @@ async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Upload failed. Please try again.');
+    throw new ApiError(body.error || 'Upload failed. Please try again.', res.status);
   }
 
   return res.json();
@@ -57,7 +73,7 @@ export const api = {
   acceptConsent: () => apiFetch<{ consentAt: string }>('/api/consent', { method: 'POST' }),
 
   changePassword: (currentPassword: string, newPassword: string) =>
-    apiFetch<{ ok: boolean }>('/api/auth/change-password', {
+    apiFetch<{ ok: boolean; requiresReauth?: boolean }>('/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
@@ -146,6 +162,15 @@ export const api = {
     query.set('format', 'json');
     return apiFetch<{ logs: AuditLogEntry[]; count: number }>(`/api/audit-logs?${query.toString()}`);
   },
+
+  getAuditSummary: () => apiFetch<AuditDashboardSummary>('/api/audit-logs/summary'),
+
+  getDashboardSummary: () => apiFetch<DashboardSummary>('/api/dashboard/summary'),
+
+  seedDemoData: () =>
+    apiFetch<{ createdCount: number; repairOrders: RepairOrder[]; message: string }>('/api/demo/seed', {
+      method: 'POST',
+    }),
 
   exportAuditLogsCsv: (params: {
     technicianId?: string;

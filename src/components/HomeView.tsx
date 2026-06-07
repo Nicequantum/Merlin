@@ -1,4 +1,4 @@
-import { Camera, Plus, Settings } from 'lucide-react';
+import { Camera, Database, Plus, Settings } from 'lucide-react';
 import type { PendingImage, RepairOrder } from '../types';
 
 interface HomeViewProps {
@@ -18,6 +18,8 @@ interface HomeViewProps {
   onOpenRO: (ro: RepairOrder) => void;
   onDeleteRO: (id: string) => void;
   onOpenSettings: () => void;
+  onSeedDemo: () => Promise<void>;
+  seedingDemo: boolean;
 }
 
 export function HomeView({
@@ -37,6 +39,8 @@ export function HomeView({
   onOpenRO,
   onDeleteRO,
   onOpenSettings,
+  onSeedDemo,
+  seedingDemo,
 }: HomeViewProps) {
   return (
     <div className="relative min-h-dvh px-4 pt-2 pb-8">
@@ -59,11 +63,11 @@ export function HomeView({
             </p>
         </div>
 
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-2">
           <button
             onClick={onAddROPhoto}
             disabled={isProcessingOCR}
-            className="primary-btn flex-1 h-12 flex items-center justify-center gap-2 text-sm"
+            className="primary-btn flex-1 h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-60"
           >
             <Camera size={18} />
             {isProcessingOCR ? `PROCESSING... ${ocrProgress}%` : 'ADD RO PHOTO'}
@@ -72,6 +76,14 @@ export function HomeView({
             <Plus size={18} /> NEW MANUAL
           </button>
         </div>
+        <button
+          onClick={onSeedDemo}
+          disabled={seedingDemo || isProcessingOCR}
+          className="secondary-btn w-full h-10 mb-4 flex items-center justify-center gap-2 text-xs font-semibold disabled:opacity-60"
+        >
+          <Database size={14} />
+          {seedingDemo ? 'LOADING DEMO DATA...' : 'LOAD DEMO DATA'}
+        </button>
 
         {pendingROImages.length > 0 && (
           <div className="ios-card p-3 mb-4">
@@ -132,8 +144,8 @@ export function HomeView({
 
         {filteredROs.length === 0 ? (
           <div className="text-center py-10 text-[#8e8e93]">
-            <p>No past ROs yet.</p>
-            <p className="text-xs mt-1">Scan your first repair order above.</p>
+            <p>No repair orders yet.</p>
+            <p className="text-xs mt-1">Scan a repair order or tap Load Demo Data to explore the workflow.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -144,7 +156,12 @@ export function HomeView({
                 className="ios-card p-3 active:bg-[#252528] cursor-pointer flex justify-between items-center"
               >
                 <div>
-                  <div className="font-semibold text-sm">{ro.roNumber}</div>
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    {ro.roNumber}
+                    {ro.roNumber.startsWith('DEMO-') && (
+                      <span className="status-pill bg-[#0a84ff]/15 text-[#0a84ff]">DEMO</span>
+                    )}
+                  </div>
                     <div className="text-xs text-[#8e8e93]">
                       {[ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ')} • {ro.repairLines.length} lines
                       {ro.technicianName ? ` • ${ro.technicianName}` : ''}

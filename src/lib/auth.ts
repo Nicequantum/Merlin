@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { prisma } from './db';
+import { logger } from './logger';
 
 const SESSION_COOKIE = 'benz_tech_session';
 const SESSION_MAX_AGE = 60 * 60 * 12; // 12 hours
@@ -14,6 +15,7 @@ export interface SessionPayload {
   dealershipId: string;
   dealershipName: string;
   consentAt: string | null;
+  sessionVersion: number;
 }
 
 function getSecret(): Uint8Array {
@@ -63,17 +65,56 @@ export async function clearSessionCookie(): Promise<void> {
   cookieStore.delete(SESSION_COOKIE);
 }
 
+async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<SessionPayload | null> {
+  const tech = await prisma.technician.findUnique({
+    where: { id: tokenPayload.technicianId },
+    include: { dealership: true },
+  });
+
+  if (!tech || !tech.isActive) return null;
+  if (tech.sessionVersion !== tokenPayload.sessionVersion) return null;
+
+  return {
+    technicianId: tech.id,
+    email: tech.email,
+    name: tech.name,
+    role: tech.role,
+    dealershipId: tech.dealershipId,
+    dealershipName: tech.dealership.name,
+    consentAt: tech.consentAt?.toISOString() ?? null,
+    sessionVersion: tech.sessionVersion,
+  };
+}
+
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifySessionToken(token);
+
+  const tokenPayload = await verifySessionToken(token);
+  if (!tokenPayload) return null;
+
+  return resolveSessionPayload(tokenPayload);
 }
 
 export async function requireSession(): Promise<SessionPayload> {
   const session = await getSession();
   if (!session) throw new Error('Unauthorized');
   return session;
+}
+
+export async function incrementSessionVersion(technicianId: string): Promise<number> {
+  const updated = await prisma.technician.update({
+    where: { id: technicianId },
+    data: { sessionVersion: { increment: 1 } },
+    select: { sessionVersion: true },
+  });
+  logger.info('auth.session_version_incremented', { technicianId, sessionVersion: updated.sessionVersion });
+  return updated.sessionVersion;
+}
+
+export async function revokeTechnicianSessions(technicianId: string): Promise<void> {
+  await incrementSessionVersion(technicianId);
 }
 
 export async function loginTechnician(email: string, password: string): Promise<SessionPayload | null> {
@@ -92,5 +133,6 @@ export async function loginTechnician(email: string, password: string): Promise<
     dealershipId: tech.dealershipId,
     dealershipName: tech.dealership.name,
     consentAt: tech.consentAt?.toISOString() ?? null,
+    sessionVersion: tech.sessionVersion,
   };
 }

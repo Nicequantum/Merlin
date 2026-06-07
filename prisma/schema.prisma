@@ -23,6 +23,7 @@ model Technician {
   passwordHash   String
   role           String        @default("technician")
   isActive       Boolean       @default(true)
+  sessionVersion Int           @default(0)
   dealershipId   String
   dealership     Dealership    @relation(fields: [dealershipId], references: [id])
   consentAt      DateTime?
@@ -92,10 +93,13 @@ model AuditLog {
   dealership   Dealership  @relation(fields: [dealershipId], references: [id])
   metadata     String      @default("{}")
   ipAddress    String?
+  previousHash String      @default("GENESIS")
+  entryHash    String      @default("")
   createdAt    DateTime    @default(now())
 
   @@index([dealershipId])
   @@index([technicianId])
   @@index([action])
   @@index([createdAt])
+  @@index([dealershipId, createdAt])
 }

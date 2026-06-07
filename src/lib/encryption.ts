@@ -36,3 +36,19 @@ export function decryptPII(ciphertext: string): string {
     return '';
   }
 }
+
+export function encryptStringArray(items: string[]): string {
+  return encryptPII(JSON.stringify(items));
+}
+
+export function decryptStringArray(ciphertext: string): string[] {
+  const raw = decryptPII(ciphertext);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+

@@ -1,7 +1,7 @@
 import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
-import { dbToRepairOrder, repairLineToDbFields, repairOrderToDbFields } from '@/lib/roMapper';
+import { dbToRepairOrder, normalizeImageAttachments, repairLineToDbFields, repairOrderToDbFields } from '@/lib/roMapper';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { parseBody, updateRepairOrderSchema } from '@/lib/validation';
@@ -49,10 +49,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
 
       const data = parsed.data;
+      const existingMapped = dbToRepairOrder(existing);
       const input = {
         roNumber: data.roNumber ?? existing.roNumber,
         vehicle: {
-          vin: data.vehicle?.vin ?? existing.vin,
+          vin: data.vehicle?.vin ?? existingMapped.vehicle.vin,
           year: data.vehicle?.year ?? existing.year,
           make: data.vehicle?.make ?? existing.make,
           model: data.vehicle?.model ?? existing.model,
@@ -60,9 +61,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           mileageIn: data.vehicle?.mileageIn ?? existing.mileageIn,
           mileageOut: data.vehicle?.mileageOut ?? existing.mileageOut,
         },
-        customer: data.customer ?? { name: '' },
-        complaints: data.complaints ?? JSON.parse(existing.complaints),
-        xentryImages: data.xentryImages,
+        customer: data.customer ?? { name: existingMapped.customer.name },
+        complaints: data.complaints ?? existingMapped.complaints,
+        xentryImages: data.xentryImages ? normalizeImageAttachments(data.xentryImages) : undefined,
         xentryOcrTexts: data.xentryOcrTexts,
         repairLines: data.repairLines,
       };
@@ -92,7 +93,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
               description: line.description || 'Enter repair description',
               customerConcern: line.customerConcern || '',
               technicianNotes: line.technicianNotes || '',
-              xentryImages: line.xentryImages || [],
+              xentryImages: normalizeImageAttachments(line.xentryImages),
               xentryOcrTexts: line.xentryOcrTexts || [],
               extractedData: { ...emptyExtractedData(), ...line.extractedData },
               warrantyStory: line.warrantyStory,

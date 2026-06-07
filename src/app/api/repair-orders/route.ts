@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import {
   dbToRepairOrder,
+  normalizeImageAttachments,
   repairLineToDbFields,
   repairOrderToDbFields,
   type RepairOrderInput,
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
           },
           customer: { name: data.customer?.name || '' },
           complaints: data.complaints || [],
-          xentryImages: data.xentryImages || [],
+          xentryImages: normalizeImageAttachments(data.xentryImages),
           xentryOcrTexts: data.xentryOcrTexts || [],
           repairLines: (data.repairLines || []).map((l, i) => ({
             id: l.id || `temp-${i}`,
@@ -102,7 +103,7 @@ export async function POST(request: Request) {
             description: l.description || 'Enter repair description',
             customerConcern: l.customerConcern || '',
             technicianNotes: l.technicianNotes || '',
-            xentryImages: l.xentryImages || [],
+            xentryImages: normalizeImageAttachments(l.xentryImages),
             xentryOcrTexts: l.xentryOcrTexts || [],
             extractedData: { ...emptyExtractedData(), ...l.extractedData },
             warrantyStory: l.warrantyStory,

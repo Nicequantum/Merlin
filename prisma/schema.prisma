@@ -43,7 +43,7 @@ model RepairOrder {
   technician            Technician   @relation(fields: [technicianId], references: [id])
   dealershipId          String
   dealership            Dealership   @relation(fields: [dealershipId], references: [id])
-  vin                   String       @default("")
+  vinEncrypted          String       @default("")
   year                  String       @default("")
   make                  String       @default("")
   model                 String       @default("")
@@ -51,7 +51,7 @@ model RepairOrder {
   mileageIn             String       @default("")
   mileageOut            String       @default("")
   customerNameEncrypted String       @default("")
-  complaints            String       @default("[]")
+  complaintsEncrypted   String       @default("[]")
   xentryOcrTexts        String       @default("[]")
   xentryImageUrls       String       @default("[]")
   createdAt             DateTime     @default(now())
@@ -64,19 +64,19 @@ model RepairOrder {
 }
 
 model RepairLine {
-  id               String      @id @default(cuid())
-  repairOrderId    String
-  repairOrder      RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
-  lineNumber       Int
-  description      String
-  customerConcern  String      @default("")
-  technicianNotes  String      @default("")
-  xentryImageUrls  String      @default("[]")
-  xentryOcrTexts   String      @default("[]")
-  extractedData    String      @default("{}")
-  warrantyStory    String?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  id                        String      @id @default(cuid())
+  repairOrderId             String
+  repairOrder               RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
+  lineNumber                Int
+  description               String
+  customerConcernEncrypted  String      @default("")
+  technicianNotes           String      @default("")
+  xentryImageUrls           String      @default("[]")
+  xentryOcrTexts            String      @default("[]")
+  extractedData             String      @default("{}")
+  warrantyStory             String?
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
 
   @@index([repairOrderId])
 }

@@ -42,13 +42,40 @@ export function encryptStringArray(items: string[]): string {
 }
 
 export function decryptStringArray(ciphertext: string): string[] {
+  return decryptComplaintsPayload(ciphertext).complaints;
+}
+
+export interface ComplaintsPayload {
+  complaints: string[];
+  labels?: string[];
+}
+
+/** Backward-compatible: legacy payloads are plain string arrays. */
+export function decryptComplaintsPayload(ciphertext: string): ComplaintsPayload {
   const raw = decryptPII(ciphertext);
-  if (!raw) return [];
+  if (!raw) return { complaints: [] };
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.map(String) : [];
+    if (Array.isArray(parsed)) {
+      return { complaints: parsed.map(String) };
+    }
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.complaints)) {
+      const complaints = parsed.complaints.map(String);
+      const labels = Array.isArray(parsed.labels) ? parsed.labels.map(String) : undefined;
+      if (labels && labels.length === complaints.length) {
+        return { complaints, labels };
+      }
+      return { complaints };
+    }
   } catch {
-    return [];
+    return { complaints: [] };
   }
+  return { complaints: [] };
+}
+
+export function encryptComplaintsPayload(complaints: string[], labels?: string[]): string {
+  const hasLabels = Boolean(labels && labels.length === complaints.length);
+  const payload: ComplaintsPayload | string[] = hasLabels ? { complaints, labels } : complaints;
+  return encryptPII(JSON.stringify(payload));
 }
 

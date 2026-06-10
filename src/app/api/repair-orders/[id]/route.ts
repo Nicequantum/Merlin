@@ -70,6 +70,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         },
         customer: data.customer ?? { name: existingMapped.customer.name },
         complaints: data.complaints ?? existingMapped.complaints,
+        complaintLabels: data.complaintLabels ?? existingMapped.complaintLabels,
         xentryImages: data.xentryImages ? normalizeImageAttachments(data.xentryImages) : undefined,
         xentryOcrTexts: data.xentryOcrTexts,
         repairLines: data.repairLines,
@@ -141,6 +142,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             repairOrderId: id,
             serviceAdvisorName: advisorNameToCapture,
             complaints: input.complaints,
+            complaintLabels: input.complaintLabels,
             vehicle: {
               make: input.vehicle.make,
               model: input.vehicle.model,

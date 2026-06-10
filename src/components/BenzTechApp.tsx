@@ -121,6 +121,9 @@ export function BenzTechApp() {
           onOpenServiceAdvisors={() => ro.setView('advisors')}
           pendingROImages={ro.pendingROImages}
           onScanRO={ro.scanRO}
+          onAddFromGallery={ro.addScanPagesFromGallery}
+          onProcessScan={ro.processPendingScan}
+          onClearPendingScan={ro.clearPendingScan}
           onCancelScan={ro.cancelScan}
           onCreateManualRO={ro.createManualRO}
           isProcessingOCR={ocr.isProcessingOCR}
@@ -142,6 +145,9 @@ export function BenzTechApp() {
           ocrProgress={ocr.ocrProgress}
           scanStatusMessage={ocr.scanStatusMessage}
           onScanRO={ro.scanRO}
+          onAddFromGallery={ro.addScanPagesFromGallery}
+          onProcessScan={ro.processPendingScan}
+          onClearPendingScan={ro.clearPendingScan}
           onCancelScan={ro.cancelScan}
           onCreateManualRO={ro.createManualRO}
           onOpenRO={ro.openRO}

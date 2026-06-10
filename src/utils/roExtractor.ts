@@ -16,7 +16,35 @@ const INSPECTION_DETAIL_LINE =
   /^(?:RISI\b|CDEF\b|PASSED\b|\d{3,}\s*(?:PASSED|CDEF|RISI)\b)/i;
 
 const LETTER_LABEL_PATTERN = /^([A-Z])\s+(.+)$/;
-const LETTER_LABEL_OUTPUT_PATTERN = /^([A-Z])[\.\)\:\s\-–—–—]+\s*(.+)$/i;
+const HASHTAG_LETTER_LABEL_PATTERN = /^#\s*([A-Z])\s+(.+)$/i;
+const LETTER_LABEL_OUTPUT_PATTERN = /^#?\s*([A-Z])[\.\)\:\s\-–—–—]+\s*(.+)$/i;
+
+export interface LabeledComplaint {
+  letter: string;
+  text: string;
+}
+
+function parseComplaintLabelSegment(segment: string): LabeledComplaint | null {
+  const trimmed = segment.trim();
+  if (!trimmed) return null;
+
+  const hashtagMatch = trimmed.match(HASHTAG_LETTER_LABEL_PATTERN);
+  if (hashtagMatch) {
+    return { letter: hashtagMatch[1].toUpperCase(), text: hashtagMatch[2] };
+  }
+
+  const letterMatch = trimmed.match(LETTER_LABEL_PATTERN);
+  if (letterMatch) {
+    return { letter: letterMatch[1].toUpperCase(), text: letterMatch[2] };
+  }
+
+  const outputMatch = trimmed.match(LETTER_LABEL_OUTPUT_PATTERN);
+  if (outputMatch) {
+    return { letter: outputMatch[1].toUpperCase(), text: outputMatch[2] };
+  }
+
+  return null;
+}
 
 function normalizeComplaintText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
@@ -66,8 +94,8 @@ function isValidComplaintText(text: string): boolean {
   return true;
 }
 
-/** Split merged OCR before the next complaint label (" B CHECK...", " C NOISE..."). */
-const COMPLAINT_LABEL_SPLIT = /\s+(?=[A-Z]\s+[A-Z][A-Za-z])/;
+/** Split merged OCR before the next complaint label ("# B ...", " B CHECK...", " C NOISE..."). */
+const COMPLAINT_LABEL_SPLIT = /\s+(?=(?:#\s*)?[A-Z]\s+[A-Z][A-Za-z])/;
 
 function isComplaintLetter(letter: string, text: string): boolean {
   if (!/^[A-Z]$/.test(letter)) return false;
@@ -95,14 +123,14 @@ function addLetterComplaint(byLetter: Map<string, string>, letter: string, text:
   }
 }
 
-/** Primary extractor for real-world RO complaint lines: "A RHODE ISLAND STATE INSPECTION" */
-export function extractLetterLabeledComplaints(text: string): string[] {
-  if (!text || text.trim().length < 4) return [];
+/** Build letter → complaint map from OCR/RO text (supports "A ...", "# A ...", "A. ..."). */
+export function extractLetterLabeledComplaintMap(text: string): Map<string, string> {
+  const byLetter = new Map<string, string>();
+  if (!text || text.trim().length < 4) return byLetter;
 
   const section = getComplaintSection(text.replace(/\r\n/g, '\n'));
-  const byLetter = new Map<string, string>();
-
   const lines = section.split(/\n/).map((l) => l.trim()).filter(Boolean);
+
   for (const line of lines) {
     if (/^LINE\s+OPCODE\s+TECH\s+TYPE\s+HOURS\s*$/i.test(line)) continue;
 
@@ -114,14 +142,36 @@ export function extractLetterLabeledComplaints(text: string): string[] {
 
     const segments = chunk.split(COMPLAINT_LABEL_SPLIT).filter(Boolean);
     for (const segment of segments) {
-      const match = segment.trim().match(LETTER_LABEL_PATTERN);
-      if (match) addLetterComplaint(byLetter, match[1], match[2]);
+      const parsed = parseComplaintLabelSegment(segment);
+      if (parsed) addLetterComplaint(byLetter, parsed.letter, parsed.text);
     }
   }
 
+  return byLetter;
+}
+
+/** Primary extractor for real-world RO complaint lines: "A RHODE ISLAND STATE INSPECTION" / "# A ..." */
+export function extractLetterLabeledComplaints(text: string): string[] {
+  return sortedLabeledComplaints(extractLetterLabeledComplaintMap(text)).map((item) => item.text);
+}
+
+export function extractLetterLabeledComplaintsWithLabels(text: string): LabeledComplaint[] {
+  return sortedLabeledComplaints(extractLetterLabeledComplaintMap(text));
+}
+
+function sortedLabeledComplaints(byLetter: Map<string, string>): LabeledComplaint[] {
   return [...byLetter.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, value]) => value);
+    .map(([letter, text]) => ({ letter, text }));
+}
+
+export function labeledComplaintsToArrays(
+  labeled: LabeledComplaint[]
+): { complaints: string[]; labels: string[] } {
+  return {
+    complaints: labeled.map((item) => item.text),
+    labels: labeled.map((item) => item.letter),
+  };
 }
 
 export function extractComplaints(text: string): string[] {
@@ -203,9 +253,9 @@ export function extractComplaints(text: string): string[] {
       }
       currentBlock += line + ' ';
     }
-    const strayLabel = line.match(LETTER_LABEL_PATTERN);
-    if (strayLabel && isComplaintLetter(strayLabel[1], strayLabel[2])) {
-      const c = normalizeComplaintText(strayLabel[2]);
+    const strayLabel = parseComplaintLabelSegment(line);
+    if (strayLabel && isComplaintLetter(strayLabel.letter, strayLabel.text)) {
+      const c = normalizeComplaintText(strayLabel.text);
       if (!comps.includes(c)) comps.push(c);
     }
   }
@@ -248,7 +298,10 @@ export function mergeROExtractions(
   supplementRawText = ''
 ): StructuredROExtraction {
   const grokComplaints = mergeComplaintLists(primary.complaints, supplement.complaints);
-  const complaints = recoverComplaintsFromText(supplementRawText, grokComplaints);
+  const recovered = recoverComplaintsWithLabelsFromText(supplementRawText, grokComplaints);
+  const complaints = sanitizeComplaints(recovered.complaints);
+  const complaintLabels =
+    recovered.labels && recovered.labels.length === complaints.length ? recovered.labels : undefined;
 
   return {
     roNumber: pickNonEmpty(primary.roNumber, supplement.roNumber),
@@ -258,7 +311,8 @@ export function mergeROExtractions(
       supplement.serviceAdvisorName || ''
     ) || undefined,
     vehicle: mergeVehicleFields(primary.vehicle, supplement.vehicle),
-    complaints: sanitizeComplaints(complaints),
+    complaints,
+    complaintLabels,
   };
 }
 
@@ -305,12 +359,24 @@ function extractStructuredLetterComplaints(text: string): Map<string, string> {
   return byLetter;
 }
 
+export interface RecoveredComplaints {
+  complaints: string[];
+  labels?: string[];
+}
+
 /**
  * Recover Line A when Grok skips it or mislabels continuation detail as B.
  * Letter-labeled OCR/raw text is authoritative over Grok structured output.
  */
 export function recoverComplaintsFromText(text: string, grokComplaints: string[] = []): string[] {
-  const letterFromRaw = extractLetterLabeledComplaints(text);
+  return recoverComplaintsWithLabelsFromText(text, grokComplaints).complaints;
+}
+
+export function recoverComplaintsWithLabelsFromText(
+  text: string,
+  grokComplaints: string[] = []
+): RecoveredComplaints {
+  const letterFromRawMap = extractLetterLabeledComplaintMap(text);
   const structuredLetters = extractStructuredLetterComplaints(text);
   const byLetter = new Map<string, string>();
 
@@ -319,9 +385,8 @@ export function recoverComplaintsFromText(text: string, grokComplaints: string[]
   }
 
   // Letter-labeled raw/OCR lines override Grok structured (fixes skipped Line A).
-  for (let i = 0; i < letterFromRaw.length; i++) {
-    const letter = String.fromCharCode(65 + i);
-    addLetterComplaint(byLetter, letter, letterFromRaw[i]);
+  for (const [letter, value] of letterFromRawMap) {
+    addLetterComplaint(byLetter, letter, value);
   }
 
   // Grok skipped A but labeled continuation detail as B (e.g. "B. RISI RHODE ISLAND...").
@@ -353,18 +418,27 @@ export function recoverComplaintsFromText(text: string, grokComplaints: string[]
 
   if (byLetter.size > 0) {
     const seen = new Set<string>();
-    const ordered: string[] = [];
-    for (const [, value] of [...byLetter.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const complaints: string[] = [];
+    const labels: string[] = [];
+    for (const [letter, value] of [...byLetter.entries()].sort(([a], [b]) => a.localeCompare(b))) {
       const key = value.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
-        ordered.push(value);
+        labels.push(letter);
+        complaints.push(value);
       }
     }
-    return ordered;
+    return { complaints, labels };
   }
 
-  return filterComplaintList(mergeComplaintLists(letterFromRaw, grokComplaints, extractComplaints(text)));
+  const fallback = filterComplaintList(
+    mergeComplaintLists(
+      [...letterFromRawMap.values()],
+      grokComplaints,
+      extractComplaints(text)
+    )
+  );
+  return { complaints: fallback };
 }
 
 export function extractVehicleDetails(text: string): VehicleInfo {
@@ -549,13 +623,18 @@ export function parseStructuredROText(text: string): StructuredROExtraction {
         continue;
       }
 
-      let m = line.match(/^([A-Z])[\.\)\:\s\-–—–—]+\s*(.+)$/i);
-      if (!m) m = line.match(/^(\d{1,2})[\.\)\:\s\-–—–—]+\s*(.+)$/i);
-      if (m && m[2]) {
-        const c = trimComplaintContinuation(m[2]);
+      const parsed = parseComplaintLabelSegment(line);
+      if (parsed) {
+        const c = trimComplaintContinuation(parsed.text);
         if (isValidComplaintText(c)) structuredComplaints.push(c);
-      } else if (isValidComplaintText(line)) {
-        structuredComplaints.push(normalizeComplaintText(line));
+      } else {
+        const numbered = line.match(/^(\d{1,2})[\.\)\:\s\-–—–—]+\s*(.+)$/i);
+        if (numbered && numbered[2]) {
+          const c = trimComplaintContinuation(numbered[2]);
+          if (isValidComplaintText(c)) structuredComplaints.push(c);
+        } else if (isValidComplaintText(line)) {
+          structuredComplaints.push(normalizeComplaintText(line));
+        }
       }
     }
   }
@@ -592,7 +671,7 @@ export function parseStructuredROText(text: string): StructuredROExtraction {
     serviceAdvisorName = extractServiceAdvisorFromText(text);
   }
 
-  const complaints = recoverComplaintsFromText(
+  const recovered = recoverComplaintsWithLabelsFromText(
     text,
     mergeComplaintLists(structuredComplaints, extractComplaints(text))
   );
@@ -604,7 +683,8 @@ export function parseStructuredROText(text: string): StructuredROExtraction {
 
   return {
     vehicle,
-    complaints,
+    complaints: recovered.complaints,
+    complaintLabels: recovered.labels,
     customerName,
     roNumber,
     serviceAdvisorName: serviceAdvisorName || undefined,

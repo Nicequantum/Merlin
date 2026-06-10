@@ -56,6 +56,8 @@ export interface RepairOrder {
     name: string;
   };
   complaints: string[];
+  /** Original RO line letters (A, B, C, E, F…) when extracted from scan; falls back to index order. */
+  complaintLabels?: string[];
   serviceAdvisor?: ServiceAdvisorSummary;
   serviceAdvisorName?: string;
   xentryImages?: ImageAttachment[];
@@ -121,6 +123,7 @@ export interface AdvisorDetail {
 export interface StructuredROExtraction {
   vehicle: VehicleInfo;
   complaints: string[];
+  complaintLabels?: string[];
   customerName: string;
   roNumber: string;
   serviceAdvisorName?: string;

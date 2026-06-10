@@ -12,6 +12,7 @@ export interface CaptureAdvisorIntelligenceInput {
   repairOrderId: string;
   serviceAdvisorName?: string;
   complaints: string[];
+  complaintLabels?: string[];
   vehicle: { make?: string; model?: string };
   extractionSource: AdvisorExtractionSource;
   extractionConfidence?: number;
@@ -70,7 +71,7 @@ export async function captureAdvisorIntelligence(
         dealershipId: input.dealershipId,
         serviceAdvisorId: resolved.id,
         repairOrderId: input.repairOrderId,
-        lineLabel: complaintLineLabel(index),
+        lineLabel: input.complaintLabels?.[index] || complaintLineLabel(index),
         complaintTextEncrypted: encryptPII(complaint),
         extractionSource: input.extractionSource,
         extractionConfidence: input.extractionConfidence ?? null,

@@ -13,6 +13,9 @@ interface HomeViewProps {
   ocrProgress: number;
   scanStatusMessage: string;
   onScanRO: () => void;
+  onAddFromGallery: () => void;
+  onProcessScan: () => void;
+  onClearPendingScan: () => void;
   onCancelScan: () => void;
   onCreateManualRO: () => void;
   onOpenRO: (ro: RepairOrder) => void;
@@ -30,6 +33,9 @@ export function HomeView({
   ocrProgress,
   scanStatusMessage,
   onScanRO,
+  onAddFromGallery,
+  onProcessScan,
+  onClearPendingScan,
   onCancelScan,
   onCreateManualRO,
   onOpenRO,
@@ -61,6 +67,9 @@ export function HomeView({
           ocrProgress={ocrProgress}
           scanStatusMessage={scanStatusMessage}
           onScanRO={onScanRO}
+          onAddFromGallery={onAddFromGallery}
+          onProcessScan={onProcessScan}
+          onClearPendingScan={onClearPendingScan}
           onCancelScan={onCancelScan}
           onCreateManualRO={onCreateManualRO}
           scanButtonLabel="SCAN RO"

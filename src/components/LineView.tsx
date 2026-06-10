@@ -20,7 +20,9 @@ interface LineViewProps {
   onGenerateStory: () => void;
 }
 
-const letter = (i: number) => String.fromCharCode(65 + i);
+function complaintLabel(labels: string[] | undefined, index: number): string {
+  return labels?.[index] || String.fromCharCode(65 + index);
+}
 
 function charCountColor(len: number): string {
   if (len > WARRANTY_STORY_MAX_CHARS) return 'text-[#ff3b30]';
@@ -81,7 +83,9 @@ export function LineView({
         {ro.complaints && ro.complaints.length > 0 && (
           <div className="mt-1.5 text-[10px] text-[#8e8e93]">
             Complaints:{' '}
-            {ro.complaints.map((c, i) => `${letter(i)}. ${c.slice(0, 42)}${c.length > 42 ? '…' : ''}`).join('  ')}
+            {ro.complaints
+              .map((c, i) => `${complaintLabel(ro.complaintLabels, i)}. ${c.slice(0, 42)}${c.length > 42 ? '…' : ''}`)
+              .join('  ')}
           </div>
         )}
       </div>

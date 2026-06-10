@@ -1,6 +1,12 @@
 import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder } from '@/types';
 import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
-import { decryptPII, decryptStringArray, encryptPII, encryptStringArray } from './encryption';
+import {
+  decryptComplaintsPayload,
+  decryptPII,
+  encryptComplaintsPayload,
+  encryptPII,
+  encryptStringArray,
+} from './encryption';
 import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
 
 function parseJson<T>(raw: string, fallback: T): T {
@@ -98,7 +104,13 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
       mileageOut: ro.mileageOut,
     },
     customer: { name: decryptPII(ro.customerNameEncrypted) },
-    complaints: decryptStringArray(ro.complaintsEncrypted),
+    ...(() => {
+      const payload = decryptComplaintsPayload(ro.complaintsEncrypted);
+      return {
+        complaints: payload.complaints,
+        complaintLabels: payload.labels,
+      };
+    })(),
     serviceAdvisor: ro.serviceAdvisor
       ? {
           id: ro.serviceAdvisor.id,
@@ -149,6 +161,7 @@ export interface RepairOrderInput {
   };
   customer: { name: string };
   complaints: string[];
+  complaintLabels?: string[];
   xentryImages?: ImageAttachment[];
   xentryOcrTexts?: string[];
   repairLines: RepairLine[];
@@ -165,7 +178,7 @@ export function repairOrderToDbFields(input: RepairOrderInput) {
     mileageIn: input.vehicle.mileageIn,
     mileageOut: input.vehicle.mileageOut,
     customerNameEncrypted: encryptPII(input.customer.name),
-    complaintsEncrypted: encryptStringArray(input.complaints),
+    complaintsEncrypted: encryptComplaintsPayload(input.complaints, input.complaintLabels),
     xentryImageUrls: imageAttachmentsToJson(input.xentryImages),
     xentryOcrTexts: JSON.stringify(input.xentryOcrTexts || []),
   };

@@ -3,9 +3,11 @@ import { describe, test } from 'node:test';
 import {
   extractComplaints,
   extractLetterLabeledComplaints,
+  extractLetterLabeledComplaintsWithLabels,
   extractServiceAdvisorFromText,
   mergeROExtractions,
   parseStructuredROText,
+  recoverComplaintsWithLabelsFromText,
 } from '../../src/utils/roExtractor';
 
 const REAL_RO_SNIPPET = `RO Number: 482910
@@ -106,6 +108,54 @@ C NOISE FROM REAR`;
     const merged = mergeROExtractions(grokParsed, ocrParsed, COLLAPSED_OCR_LINE);
     assert.equal(merged.complaints[0], 'RHODE ISLAND STATE INSPECTION');
     assert.ok(merged.complaints.length >= 1);
+  });
+
+  test('extracts hashtag-prefixed complaints (# A, # B, # C)', () => {
+    const text = `LINE OPCODE TECH TYPE HOURS
+# A RHODE ISLAND STATE INSPECTION
+# B CHECK ENGINE LIGHT ON
+# C NOISE FROM REAR`;
+    const complaints = extractLetterLabeledComplaints(text);
+    assert.deepEqual(complaints, [
+      'RHODE ISLAND STATE INSPECTION',
+      'CHECK ENGINE LIGHT ON',
+      'NOISE FROM REAR',
+    ]);
+  });
+
+  test('preserves non-sequential complaint letters (A, B, C, E, F — no D)', () => {
+    const text = `LINE OPCODE TECH TYPE HOURS
+# A RHODE ISLAND STATE INSPECTION
+# B CHECK ENGINE LIGHT ON
+# C NOISE FROM REAR
+# E VIBRATION AT HIGHWAY SPEED
+# F WIND NOISE FROM SUNROOF`;
+    const labeled = extractLetterLabeledComplaintsWithLabels(text);
+    assert.deepEqual(
+      labeled.map((item) => item.letter),
+      ['A', 'B', 'C', 'E', 'F']
+    );
+    const recovered = recoverComplaintsWithLabelsFromText(text);
+    assert.deepEqual(recovered.labels, ['A', 'B', 'C', 'E', 'F']);
+    assert.equal(recovered.complaints.length, 5);
+  });
+
+  test('extracts Line A from merged hashtag header row', () => {
+    const text = 'LINE OPCODE TECH TYPE HOURS # A RHODE ISLAND STATE INSPECTION # B CHECK ENGINE LIGHT ON';
+    const complaints = extractLetterLabeledComplaints(text);
+    assert.deepEqual(complaints, ['RHODE ISLAND STATE INSPECTION', 'CHECK ENGINE LIGHT ON']);
+  });
+
+  test('parseStructuredROText preserves E/F labels from hashtag OCR', () => {
+    const text = `LINE OPCODE TECH TYPE HOURS
+# A STATE INSPECTION
+# B CHECK ENGINE LIGHT
+# C BRAKE NOISE
+# E VIBRATION
+# F SUNROOF WIND NOISE`;
+    const parsed = parseStructuredROText(text);
+    assert.deepEqual(parsed.complaintLabels, ['A', 'B', 'C', 'E', 'F']);
+    assert.equal(parsed.complaints.length, 5);
   });
 
   test('mergeROExtractions prefers non-empty service advisor name', () => {

@@ -11,19 +11,23 @@ VEHICLE FIELDS (top header):
 CUSTOMER COMPLAINTS (HIGHEST PRIORITY — DO NOT SKIP LINE A):
 Real dealership ROs use minimal formatting. Complaints are NOT always preceded by "Customer states" or colons.
 
-CRITICAL FORMAT — letter + space + text (period optional):
+CRITICAL FORMAT — letter + space + text (period optional). Many ROs prefix with hashtag:
+  # A RHODE ISLAND STATE INSPECTION
+  # B CHECK ENGINE LIGHT ON
+  # C NOISE FROM FRONT SUSPENSION
   A RHODE ISLAND STATE INSPECTION
   B CHECK ENGINE LIGHT ON
   C. NOISE FROM FRONT SUSPENSION
 
 Rules:
 1. Find the complaint section (header row often reads "LINE OPCODE TECH TYPE HOURS" or similar).
-2. Extract EVERY line that starts with a SINGLE CAPITAL LETTER followed by a SPACE, then complaint text.
+2. Extract EVERY line that starts with "# " + LETTER + SPACE, or a SINGLE CAPITAL LETTER followed by a SPACE, then complaint text.
 3. Line A is frequently the FIRST complaint immediately after the header — minimal spacing, plain sentence, ALL CAPS is common. NEVER skip Line A.
-4. A line starting with "A " (letter A + space) IS a complaint even with no period, colon, or bullet.
-5. Lines WITHOUT a leading letter (e.g. "RISI RHODE ISLAND STATE INSPECTION", "619 CDEF", "130132 PASSED") are continuation/inspection detail — attach mentally to the prior lettered line but output ONLY the lettered complaint lines A, B, C…
-6. Also capture complaints after phrases: "Customer states", "Customer complaint", "C/S", "Concern", "state inspection".
-7. Search ALL pages/images. If truly none, output exactly "None listed."
+4. A line starting with "# A " or "A " (letter A + space) IS a complaint even with no period, colon, or bullet.
+5. Preserve the EXACT letter labels from the RO (A, B, C, E, F — letters may skip, e.g. no D).
+6. Lines WITHOUT a leading letter (e.g. "RISI RHODE ISLAND STATE INSPECTION", "619 CDEF", "130132 PASSED") are continuation/inspection detail — attach mentally to the prior lettered line but output ONLY the lettered complaint lines A, B, C…
+7. Also capture complaints after phrases: "Customer states", "Customer complaint", "C/S", "Concern", "state inspection".
+8. Search ALL pages/images. If truly none, output exactly "None listed."
 
 Output ONLY this exact format:
 

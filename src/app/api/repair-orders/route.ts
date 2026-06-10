@@ -76,6 +76,7 @@ export async function POST(request: Request) {
           },
           customerName: data.customerName || data.customer?.name || '',
           complaints: data.complaints || [],
+          complaintLabels: data.complaintLabels,
           serviceAdvisorName: data.serviceAdvisorName,
         });
         input = {
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
           vehicle: ro.vehicle,
           customer: ro.customer,
           complaints: ro.complaints,
+          complaintLabels: ro.complaintLabels,
           xentryImages: ro.xentryImages,
           xentryOcrTexts: ro.xentryOcrTexts,
           repairLines: ro.repairLines,
@@ -154,6 +156,7 @@ export async function POST(request: Request) {
                 repairOrderId: ro.id,
                 serviceAdvisorName: data.serviceAdvisorName,
                 complaints: input.complaints,
+                complaintLabels: input.complaintLabels,
                 vehicle: {
                   make: input.vehicle.make,
                   model: input.vehicle.model,

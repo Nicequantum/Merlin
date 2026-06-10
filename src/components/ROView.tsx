@@ -19,7 +19,9 @@ interface ROViewProps {
   onDeleteRO: () => void;
 }
 
-const letter = (i: number) => String.fromCharCode(65 + i);
+function complaintLabel(labels: string[] | undefined, index: number): string {
+  return labels?.[index] || String.fromCharCode(65 + index);
+}
 
 export function ROView({
   ro,
@@ -162,7 +164,9 @@ export function ROView({
           {ro.complaints && ro.complaints.length > 0 ? (
             ro.complaints.map((c, idx) => (
               <div key={idx} className="flex gap-2 mb-2 items-start">
-                <div className="mt-2 w-6 text-[#0a84ff] font-semibold text-sm shrink-0">{letter(idx)}.</div>
+                <div className="mt-2 w-6 text-[#0a84ff] font-semibold text-sm shrink-0">
+                  {complaintLabel(ro.complaintLabels, idx)}.
+                </div>
                 <textarea
                   value={c}
                   onChange={(e) => onEditComplaint(idx, e.target.value)}

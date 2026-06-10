@@ -143,6 +143,7 @@ export function useRepairOrders({
         serviceAdvisorName: parsed.serviceAdvisorName,
         advisorExtractionSource: 'ocr_fallback',
         complaints,
+        complaintLabels: parsed.complaintLabels,
       } as never);
       setAllROs((prev) => [repairOrder, ...prev]);
       setCurrentRO(repairOrder);
@@ -157,11 +158,17 @@ export function useRepairOrders({
     async (extracted: {
       vehicle: RepairOrder['vehicle'];
       complaints: string[];
+      complaintLabels?: string[];
       customerName: string;
       roNumber?: string;
       serviceAdvisorName?: string;
     }) => {
       try {
+        const complaints = sanitizeComplaints(extracted.complaints || []);
+        const complaintLabels =
+          extracted.complaintLabels && extracted.complaintLabels.length === complaints.length
+            ? extracted.complaintLabels
+            : undefined;
         const { repairOrder } = await api.createRepairOrder({
           fromExtraction: true,
           roNumber: extracted.roNumber || `R-${Date.now().toString().slice(-6)}`,
@@ -169,7 +176,8 @@ export function useRepairOrders({
           customerName: extracted.customerName,
           serviceAdvisorName: extracted.serviceAdvisorName,
           advisorExtractionSource: 'grok',
-          complaints: sanitizeComplaints(extracted.complaints || []),
+          complaints,
+          complaintLabels,
         } as never);
         setAllROs((prev) => [repairOrder, ...prev]);
         setCurrentRO(repairOrder);
@@ -277,44 +285,76 @@ export function useRepairOrders({
     ]
   );
 
+  const appendScanPages = useCallback(
+    async (rawFiles: File[]) => {
+      if (rawFiles.length === 0) return;
+
+      try {
+        const normalizedFiles = await normalizeScanFiles(rawFiles);
+        if (normalizedFiles.length === 0) {
+          toast.error('No supported images or PDFs were selected.');
+          return;
+        }
+
+        const baseIndex = pendingROImages.length;
+        const newImages: PendingImage[] = normalizedFiles.map((file, i) => ({
+          id: 'roimg-' + Date.now() + '-' + i,
+          previewUrl: URL.createObjectURL(file),
+          name: file.name || `page-${baseIndex + i + 1}.jpg`,
+          file,
+        }));
+
+        setPendingROImages((prev) => [...prev, ...newImages]);
+        const total = baseIndex + newImages.length;
+        toast.success(
+          `Added ${newImages.length} page${newImages.length === 1 ? '' : 's'} (${total} total). Tap Process RO when ready.`
+        );
+      } catch (error) {
+        console.error('Scan file preparation failed', error);
+        toast.error(error instanceof Error ? error.message : 'Could not prepare files for scan.');
+      }
+    },
+    [pendingROImages.length]
+  );
+
   const scanRO = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.multiple = false;
+    input.onchange = async (e) => {
+      const rawFiles = Array.from((e.target as HTMLInputElement).files || []);
+      await appendScanPages(rawFiles);
+    };
+    input.click();
+  }, [appendScanPages]);
+
+  const addScanPagesFromGallery = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*,application/pdf';
     input.multiple = true;
     input.onchange = async (e) => {
       const rawFiles = Array.from((e.target as HTMLInputElement).files || []);
-      if (rawFiles.length === 0) return;
-
-      onOcrStart('Preparing files…');
-      setOcrProgress(2);
-      setScanStatusMessage('Converting PDFs and preparing pages…');
-
-      try {
-        const normalizedFiles = await normalizeScanFiles(rawFiles);
-        if (normalizedFiles.length === 0) {
-          toast.error('No supported images or PDFs were selected.');
-          onOcrFinish();
-          return;
-        }
-
-        const images: PendingImage[] = normalizedFiles.map((file, i) => ({
-          id: 'roimg-' + Date.now() + '-' + i,
-          previewUrl: URL.createObjectURL(file),
-          name: file.name || `page-${i + 1}.jpg`,
-          file,
-        }));
-
-        toast.success(`Scanning ${images.length} page${images.length === 1 ? '' : 's'}…`);
-        await processScanImages(images);
-      } catch (error) {
-        console.error('Scan file preparation failed', error);
-        toast.error(error instanceof Error ? error.message : 'Could not prepare files for scan.');
-        onOcrFinish();
-      }
+      await appendScanPages(rawFiles);
     };
     input.click();
-  }, [onOcrFinish, onOcrStart, pendingROImages.length, processScanImages, setOcrProgress, setScanStatusMessage]);
+  }, [appendScanPages]);
+
+  const processPendingScan = useCallback(async () => {
+    if (pendingROImages.length === 0) {
+      toast.message('Add at least one page before processing.');
+      return;
+    }
+    await processScanImages(pendingROImages);
+  }, [pendingROImages, processScanImages]);
+
+  const clearPendingScan = useCallback(() => {
+    clearPendingPreviews(pendingROImages);
+    setPendingROImages([]);
+    toast.message('Scan pages cleared');
+  }, [clearPendingPreviews, pendingROImages]);
 
   const cancelScan = useCallback(() => {
     scanCancelledRef.current = true;
@@ -374,8 +414,18 @@ export function useRepairOrders({
     [getLatestRO, saveRO]
   );
 
+  const nextComplaintLabel = useCallback((labels?: string[], count = 0) => {
+    if (labels && labels.length > 0) {
+      const lastCode = labels[labels.length - 1].toUpperCase().charCodeAt(0);
+      if (lastCode >= 65 && lastCode < 90) {
+        return String.fromCharCode(lastCode + 1);
+      }
+    }
+    return String.fromCharCode(65 + count);
+  }, []);
+
   const updateComplaints = useCallback(
-    (newComplaints: string[]) => {
+    (newComplaints: string[], newLabels?: string[]) => {
       const latestRO = getLatestRO();
       if (!latestRO) return;
       let updatedLines = latestRO.repairLines;
@@ -388,7 +438,9 @@ export function useRepairOrders({
           return l;
         });
       }
-      const updated = { ...latestRO, complaints: newComplaints, repairLines: updatedLines };
+      const complaintLabels =
+        newLabels && newLabels.length === newComplaints.length ? newLabels : latestRO.complaintLabels;
+      const updated = { ...latestRO, complaints: newComplaints, complaintLabels, repairLines: updatedLines };
       setCurrentRO(updated);
       setAllROs((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       saveRO(updated);
@@ -399,14 +451,19 @@ export function useRepairOrders({
   const addComplaint = useCallback(() => {
     const latestRO = getLatestRO();
     if (!latestRO) return;
-    updateComplaints([...(latestRO.complaints || []), 'New concern - describe symptom']);
-  }, [getLatestRO, updateComplaints]);
+    const complaints = [...(latestRO.complaints || []), 'New concern - describe symptom'];
+    const labels = [...(latestRO.complaintLabels || latestRO.complaints.map((_, i) => String.fromCharCode(65 + i)))];
+    labels.push(nextComplaintLabel(labels, complaints.length - 1));
+    updateComplaints(complaints, labels);
+  }, [getLatestRO, nextComplaintLabel, updateComplaints]);
 
   const removeComplaint = useCallback(
     (index: number) => {
       const latestRO = getLatestRO();
       if (!latestRO) return;
-      updateComplaints((latestRO.complaints || []).filter((_, i) => i !== index));
+      const complaints = (latestRO.complaints || []).filter((_, i) => i !== index);
+      const labels = latestRO.complaintLabels?.filter((_, i) => i !== index);
+      updateComplaints(complaints, labels);
     },
     [getLatestRO, updateComplaints]
   );
@@ -670,6 +727,9 @@ export function useRepairOrders({
     deleteRO,
     openRO,
     scanRO,
+    addScanPagesFromGallery,
+    processPendingScan,
+    clearPendingScan,
     cancelScan,
     createManualRO,
     updateLine,

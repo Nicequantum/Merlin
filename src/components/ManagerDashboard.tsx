@@ -30,6 +30,9 @@ interface ManagerDashboardProps {
   onOpenServiceAdvisors: () => void;
   pendingROImages: PendingImage[];
   onScanRO: () => void;
+  onAddFromGallery: () => void;
+  onProcessScan: () => void;
+  onClearPendingScan: () => void;
   onCancelScan: () => void;
   onCreateManualRO: () => void;
   isProcessingOCR: boolean;
@@ -72,6 +75,9 @@ export function ManagerDashboard({
   onOpenServiceAdvisors,
   pendingROImages,
   onScanRO,
+  onAddFromGallery,
+  onProcessScan,
+  onClearPendingScan,
   onCancelScan,
   onCreateManualRO,
   isProcessingOCR,
@@ -207,6 +213,9 @@ export function ManagerDashboard({
         ocrProgress={ocrProgress}
         scanStatusMessage={scanStatusMessage}
         onScanRO={onScanRO}
+        onAddFromGallery={onAddFromGallery}
+        onProcessScan={onProcessScan}
+        onClearPendingScan={onClearPendingScan}
         onCancelScan={onCancelScan}
         onCreateManualRO={onCreateManualRO}
         scanButtonLabel="SCAN RO"

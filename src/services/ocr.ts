@@ -223,27 +223,52 @@ export async function runOCR(
   }
 }
 
-/** Merge multiple OCR passes — keep the longest useful variant of each unique line. */
-export function mergeOcrTextPasses(...passes: string[]): string {
-  const lineMap = new Map<string, string>();
+const COMPLAINT_LINE_RE = /^#\s*[A-F]\b/i;
 
-  for (const pass of passes) {
-    if (!pass?.trim()) continue;
-    for (const rawLine of pass.split(/\r?\n/)) {
-      const trimmed = rawLine.trim();
-      if (!trimmed) continue;
-      const key = trimmed.toLowerCase().replace(/\s+/g, ' ');
-      const existing = lineMap.get(key);
-      if (!existing || trimmed.length > existing.length) {
-        lineMap.set(key, trimmed);
-      }
+function isComplaintRelevantOcrLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  if (COMPLAINT_LINE_RE.test(trimmed)) return true;
+  if (/^LINE\s+OP/i.test(trimmed)) return true;
+  if (/^(?:customer\s+states|cust(?:omer)?\s+states?)/i.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * Merge OCR passes without scrambling document order.
+ * Uses the longest pass as the structural base; appends only missing # A–F lines from other passes.
+ */
+export function mergeOcrTextPasses(...passes: string[]): string {
+  const nonEmpty = passes.map((p) => p?.trim()).filter(Boolean) as string[];
+  if (nonEmpty.length === 0) return '';
+  if (nonEmpty.length === 1) return nonEmpty[0];
+
+  let primary = nonEmpty[0];
+  for (const pass of nonEmpty) {
+    if (pass.length > primary.length) primary = pass;
+  }
+
+  const primaryLines = primary.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const seen = new Set(primaryLines.map((l) => l.toLowerCase()));
+  const extras: string[] = [];
+
+  for (const pass of nonEmpty) {
+    if (pass === primary) continue;
+    for (const raw of pass.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      const key = line.toLowerCase();
+      if (seen.has(key)) continue;
+      if (!isComplaintRelevantOcrLine(line)) continue;
+      extras.push(line);
+      seen.add(key);
     }
   }
 
-  return [...lineMap.values()].join('\n');
+  return [...primaryLines, ...extras].join('\n');
 }
 
-/** Accuracy-first OCR: full preprocess + fast pass + sparse-column PSM for # A–F labels. */
+/** Accuracy-first OCR: B&W full + fast + sparse column + original image passes. */
 export async function runMultiPassOCR(
   file: File,
   onProgress?: (p: number) => void
@@ -251,9 +276,11 @@ export async function runMultiPassOCR(
   const full = await preprocessImageForOCR(file, 'full');
   const fast = await preprocessImageForOCR(file, 'fast');
 
-  const pass1 = await runOCR(full, onProgress ? (p) => onProgress(Math.round(p * 0.4)) : undefined, '6');
-  const pass2 = await runOCR(fast, onProgress ? (p) => onProgress(40 + Math.round(p * 0.35)) : undefined, '6');
-  const pass3 = await runOCR(full, onProgress ? (p) => onProgress(75 + Math.round(p * 0.25)) : undefined, '4');
+  const pass1 = await runOCR(full, onProgress ? (p) => onProgress(Math.round(p * 0.25)) : undefined, '6');
+  const pass2 = await runOCR(fast, onProgress ? (p) => onProgress(25 + Math.round(p * 0.2)) : undefined, '6');
+  const pass3 = await runOCR(full, onProgress ? (p) => onProgress(45 + Math.round(p * 0.2)) : undefined, '4');
+  const pass4 = await runOCR(file, onProgress ? (p) => onProgress(65 + Math.round(p * 0.15)) : undefined, '6');
+  const pass5 = await runOCR(full, onProgress ? (p) => onProgress(80 + Math.round(p * 0.2)) : undefined, '11');
 
-  return mergeOcrTextPasses(pass1, pass2, pass3);
+  return mergeOcrTextPasses(pass1, pass2, pass3, pass4, pass5);
 }

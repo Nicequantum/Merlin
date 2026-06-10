@@ -411,6 +411,25 @@ C. CHECK ENGINE LIGHT ON`);
     assert.ok(['QC', 'QUALITY CONTROL'].includes(merged.complaints[1]));
   });
 
+  test('does not treat # R or letter R as a complaint slot (A-F only)', () => {
+    const text = `LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS
+# A
+RHODE ISLAND STATE INSPECTION
+# R
+RANDOM HEADER FIELD
+# B
+CHECK ENGINE LIGHT ON
+R SOME OTHER FIELD`;
+
+    const labeled = extractLetterLabeledComplaintsWithLabels(text);
+    assert.deepEqual(
+      labeled.map((item) => item.letter),
+      ['A', 'B']
+    );
+    assert.equal(labeled[0].text, 'RHODE ISLAND STATE INSPECTION');
+    assert.equal(labeled[1].text, 'CHECK ENGINE LIGHT ON');
+  });
+
   test('mergeROExtractions prefers non-empty service advisor name', () => {
     const grokParsed = {
       ...parseStructuredROText(GROK_OUTPUT_MISSING_A),

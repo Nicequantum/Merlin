@@ -5,6 +5,8 @@ import { apiError, VALIDATION_ERROR } from '@/lib/errors';
 import { extractPathnameFromImageRef } from '@/lib/imageUrls';
 import { imagePathnamesSchema, parseBody } from '@/lib/validation';
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   return withAuth(
     request,

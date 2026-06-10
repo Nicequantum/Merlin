@@ -209,43 +209,45 @@ export function useRepairOrders({
           for (let i = 0; i < images.length; i++) {
             if (scanCancelledRef.current) return '';
             const img = images[i];
-            setScanStatusMessage(`Reading page ${i + 1} of ${images.length}…`);
-            const preprocessed = await preprocessImageForOCR(img.file);
+            setScanStatusMessage(`Reading page ${i + 1} of ${images.length} on device…`);
+            setOcrProgress(Math.round(30 + (i / images.length) * 15));
+            const preprocessed = await preprocessImageForOCR(img.file, 'fast');
             const text = await runOCR(preprocessed, (p) =>
-              setOcrProgress(Math.round(28 + (i / images.length) * 50 + (p / images.length) * 50 * 0.35))
+              setOcrProgress(Math.round(45 + (i / images.length) * 35 + (p / images.length) * 35))
             );
             combinedText += `\n\n=== PAGE ${i + 1} ===\n` + text;
           }
           return combinedText;
         };
 
-        try {
-          setOcrProgress(42);
-          setScanStatusMessage('Reading pages and extracting with AI vision…');
-          const [grokExtracted, ocrText] = await Promise.all([
-            api.extractRO(imagePathnames),
-            runClientOcr(),
-          ]);
-          if (scanCancelledRef.current) return;
+        setOcrProgress(35);
+        setScanStatusMessage('Starting on-device OCR and AI vision in parallel…');
+        const ocrPromise = runClientOcr();
+        const grokPromise = api.extractRO(imagePathnames).catch((error) => {
+          console.warn('Server RO extraction failed or timed out', error);
+          return null;
+        });
 
-          const ocrExtracted = ocrText ? parseStructuredROText(ocrText) : null;
-          const extracted = ocrExtracted
-            ? mergeROExtractions(grokExtracted, ocrExtracted, ocrText)
-            : grokExtracted;
+        setOcrProgress(42);
+        setScanStatusMessage('AI vision extraction in progress (OCR continues in parallel)…');
 
-          if (scanCancelledRef.current) return;
-          setOcrProgress(88);
-          setScanStatusMessage('Creating repair order…');
-          await createROFromExtracted(extracted);
-        } catch (extractError) {
-          console.warn('Server RO extraction failed, falling back to on-device OCR', extractError);
-          setScanStatusMessage('AI unavailable — reading pages on device…');
-          const combinedText = await runClientOcr();
-          if (scanCancelledRef.current || !combinedText) return;
-          setOcrProgress(92);
-          setScanStatusMessage('Creating repair order…');
-          await createROFromText(combinedText);
+        const [ocrText, grokExtracted] = await Promise.all([ocrPromise, grokPromise]);
+        if (scanCancelledRef.current) return;
+
+        if (!ocrText?.trim() && !grokExtracted) {
+          throw new Error('Could not read the repair order. Try sharper photos or fewer pages.');
         }
+
+        const ocrExtracted = ocrText ? parseStructuredROText(ocrText) : null;
+        const extracted =
+          grokExtracted && ocrExtracted
+            ? mergeROExtractions(grokExtracted, ocrExtracted, ocrText)
+            : grokExtracted || ocrExtracted || parseStructuredROText(ocrText || '');
+
+        if (scanCancelledRef.current) return;
+        setOcrProgress(88);
+        setScanStatusMessage('Creating repair order…');
+        await createROFromExtracted(extracted);
 
         if (scanCancelledRef.current) return;
         setOcrProgress(100);
@@ -491,11 +493,15 @@ export function useRepairOrders({
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        setOcrProgress(Math.round((i / files.length) * 25));
         const attachment = await uploadFileAsAttachment(file, 'ximg');
         newImgs.push(attachment);
         try {
-          const pre = await preprocessImageForOCR(file);
-          const text = await runOCR(pre, (p) => setOcrProgress(Math.round(((i + p) / files.length) * 100)));
+          setOcrProgress(Math.round(25 + (i / files.length) * 20));
+          const pre = await preprocessImageForOCR(file, 'fast');
+          const text = await runOCR(pre, (p) =>
+            setOcrProgress(Math.round(45 + ((i + p / 100) / files.length) * 55))
+          );
           const diag = parseDiagnosticText(text);
           updatedExtracted = mergeExtracted(updatedExtracted, diag);
           updatedOcrTexts = [...updatedOcrTexts, text];

@@ -13,7 +13,8 @@
     "db:studio": "prisma studio",
     "test": "tsx --test tests/**/*.test.ts",
     "test:integration": "tsx --test tests/integration/**/*.test.ts",
-    "postinstall": "prisma generate"
+    "setup:tesseract": "node scripts/copy-tesseract-assets.mjs",
+    "postinstall": "prisma generate && npm run setup:tesseract"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",

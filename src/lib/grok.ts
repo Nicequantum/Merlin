@@ -20,29 +20,43 @@ async function grokChat(
     role: string;
     content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
   }>,
-  options: { temperature: number; max_tokens: number }
+  options: { temperature: number; max_tokens: number; timeoutMs?: number }
 ): Promise<string> {
-  const response = await fetch(GROK_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${getApiKey()}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'grok-3',
-      messages,
-      temperature: options.temperature,
-      max_tokens: options.max_tokens,
-    }),
-  });
+  const timeoutMs = options.timeoutMs ?? 55_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Grok API error: ${response.status} ${err}`);
+  try {
+    const response = await fetch(GROK_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getApiKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'grok-3',
+        messages,
+        temperature: options.temperature,
+        max_tokens: options.max_tokens,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Grok API error: ${response.status} ${err}`);
+    }
+
+    const apiResponse = await response.json();
+    return apiResponse.choices?.[0]?.message?.content?.trim() || '';
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Grok API timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-
-  const apiResponse = await response.json();
-  return apiResponse.choices?.[0]?.message?.content?.trim() || '';
 }
 
 export async function generateWarrantyStory(
@@ -71,7 +85,7 @@ export async function extractROFromImages(imageDataUrls: string[]) {
         content: [{ type: 'text', text: RO_EXTRACTION_PROMPT }, ...imageContents],
       },
     ],
-    { temperature: 0.05, max_tokens: 1000 }
+    { temperature: 0.05, max_tokens: 1000, timeoutMs: 90_000 }
   );
   return parseStructuredROText(extractedText);
 }

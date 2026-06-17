@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { getKnowledgeBaseOriginal, listLoadedKnowledgeBaseOriginals } from '@/data/knowledgeBaseOriginals';
 import {
   STORY_TEMPLATE_SEEDS,
   toKnowledgeBaseFields,
@@ -31,13 +32,14 @@ export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number;
       },
     });
 
+    const userOriginal = getKnowledgeBaseOriginal(seed.title);
     await prisma.knowledgeBase.upsert({
       where: { title: seed.title },
       update: {
         category: kb.category,
-        fullOriginalText: kb.fullOriginalText,
         cleanTemplate: kb.cleanTemplate,
         tags: kb.tags,
+        ...(userOriginal ? { fullOriginalText: userOriginal } : {}),
       },
       create: kb,
     });
@@ -165,6 +167,7 @@ export function selectRelevantKnowledgeEntries(
     .toLowerCase();
 
   return [...entries]
+    .filter((entry) => entry.fullOriginalText.trim().length > 0)
     .map((entry) => ({ entry, score: scoreKnowledgeEntry(entry, haystack, line.description) }))
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
@@ -192,3 +195,5 @@ export function formatKnowledgeBaseForPrompt(entries: KnowledgeBaseRecord[]): st
 export function getSeedPreview(): StoryTemplateSeed[] {
   return STORY_TEMPLATE_SEEDS;
 }
+
+export { listLoadedKnowledgeBaseOriginals };

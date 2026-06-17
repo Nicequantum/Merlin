@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { KNOWLEDGE_BASE_ORIGINALS } from '@/data/knowledgeBaseOriginals';
 import { STORY_TEMPLATE_SEEDS } from '@/lib/storyTemplateSeed';
 import {
   formatKnowledgeBaseForPrompt,
@@ -8,13 +9,13 @@ import {
 } from '@/lib/templateLibrary';
 import type { RepairLine, RepairOrder } from '@/types';
 
-function kbFromSeed(title: string): KnowledgeBaseRecord {
+function kbFromSeed(title: string, fullOriginalText: string): KnowledgeBaseRecord {
   const seed = STORY_TEMPLATE_SEEDS.find((s) => s.title === title)!;
   return {
     id: `kb-${title}`,
     title: seed.title,
     category: seed.category,
-    fullOriginalText: seed.fullDetail,
+    fullOriginalText,
     cleanTemplate: seed.complaint,
     tags: seed.tags,
     createdAt: new Date().toISOString(),
@@ -59,23 +60,32 @@ describe('story template seed data', () => {
     const titles = STORY_TEMPLATE_SEEDS.map((s) => s.title);
     assert.equal(new Set(titles).size, titles.length);
   });
+
+  it('stores user-provided blind spot original verbatim', () => {
+    const original = KNOWLEDGE_BASE_ORIGINALS['Blind Spot Assist Warning'];
+    assert.ok(original);
+    assert.match(original!, /2023 Mercedes-Benz S-Class/);
+    assert.match(original!, /multifunction camera/);
+  });
 });
 
 describe('knowledge base selection', () => {
   it('ranks blind spot template for matching line description', () => {
     const entries = [
-      kbFromSeed('Blind Spot Assist Warning'),
-      kbFromSeed('B Service'),
-      kbFromSeed('Cylinder Head Failure'),
+      kbFromSeed('Blind Spot Assist Warning', KNOWLEDGE_BASE_ORIGINALS['Blind Spot Assist Warning']!),
+      kbFromSeed('B Service', ''),
+      kbFromSeed('Cylinder Head Failure', ''),
     ];
     const selected = selectRelevantKnowledgeEntries(baseRo, baseLine, entries, 2);
     assert.equal(selected[0]?.title, 'Blind Spot Assist Warning');
   });
 
   it('formats knowledge base prompt with style guardrails', () => {
-    const prompt = formatKnowledgeBaseForPrompt([kbFromSeed('B Service')]);
+    const prompt = formatKnowledgeBaseForPrompt([
+      kbFromSeed('Blind Spot Assist Warning', KNOWLEDGE_BASE_ORIGINALS['Blind Spot Assist Warning']!),
+    ]);
     assert.match(prompt, /KNOWLEDGE BASE/);
-    assert.match(prompt, /B Service/);
+    assert.match(prompt, /Blind Spot Assist Warning/);
     assert.match(prompt, /do NOT copy facts/i);
   });
 });

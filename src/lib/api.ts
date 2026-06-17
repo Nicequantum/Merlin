@@ -6,6 +6,7 @@ import type {
   DashboardSummary,
   KnowledgeBaseEntry,
   RepairOrder,
+  SaveTemplateFromStoryPayload,
   StoryTemplate,
   StructuredROExtraction,
   TechnicianSession,
@@ -178,6 +179,15 @@ export const api = {
     const query = category ? `?category=${category}` : '';
     return apiFetch<{ entries: KnowledgeBaseEntry[] }>(`/api/knowledge-base${query}`);
   },
+
+  saveTemplateFromStory: (payload: SaveTemplateFromStoryPayload) =>
+    apiFetch<{ template: StoryTemplate; knowledgeBase: KnowledgeBaseEntry; tags: string[] }>(
+      '/api/templates/save-from-story',
+      { method: 'POST', body: JSON.stringify(payload) }
+    ),
+
+  recordTemplateUse: (templateId: string) =>
+    apiFetch<{ ok: boolean }>(`/api/templates/${templateId}/use`, { method: 'POST' }),
 
   decodeVin: (vin: string) =>
     apiFetch<{

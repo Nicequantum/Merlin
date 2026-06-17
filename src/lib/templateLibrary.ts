@@ -6,7 +6,9 @@ import {
   toTemplateContent,
   type StoryTemplateSeed,
 } from '@/lib/storyTemplateSeed';
-import type { RepairLine, RepairOrder } from '@/types';
+import type { RepairLine, RepairOrder, TemplateCategory } from '@/types';
+
+export const GLOBAL_DEALERSHIP_ID = '__global__';
 
 export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number; knowledgeBase: number }> {
   const [templateCount, kbCount] = await Promise.all([
@@ -21,27 +23,39 @@ export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number;
   for (const seed of STORY_TEMPLATE_SEEDS) {
     const content = toTemplateContent(seed);
     const kb = toKnowledgeBaseFields(seed);
+    const userOriginal = getKnowledgeBaseOriginal(seed.title);
 
     await prisma.template.upsert({
-      where: { title: seed.title },
-      update: { category: seed.category, content },
+      where: {
+        dealershipId_title: { dealershipId: GLOBAL_DEALERSHIP_ID, title: seed.title },
+      },
+      update: { category: seed.category, content, source: 'seed' },
       create: {
         title: seed.title,
         category: seed.category,
         content,
+        source: 'seed',
+        dealershipId: GLOBAL_DEALERSHIP_ID,
       },
     });
 
-    const userOriginal = getKnowledgeBaseOriginal(seed.title);
     await prisma.knowledgeBase.upsert({
-      where: { title: seed.title },
+      where: {
+        dealershipId_title: { dealershipId: GLOBAL_DEALERSHIP_ID, title: seed.title },
+      },
       update: {
         category: kb.category,
         cleanTemplate: kb.cleanTemplate,
         tags: kb.tags,
+        source: 'seed',
         ...(userOriginal ? { fullOriginalText: userOriginal } : {}),
       },
-      create: kb,
+      create: {
+        ...kb,
+        source: 'seed',
+        dealershipId: GLOBAL_DEALERSHIP_ID,
+        ...(userOriginal ? { fullOriginalText: userOriginal } : {}),
+      },
     });
   }
 
@@ -54,19 +68,28 @@ export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number;
 export interface TemplateRecord {
   id: string;
   title: string;
-  category: string;
+  category: TemplateCategory;
   content: string;
+  source: string;
+  dealershipId: string;
+  useCount: number;
+  lastUsedAt: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface KnowledgeBaseRecord {
   id: string;
   title: string;
-  category: string;
+  category: TemplateCategory;
+  generatedText: string | null;
   fullOriginalText: string;
   cleanTemplate: string;
   tags: string[];
+  source: string;
+  dealershipId: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export function mapTemplate(row: {
@@ -74,14 +97,24 @@ export function mapTemplate(row: {
   title: string;
   category: string;
   content: string;
+  source: string;
+  dealershipId: string;
+  useCount: number;
+  lastUsedAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
 }): TemplateRecord {
   return {
     id: row.id,
     title: row.title,
-    category: row.category,
+    category: row.category as TemplateCategory,
     content: row.content,
+    source: row.source,
+    dealershipId: row.dealershipId,
+    useCount: row.useCount,
+    lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -89,10 +122,14 @@ export function mapKnowledgeBase(row: {
   id: string;
   title: string;
   category: string;
+  generatedText: string | null;
   fullOriginalText: string;
   cleanTemplate: string;
   tags: string;
+  source: string;
+  dealershipId: string;
   createdAt: Date;
+  updatedAt: Date;
 }): KnowledgeBaseRecord {
   let tags: string[] = [];
   try {
@@ -104,11 +141,15 @@ export function mapKnowledgeBase(row: {
   return {
     id: row.id,
     title: row.title,
-    category: row.category,
+    category: row.category as TemplateCategory,
+    generatedText: row.generatedText,
     fullOriginalText: row.fullOriginalText,
     cleanTemplate: row.cleanTemplate,
     tags,
+    source: row.source,
+    dealershipId: row.dealershipId,
     createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -128,6 +169,10 @@ function scoreKnowledgeEntry(
   let score = 0;
   const titleLower = entry.title.toLowerCase();
   const descLower = lineDescription.toLowerCase();
+
+  if (entry.source === 'user') score += 8;
+  if (entry.tags.includes('user-saved')) score += 4;
+  if (entry.generatedText && entry.fullOriginalText) score += 2;
 
   if (descLower.includes(titleLower) || titleLower.includes(descLower)) {
     score += 12;
@@ -151,7 +196,8 @@ export function selectRelevantKnowledgeEntries(
   ro: RepairOrder,
   line: RepairLine,
   entries: KnowledgeBaseRecord[],
-  limit = 3
+  dealershipId: string,
+  limit = 5
 ): KnowledgeBaseRecord[] {
   const codes = line.extractedData?.codes?.join(' ') || '';
   const haystack = [
@@ -166,30 +212,59 @@ export function selectRelevantKnowledgeEntries(
     .join(' ')
     .toLowerCase();
 
-  return [...entries]
+  const scored = [...entries]
     .filter((entry) => entry.fullOriginalText.trim().length > 0)
     .map((entry) => ({ entry, score: scoreKnowledgeEntry(entry, haystack, line.description) }))
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((item) => item.entry);
+    .sort((a, b) => b.score - a.score);
+
+  const dealershipUser = scored.filter((item) => item.entry.dealershipId === dealershipId).slice(0, 3);
+  const pickedIds = new Set(dealershipUser.map((item) => item.entry.id));
+  const remainder = scored.filter((item) => !pickedIds.has(item.entry.id));
+
+  return [...dealershipUser, ...remainder].slice(0, limit).map((item) => item.entry);
 }
 
 export function formatKnowledgeBaseForPrompt(entries: KnowledgeBaseRecord[]): string {
   if (entries.length === 0) return '';
 
-  const blocks = entries.map(
-    (entry, index) =>
-      `### Reference ${index + 1}: ${entry.title} (${entry.category})\nTags: ${entry.tags.join(', ')}\n\nAPPROVED ORIGINAL (style, tone, sequencing — do NOT copy facts unless supported by current line data):\n${entry.fullOriginalText}\n\nCLEAN TEMPLATE SUMMARY:\n${entry.cleanTemplate}`
-  );
+  const blocks = entries.map((entry, index) => {
+    const lines = [
+      `### Reference ${index + 1}: ${entry.title} (${entry.category}, ${entry.source})`,
+      `Tags: ${entry.tags.join(', ')}`,
+      '',
+      'APPROVED FINAL STORY (primary style reference — mirror tone, sequencing, and technician voice):',
+      entry.fullOriginalText,
+    ];
+
+    if (entry.generatedText?.trim()) {
+      lines.push(
+        '',
+        'GROK DRAFT BEFORE TECHNICIAN EDITS (shows what was refined — prefer final story phrasing, learn from edits):',
+        entry.generatedText
+      );
+    }
+
+    lines.push('', 'CLEAN INSERT TEMPLATE:', entry.cleanTemplate);
+    return lines.join('\n');
+  });
 
   return [
-    'KNOWLEDGE BASE — APPROVED WARRANTY WRITING STYLE REFERENCES',
-    'Use these only for professional phrasing, workflow sequencing, and dealership tone.',
-    'Never import codes, measurements, parts, or findings from these references unless the same facts appear in the current repair line data.',
+    'KNOWLEDGE BASE — GROWING DEALERSHIP WARRANTY WRITING LIBRARY',
+    'These are real approved stories from this dealership. Prioritize user-saved entries when present.',
+    'Mirror professional phrasing, workflow sequencing, and 3 C\'s structure.',
+    'Never import codes, measurements, parts, or findings unless the same facts appear in the current repair line data.',
+    'When both a Grok draft and final edited story are shown, follow the FINAL story style — the edits reflect technician-approved language.',
     '',
     ...blocks,
   ].join('\n');
+}
+
+export async function recordTemplateUsage(templateId: string, dealershipId: string): Promise<void> {
+  await prisma.template.updateMany({
+    where: { id: templateId, OR: [{ dealershipId }, { dealershipId: GLOBAL_DEALERSHIP_ID }] },
+    data: { useCount: { increment: 1 }, lastUsedAt: new Date() },
+  });
 }
 
 export function getSeedPreview(): StoryTemplateSeed[] {

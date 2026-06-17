@@ -162,25 +162,41 @@ model RepairLine {
 }
 
 model Template {
-  id        String   @id @default(cuid())
-  title     String   @unique
-  category  String
-  content   String   @db.Text
-  createdAt DateTime @default(now())
+  id           String    @id @default(cuid())
+  title        String
+  category     String
+  content      String    @db.Text
+  source       String    @default("seed")
+  dealershipId String    @default("__global__")
+  createdById  String?
+  useCount     Int       @default(0)
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
+  @@unique([dealershipId, title])
   @@index([category])
+  @@index([dealershipId, lastUsedAt])
+  @@index([source])
 }
 
 model KnowledgeBase {
   id               String   @id @default(cuid())
-  title            String   @unique
+  title            String
   category         String
+  generatedText    String?  @db.Text
   fullOriginalText String   @db.Text
   cleanTemplate    String   @db.Text
   tags             String   @default("[]")
+  source           String   @default("seed")
+  dealershipId     String   @default("__global__")
   createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
+  @@unique([dealershipId, title])
   @@index([category])
+  @@index([dealershipId])
+  @@index([source])
 }
 
 model AuditLog {

@@ -129,6 +129,19 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(128),
 });
 
+export const saveTemplateFromStorySchema = z.object({
+  title: safeText(120),
+  category: z.enum(['customer', 'warranty']),
+  finalText: safeText(5000),
+  generatedText: safeText(5000),
+  lineDescription: safeTextOptional(500),
+  vehicleMake: safeTextOptional(64),
+  vehicleModel: safeTextOptional(64),
+  codes: z.array(safeText(32)).max(20).optional(),
+  repairOrderId: safeIdOptional(64),
+  lineId: safeIdOptional(64),
+});
+
 export const auditLogQuerySchema = z.object({
   technicianId: safeIdOptional(64),
   action: safeIdOptional(64),

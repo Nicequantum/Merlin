@@ -9,16 +9,20 @@ import {
 } from '@/lib/templateLibrary';
 import type { RepairLine, RepairOrder } from '@/types';
 
-function kbFromSeed(title: string, fullOriginalText: string): KnowledgeBaseRecord {
+function kbFromSeed(title: string, fullOriginalText: string, source = 'seed'): KnowledgeBaseRecord {
   const seed = STORY_TEMPLATE_SEEDS.find((s) => s.title === title)!;
   return {
     id: `kb-${title}`,
     title: seed.title,
     category: seed.category,
+    generatedText: null,
     fullOriginalText,
     cleanTemplate: seed.complaint,
     tags: seed.tags,
+    source,
+    dealershipId: source === 'user' ? 'dealer-1' : '__global__',
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -76,7 +80,7 @@ describe('knowledge base selection', () => {
       kbFromSeed('B Service', ''),
       kbFromSeed('Cylinder Head Failure', ''),
     ];
-    const selected = selectRelevantKnowledgeEntries(baseRo, baseLine, entries, 2);
+    const selected = selectRelevantKnowledgeEntries(baseRo, baseLine, entries, 'dealer-1', 2);
     assert.equal(selected[0]?.title, 'Blind Spot Assist Warning');
   });
 
@@ -86,6 +90,24 @@ describe('knowledge base selection', () => {
     ]);
     assert.match(prompt, /KNOWLEDGE BASE/);
     assert.match(prompt, /Blind Spot Assist Warning/);
-    assert.match(prompt, /do NOT copy facts/i);
+    assert.match(prompt, /GROWING DEALERSHIP/i);
+  });
+});
+
+describe('template tags', () => {
+  it('builds tags from title and story content', async () => {
+    const { buildTemplateTags } = await import('@/lib/templateTags');
+    const tags = buildTemplateTags({
+      title: 'Blind Spot Assist Warning',
+      category: 'warranty',
+      finalText: 'Customer reported blind spot assist warning on 2023 S-Class. XENTRY quick test performed.',
+      lineDescription: 'Blind Spot Assist Warning repair',
+      vehicleMake: 'Mercedes-Benz',
+      vehicleModel: 'S-Class',
+      codes: ['U0122'],
+    });
+    assert.ok(tags.includes('warranty'));
+    assert.ok(tags.includes('user-saved'));
+    assert.ok(tags.some((t) => t.includes('blind') || t.includes('spot')));
   });
 });

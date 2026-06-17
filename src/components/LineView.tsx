@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowLeft, BookOpen, Camera, Copy, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowLeft, BookOpen, BookmarkPlus, Camera, Copy, Download, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
+import { SaveTemplateModal } from '@/components/SaveTemplateModal';
 import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
 import type { RepairLine, RepairOrder } from '@/types';
 import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
@@ -17,6 +18,7 @@ interface LineViewProps {
   isProcessingOCR: boolean;
   ocrProgress: number;
   isGenerating: boolean;
+  lastGeneratedStoryText: string | null;
   onBack: () => void;
   onUpdateLine: (updates: Partial<RepairLine>) => void;
   onAddXentryPhotos: () => void;
@@ -40,6 +42,7 @@ export function LineView({
   isProcessingOCR,
   ocrProgress,
   isGenerating,
+  lastGeneratedStoryText,
   onBack,
   onUpdateLine,
   onAddXentryPhotos,
@@ -52,12 +55,24 @@ export function LineView({
   const storyLen = line.warrantyStory?.length ?? 0;
   const advisorName = ro.serviceAdvisor?.displayName || ro.serviceAdvisorName;
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+
+  const canSaveAsTemplate = useMemo(() => {
+    if (!lastGeneratedStoryText || !line.warrantyStory?.trim()) return false;
+    return line.warrantyStory.trim() !== lastGeneratedStoryText.trim();
+  }, [lastGeneratedStoryText, line.warrantyStory]);
+
+  const defaultTemplateTitle = useMemo(() => {
+    const base = line.description?.trim() || 'Warranty Story';
+    return base.length > 80 ? `${base.slice(0, 77)}…` : base;
+  }, [line.description]);
 
   const handleInsertTemplate = (content: string, title: string) => {
     const existing = line.warrantyStory?.trim();
     const next = existing ? `${existing}\n\n---\n${title}\n\n${content}` : content;
     onUpdateLine({ warrantyStory: next });
-    toast.success(`Inserted "${title}" template`);
+    toast.success(`Inserted "${title}" into story`);
   };
 
   const handleCopy = async () => {
@@ -141,9 +156,9 @@ export function LineView({
           <button
             onClick={onAddXentryPhotos}
             disabled={isProcessingOCR}
-            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm mb-2"
+            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm mb-2 disabled:opacity-60"
           >
-            <Camera size={18} />
+            {isProcessingOCR ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
             {isProcessingOCR ? `ANALYZING PHOTOS... ${ocrProgress}%` : 'ADD XENTRY TESTS / FAULT CODES / GUIDED / WIRING / CONTINUITY'}
           </button>
           <p className="text-[10px] text-[#8e8e93] -mt-1 mb-2">Photos analyzed with OCR. Only extracted data is used in warranty stories.</p>
@@ -210,16 +225,44 @@ export function LineView({
           <button
             type="button"
             onClick={() => setShowTemplateLibrary(true)}
-            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm"
+            disabled={isGenerating}
+            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-60"
           >
             <BookOpen size={18} />
             TEMPLATE LIBRARY
           </button>
-          <button onClick={onGenerateStory} disabled={isGenerating} className="primary-btn w-full h-14 text-base disabled:opacity-60">
-            {isGenerating ? 'GENERATING WITH GROK...' : 'GENERATE WARRANTY STORY (ONE-CLICK)'}
-          </button>
+
+          <div className={`grid gap-2 ${canSaveAsTemplate ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+            <button
+              onClick={onGenerateStory}
+              disabled={isGenerating}
+              className="primary-btn w-full h-14 text-base flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  GENERATING WITH GROK…
+                </>
+              ) : (
+                'GENERATE WARRANTY STORY'
+              )}
+            </button>
+
+            {canSaveAsTemplate && lastGeneratedStoryText && (
+              <button
+                type="button"
+                onClick={() => setShowSaveTemplate(true)}
+                disabled={isGenerating}
+                className="secondary-btn w-full h-14 text-sm flex items-center justify-center gap-2 border-[#30d158]/40 text-[#30d158] disabled:opacity-60"
+              >
+                <BookmarkPlus size={18} />
+                SAVE AS NEW TEMPLATE
+              </button>
+            )}
+          </div>
+
           <p className="text-[10px] text-[#8e8e93] text-center leading-snug">
-            Templates insert pre-approved 3 C&apos;s stories. Grok generation uses the knowledge base for your approved writing style.
+            Generate with Grok, edit the story, then save it to grow your dealership knowledge base.
           </p>
         </div>
 
@@ -242,21 +285,35 @@ export function LineView({
               placeholder="Edit warranty story before DMS submission..."
             />
             <div className="flex gap-2 flex-wrap">
+              {canSaveAsTemplate && (
+                <button
+                  type="button"
+                  onClick={() => setShowSaveTemplate(true)}
+                  className="flex-1 min-w-[160px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm border-[#30d158]/30 text-[#30d158]"
+                >
+                  <BookmarkPlus size={16} /> SAVE TEMPLATE
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowTemplateLibrary(true)}
-                className="flex-1 min-w-[140px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
+                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
               >
                 <BookOpen size={16} /> TEMPLATES
               </button>
               <button onClick={handleCopy} className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm">
-                <Copy size={16} /> COPY FORMATTED
+                <Copy size={16} /> COPY
               </button>
               <button onClick={handlePdf} className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm">
-                <Download size={16} /> EXPORT PDF
+                <Download size={16} /> PDF
               </button>
-              <button onClick={onGenerateStory} className="secondary-btn h-11 px-5 flex items-center gap-2 text-sm">
-                <RefreshCw size={16} /> REGEN
+              <button
+                onClick={onGenerateStory}
+                disabled={isGenerating}
+                className="secondary-btn h-11 px-5 flex items-center gap-2 text-sm disabled:opacity-60"
+              >
+                {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                REGEN
               </button>
             </div>
           </div>
@@ -264,10 +321,29 @@ export function LineView({
       </div>
 
       <TemplateLibraryModal
+        key={libraryRefreshKey}
         open={showTemplateLibrary}
         onClose={() => setShowTemplateLibrary(false)}
         onInsert={handleInsertTemplate}
       />
+
+      {lastGeneratedStoryText && (
+        <SaveTemplateModal
+          open={showSaveTemplate}
+          onClose={() => setShowSaveTemplate(false)}
+          onSaved={() => setLibraryRefreshKey((k) => k + 1)}
+          defaultTitle={defaultTemplateTitle}
+          defaultCategory="warranty"
+          storyText={line.warrantyStory || ''}
+          generatedText={lastGeneratedStoryText}
+          lineDescription={line.description}
+          vehicleMake={ro.vehicle.make}
+          vehicleModel={ro.vehicle.model}
+          codes={line.extractedData?.codes}
+          repairOrderId={ro.id}
+          lineId={line.id}
+        />
+      )}
     </div>
   );
 }

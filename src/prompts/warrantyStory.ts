@@ -156,6 +156,7 @@ AUDIT-SAFE REQUIREMENTS:
 - For voltage, Quick Test, battery charger, guided tests, final Quick Test, or test drives NOT in the notes/OCR above, use [NOT DOCUMENTED] or [NOT PROVIDED] — do NOT fabricate them.
 - Smart-default or common-issue text in technician notes (if present) is reference only — never state it as performed work unless confirmed in diagnostic OCR or explicit technician findings.
 - Vary phrasing across steps — do not repeat identical sentences. Follow this narrative style while staying strictly factual: ${selectedTemplate}
+- If Knowledge Base references are provided in the system prompt, prioritize dealership user-saved stories for tone and workflow sequencing. Learn from how technicians edited Grok drafts into final approved language.
 
 Write only the warranty story for this specific line.`;
 }

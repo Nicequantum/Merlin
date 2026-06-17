@@ -88,17 +88,39 @@ export interface StoryTemplate {
   title: string;
   category: TemplateCategory;
   content: string;
+  source?: string;
+  dealershipId?: string;
+  useCount?: number;
+  lastUsedAt?: string | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface KnowledgeBaseEntry {
   id: string;
   title: string;
   category: TemplateCategory;
+  generatedText?: string | null;
   fullOriginalText: string;
   cleanTemplate: string;
   tags: string[];
+  source?: string;
+  dealershipId?: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SaveTemplateFromStoryPayload {
+  title: string;
+  category: TemplateCategory;
+  finalText: string;
+  generatedText: string;
+  lineDescription?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  codes?: string[];
+  repairOrderId?: string;
+  lineId?: string;
 }
 
 export interface AdvisorListItem {
@@ -257,4 +279,5 @@ export const AUDIT_ACTIONS = [
   'image.upload',
   'advisor.resolve',
   'advisor.capture',
+  'template.save',
 ] as const;

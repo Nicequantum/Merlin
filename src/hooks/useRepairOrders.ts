@@ -54,6 +54,7 @@ export function useRepairOrders({
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingROImages, setPendingROImages] = useState<PendingImage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [lastGeneratedStoryByLine, setLastGeneratedStoryByLine] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [openingROId, setOpeningROId] = useState<string | null>(null);
   const scanCancelledRef = useRef(false);
@@ -827,6 +828,7 @@ export function useRepairOrders({
       setIsGenerating(true);
       try {
         const { warrantyStory } = await api.generateStory(latestRO.id, lineId);
+        setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));
         applyROUpdate(
           (ro) => ({
             ...ro,
@@ -834,7 +836,7 @@ export function useRepairOrders({
           }),
           { immediate: true }
         );
-        toast.success('Warranty story generated');
+        toast.success('Warranty story generated — edit as needed, then save as a template');
       } catch (error: unknown) {
         toast.error(error instanceof Error ? error.message : 'Story generation failed');
       } finally {
@@ -845,6 +847,10 @@ export function useRepairOrders({
   );
 
   const currentLine = currentRO?.repairLines.find((l) => l.id === currentLineId);
+  const lastGeneratedStoryForLine =
+    currentLineId && lastGeneratedStoryByLine[currentLineId]
+      ? lastGeneratedStoryByLine[currentLineId]
+      : null;
 
   const filteredROs = allROs
     .filter(
@@ -882,6 +888,7 @@ export function useRepairOrders({
     pendingROImages,
     setPendingROImages,
     isGenerating,
+    lastGeneratedStoryForLine,
     openingROId,
     filteredROs,
     flushPendingSave,

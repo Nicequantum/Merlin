@@ -70,9 +70,14 @@ export async function POST(
       const advisorContext = advisorCtx ? formatAdvisorContextForPrompt(advisorCtx) : '';
 
       await seedTemplateLibraryIfEmpty();
-      const kbRows = await prisma.knowledgeBase.findMany({ orderBy: { title: 'asc' } });
+      const kbRows = await prisma.knowledgeBase.findMany({
+        where: {
+          OR: [{ dealershipId: '__global__' }, { dealershipId: session.dealershipId, source: 'user' }],
+        },
+        orderBy: [{ source: 'desc' }, { updatedAt: 'desc' }],
+      });
       const kbEntries = kbRows.map(mapKnowledgeBase);
-      const relevantKb = selectRelevantKnowledgeEntries(mapped, line, kbEntries);
+      const relevantKb = selectRelevantKnowledgeEntries(mapped, line, kbEntries, session.dealershipId);
       const knowledgeBaseContext = formatKnowledgeBaseForPrompt(relevantKb);
 
       const warrantyStory = await generateWarrantyStory(

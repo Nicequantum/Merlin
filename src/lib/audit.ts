@@ -19,7 +19,8 @@ export type AuditAction =
   | 'user.password_reset'
   | 'image.upload'
   | 'advisor.resolve'
-  | 'advisor.capture';
+  | 'advisor.capture'
+  | 'template.save';
 
 interface AuditLogInput {
   action: AuditAction;

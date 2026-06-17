@@ -5,15 +5,18 @@ import { mapKnowledgeBase, seedTemplateLibraryIfEmpty } from '@/lib/templateLibr
 export async function GET(request: Request) {
   return withAuth(
     request,
-    async () => {
+    async (session) => {
       await seedTemplateLibraryIfEmpty();
 
       const { searchParams } = new URL(request.url);
       const category = searchParams.get('category');
 
       const entries = await prisma.knowledgeBase.findMany({
-        where: category ? { category } : undefined,
-        orderBy: [{ category: 'asc' }, { title: 'asc' }],
+        where: {
+          OR: [{ dealershipId: '__global__' }, { dealershipId: session.dealershipId, source: 'user' }],
+          ...(category ? { category } : {}),
+        },
+        orderBy: [{ source: 'desc' }, { updatedAt: 'desc' }, { title: 'asc' }],
       });
 
       return { entries: entries.map(mapKnowledgeBase) };

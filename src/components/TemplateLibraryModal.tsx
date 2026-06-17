@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, FileText, Search, ShieldCheck, X } from 'lucide-react';
+import { BookOpen, Clock3, FileText, Loader2, Search, ShieldCheck, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { getRecentTemplateRefs, recordRecentTemplate, type RecentTemplateRef } from '@/lib/recentTemplates';
 import type { StoryTemplate, TemplateCategory } from '@/types';
 
 interface TemplateLibraryModalProps {
@@ -35,12 +36,14 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [recentRefs, setRecentRefs] = useState<RecentTemplateRef[]>([]);
 
   const loadTemplates = useCallback(async () => {
     setLoading(true);
     try {
       const { templates: rows } = await api.listTemplates();
       setTemplates(rows);
+      setRecentRefs(getRecentTemplateRefs());
       setSelectedId((current) => {
         if (current && rows.some((t) => t.id === current)) return current;
         const firstWarranty = rows.find((t) => t.category === 'warranty') || rows[0];
@@ -75,6 +78,14 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
       .filter((t) => !term || t.title.toLowerCase().includes(term) || t.content.toLowerCase().includes(term));
   }, [templates, activeTab, search]);
 
+  const recentTemplates = useMemo(() => {
+    const byId = new Map(templates.map((t) => [t.id, t]));
+    return recentRefs
+      .map((ref) => byId.get(ref.id))
+      .filter((t): t is StoryTemplate => !!t && t.category === activeTab)
+      .slice(0, 6);
+  }, [recentRefs, templates, activeTab]);
+
   useEffect(() => {
     if (filtered.length > 0 && !filtered.some((t) => t.id === selectedId)) {
       setSelectedId(filtered[0].id);
@@ -91,6 +102,22 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
     [templates]
   );
 
+  const handleInsert = async (template: StoryTemplate) => {
+    try {
+      await api.recordTemplateUse(template.id);
+    } catch {
+      // Non-blocking — local recent list still works
+    }
+    recordRecentTemplate({
+      id: template.id,
+      title: template.title,
+      category: template.category,
+    });
+    setRecentRefs(getRecentTemplateRefs());
+    onInsert(template.content, template.title);
+    onClose();
+  };
+
   if (!open) return null;
 
   return (
@@ -103,7 +130,7 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
               <span className="text-xs uppercase tracking-[0.2em] font-semibold">Template Library</span>
             </div>
             <h2 className="text-lg font-semibold">Mercedes-Benz Story Templates</h2>
-            <p className="text-xs text-[#8e8e93] mt-1">One-click insert into the current line warranty story field</p>
+            <p className="text-xs text-[#8e8e93] mt-1">One-click insert — grows smarter when you save new templates</p>
           </div>
           <button
             type="button"
@@ -137,6 +164,34 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
           ))}
         </div>
 
+        {recentTemplates.length > 0 && (
+          <div className="px-5 pb-3">
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#8e8e93] mb-2">
+              <Clock3 size={14} />
+              Recently Used
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentTemplates.map((template) => (
+                <button
+                  key={`recent-${template.id}`}
+                  type="button"
+                  onClick={() => setSelectedId(template.id)}
+                  className={`shrink-0 rounded-xl px-3 py-2 text-left border transition-colors ${
+                    selected?.id === template.id
+                      ? 'bg-[#0a84ff]/15 border-[#0a84ff]/40'
+                      : 'bg-[#1c1c1e] border-[#38383a] hover:bg-[#252528]'
+                  }`}
+                >
+                  <div className="text-xs font-medium max-w-[160px] truncate">{template.title}</div>
+                  {template.source === 'user' && (
+                    <div className="text-[9px] text-[#30d158] mt-0.5">Your template</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="px-5 pb-3">
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8e8e93]" />
@@ -153,7 +208,10 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
         <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-[220px_1fr] border-t border-[#38383a]">
           <div className="sm:border-r border-[#38383a] overflow-y-auto max-h-[28dvh] sm:max-h-none">
             {loading ? (
-              <div className="p-4 text-sm text-[#8e8e93]">Loading templates…</div>
+              <div className="p-4 text-sm text-[#8e8e93] flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin text-[#0a84ff]" />
+                Loading templates…
+              </div>
             ) : filtered.length === 0 ? (
               <div className="p-4 text-sm text-[#8e8e93]">No templates match your search.</div>
             ) : (
@@ -167,6 +225,9 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
                   }`}
                 >
                   <div className="text-sm font-medium leading-snug">{template.title}</div>
+                  {template.source === 'user' && (
+                    <div className="text-[9px] text-[#30d158] mt-0.5">Saved by your team</div>
+                  )}
                 </button>
               ))
             )}
@@ -179,6 +240,7 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
                   <div className="text-sm font-semibold">{selected.title}</div>
                   <div className="text-[10px] text-[#8e8e93] mt-0.5 uppercase tracking-wider">
                     {selected.category === 'customer' ? 'Customer Pay Template' : 'Warranty Claim Template'}
+                    {selected.source === 'user' ? ' • Dealership' : ' • Standard'}
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
@@ -189,10 +251,7 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
                 <div className="p-4 border-t border-[#38383a] flex gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      onInsert(selected.content, selected.title);
-                      onClose();
-                    }}
+                    onClick={() => void handleInsert(selected)}
                     className="primary-btn flex-1 h-11 text-sm"
                   >
                     INSERT INTO STORY

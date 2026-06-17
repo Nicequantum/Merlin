@@ -166,6 +166,7 @@ export function BenzTechApp() {
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}
           isGenerating={ro.isGenerating}
+          lastGeneratedStoryText={ro.lastGeneratedStoryForLine}
           onBack={() => ro.setView('ro')}
           onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
           onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}

@@ -30,3 +30,4 @@ prisma/dev.db-journal
 # Environment
 .env
 .env.local
+tsconfig.tsbuildinfo

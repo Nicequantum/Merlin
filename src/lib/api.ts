@@ -4,9 +4,12 @@ import type {
   AuditDashboardSummary,
   AuditLogEntry,
   DashboardSummary,
+  KnowledgeBaseEntry,
   RepairOrder,
+  StoryTemplate,
   StructuredROExtraction,
   TechnicianSession,
+  TemplateCategory,
 } from '@/types';
 
 export interface TechnicianUser {
@@ -165,6 +168,16 @@ export const api = {
     apiFetch<{ warrantyStory: string }>(`/api/repair-orders/${roId}/lines/${lineId}/generate-story`, {
       method: 'POST',
     }),
+
+  listTemplates: (category?: TemplateCategory) => {
+    const query = category ? `?category=${category}` : '';
+    return apiFetch<{ templates: StoryTemplate[] }>(`/api/templates${query}`);
+  },
+
+  listKnowledgeBase: (category?: TemplateCategory) => {
+    const query = category ? `?category=${category}` : '';
+    return apiFetch<{ entries: KnowledgeBaseEntry[] }>(`/api/knowledge-base${query}`);
+  },
 
   decodeVin: (vin: string) =>
     apiFetch<{

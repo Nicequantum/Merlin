@@ -6,6 +6,12 @@ import {
 } from '@/lib/advisorIntelligence';
 import { prisma } from '@/lib/db';
 import { generateWarrantyStory } from '@/lib/grok';
+import {
+  formatKnowledgeBaseForPrompt,
+  mapKnowledgeBase,
+  seedTemplateLibraryIfEmpty,
+  selectRelevantKnowledgeEntries,
+} from '@/lib/templateLibrary';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
@@ -63,7 +69,19 @@ export async function POST(
       const advisorCtx = await loadAdvisorPromptContextForRepairOrder(id);
       const advisorContext = advisorCtx ? formatAdvisorContextForPrompt(advisorCtx) : '';
 
-      const warrantyStory = await generateWarrantyStory(mapped, line, historyContext, advisorContext);
+      await seedTemplateLibraryIfEmpty();
+      const kbRows = await prisma.knowledgeBase.findMany({ orderBy: { title: 'asc' } });
+      const kbEntries = kbRows.map(mapKnowledgeBase);
+      const relevantKb = selectRelevantKnowledgeEntries(mapped, line, kbEntries);
+      const knowledgeBaseContext = formatKnowledgeBaseForPrompt(relevantKb);
+
+      const warrantyStory = await generateWarrantyStory(
+        mapped,
+        line,
+        historyContext,
+        advisorContext,
+        knowledgeBaseContext
+      );
 
       await prisma.repairLine.update({
         where: { id: lineId },
@@ -80,6 +98,7 @@ export async function POST(
           repairOrderId: id,
           lineNumber: line.lineNumber,
           advisorIntelligenceUsed: Boolean(advisorCtx),
+          knowledgeBaseEntriesUsed: relevantKb.map((entry) => entry.title),
           serviceAdvisorId: advisorCtx?.serviceAdvisorId ?? null,
           serviceAdvisorName: advisorCtx?.displayName ?? null,
         },

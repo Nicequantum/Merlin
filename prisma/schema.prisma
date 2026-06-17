@@ -161,6 +161,28 @@ model RepairLine {
   @@index([repairOrderId])
 }
 
+model Template {
+  id        String   @id @default(cuid())
+  title     String   @unique
+  category  String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([category])
+}
+
+model KnowledgeBase {
+  id               String   @id @default(cuid())
+  title            String   @unique
+  category         String
+  fullOriginalText String   @db.Text
+  cleanTemplate    String   @db.Text
+  tags             String   @default("[]")
+  createdAt        DateTime @default(now())
+
+  @@index([category])
+}
+
 model AuditLog {
   id           String      @id @default(cuid())
   action       String

@@ -1,9 +1,11 @@
 'use client';
 
-import { ArrowLeft, Camera, Copy, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, BookOpen, Camera, Copy, Download, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
+import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
 import type { RepairLine, RepairOrder } from '@/types';
 import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
 import { getSuggestions } from '@/utils/mercedesKb';
@@ -49,6 +51,14 @@ export function LineView({
   const suggestions = getSuggestions(ro);
   const storyLen = line.warrantyStory?.length ?? 0;
   const advisorName = ro.serviceAdvisor?.displayName || ro.serviceAdvisorName;
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+
+  const handleInsertTemplate = (content: string, title: string) => {
+    const existing = line.warrantyStory?.trim();
+    const next = existing ? `${existing}\n\n---\n${title}\n\n${content}` : content;
+    onUpdateLine({ warrantyStory: next });
+    toast.success(`Inserted "${title}" template`);
+  };
 
   const handleCopy = async () => {
     if (!line.warrantyStory) return;
@@ -196,10 +206,21 @@ export function LineView({
           </div>
         )}
 
-        <div>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowTemplateLibrary(true)}
+            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm"
+          >
+            <BookOpen size={18} />
+            TEMPLATE LIBRARY
+          </button>
           <button onClick={onGenerateStory} disabled={isGenerating} className="primary-btn w-full h-14 text-base disabled:opacity-60">
             {isGenerating ? 'GENERATING WITH GROK...' : 'GENERATE WARRANTY STORY (ONE-CLICK)'}
           </button>
+          <p className="text-[10px] text-[#8e8e93] text-center leading-snug">
+            Templates insert pre-approved 3 C&apos;s stories. Grok generation uses the knowledge base for your approved writing style.
+          </p>
         </div>
 
         {line.warrantyStory && (
@@ -221,6 +242,13 @@ export function LineView({
               placeholder="Edit warranty story before DMS submission..."
             />
             <div className="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowTemplateLibrary(true)}
+                className="flex-1 min-w-[140px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
+              >
+                <BookOpen size={16} /> TEMPLATES
+              </button>
               <button onClick={handleCopy} className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm">
                 <Copy size={16} /> COPY FORMATTED
               </button>
@@ -234,6 +262,12 @@ export function LineView({
           </div>
         )}
       </div>
+
+      <TemplateLibraryModal
+        open={showTemplateLibrary}
+        onClose={() => setShowTemplateLibrary(false)}
+        onInsert={handleInsertTemplate}
+      />
     </div>
   );
 }

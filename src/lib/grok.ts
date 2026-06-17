@@ -63,12 +63,16 @@ export async function generateWarrantyStory(
   ro: RepairOrder,
   line: RepairLine,
   historyContext = '',
-  advisorContext = ''
+  advisorContext = '',
+  knowledgeBaseContext = ''
 ): Promise<string> {
+  const systemPrompt = knowledgeBaseContext
+    ? `${SYSTEM_PROMPT}\n\n${knowledgeBaseContext}`
+    : SYSTEM_PROMPT;
   const userMessage = buildWarrantyStoryUserMessage(ro, line, historyContext, undefined, advisorContext);
   const story = await grokChat(
     [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ],
     { temperature: WARRANTY_STORY_TEMPERATURE, max_tokens: 1200 }

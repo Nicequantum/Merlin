@@ -81,6 +81,26 @@ export interface RepairOrder {
 
 export type AppView = 'home' | 'ro' | 'line' | 'settings' | 'audit' | 'advisors';
 
+export type TemplateCategory = 'customer' | 'warranty';
+
+export interface StoryTemplate {
+  id: string;
+  title: string;
+  category: TemplateCategory;
+  content: string;
+  createdAt: string;
+}
+
+export interface KnowledgeBaseEntry {
+  id: string;
+  title: string;
+  category: TemplateCategory;
+  fullOriginalText: string;
+  cleanTemplate: string;
+  tags: string[];
+  createdAt: string;
+}
+
 export interface AdvisorListItem {
   id: string;
   displayName: string;

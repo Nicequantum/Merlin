@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { seedTemplateLibraryIfEmpty } from '../src/lib/templateLibrary';
 
 const prisma = new PrismaClient();
 
@@ -60,6 +61,9 @@ async function main() {
       consentVersion: '2026-06-07-v1',
     },
   });
+
+  const library = await seedTemplateLibraryIfEmpty();
+  console.log(`  Template library: ${library.templates} templates, ${library.knowledgeBase} knowledge-base entries`);
 
   console.log('Seed complete.');
   console.log(`  ${managerEmail} (manager) — password from ADMIN_SEED_PASSWORD`);

@@ -59,6 +59,7 @@ export function SaveTemplateModal({
   }, [open, saving, onClose]);
 
   const handleSave = async () => {
+    if (saving) return;
     const trimmedTitle = title.trim();
     const trimmedPreview = preview.trim();
     if (!trimmedTitle) {

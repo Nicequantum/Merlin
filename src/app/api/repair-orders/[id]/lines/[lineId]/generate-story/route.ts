@@ -81,13 +81,25 @@ export async function POST(
       const relevantKb = selectRelevantKnowledgeEntries(mapped, line, kbEntries, session.dealershipId);
       const knowledgeBaseContext = formatKnowledgeBaseForPrompt(relevantKb);
 
-      const warrantyStory = await generateWarrantyStory(
-        mapped,
-        line,
-        historyContext,
-        advisorContext,
-        knowledgeBaseContext
-      );
+      let warrantyStory: string;
+      try {
+        warrantyStory = await generateWarrantyStory(
+          mapped,
+          line,
+          historyContext,
+          advisorContext,
+          knowledgeBaseContext
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Story generation failed';
+        if (message.includes('GROK_API_KEY')) {
+          return apiError('Story generation is not configured. Contact your administrator.', 503);
+        }
+        if (message.toLowerCase().includes('timed out')) {
+          return apiError('Story generation timed out — try again in a moment.', 504);
+        }
+        return apiError('Story generation failed — try again in a moment.', 502);
+      }
 
       await prisma.repairLine.update({
         where: { id: lineId },

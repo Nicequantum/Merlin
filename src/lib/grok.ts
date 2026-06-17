@@ -75,7 +75,7 @@ export async function generateWarrantyStory(
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ],
-    { temperature: WARRANTY_STORY_TEMPERATURE, max_tokens: 1200 }
+    { temperature: WARRANTY_STORY_TEMPERATURE, max_tokens: 1200, timeoutMs: 110_000 }
   );
   return story || 'No story generated.';
 }

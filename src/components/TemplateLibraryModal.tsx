@@ -56,6 +56,8 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
       });
     } catch (e) {
       if (seq === loadSeqRef.current) {
+        setTemplates([]);
+        setSelectedId(null);
         toast.error(e instanceof Error ? e.message : 'Failed to load templates');
       }
     } finally {
@@ -70,6 +72,7 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
       loadSeqRef.current += 1;
       setSearch('');
       setInsertingId(null);
+      setActiveTab('warranty');
       return;
     }
     void loadTemplates();

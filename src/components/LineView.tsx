@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, BookOpen, BookmarkPlus, Camera, Copy, Download, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { StableInput } from '@/components/StableInput';
@@ -59,6 +59,11 @@ export function LineView({
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+
+  useEffect(() => {
+    setShowSaveTemplate(false);
+    setShowTemplateLibrary(false);
+  }, [line.id]);
 
   const canSaveAsTemplate = useMemo(() => {
     if (!lastGeneratedStoryText || !line.warrantyStory?.trim()) return false;

@@ -173,7 +173,7 @@ export const api = {
 
   listTemplates: (category?: TemplateCategory) => {
     const query = category ? `?category=${category}` : '';
-    return apiFetch<{ templates: StoryTemplate[] }>(`/api/templates${query}`);
+    return apiFetch<{ templates: StoryTemplate[] }>(`/api/templates${query}`, { timeoutMs: 30_000 });
   },
 
   listKnowledgeBase: (category?: TemplateCategory) => {
@@ -188,7 +188,7 @@ export const api = {
     ),
 
   recordTemplateUse: (templateId: string) =>
-    apiFetch<{ ok: boolean }>(`/api/templates/${templateId}/use`, { method: 'POST' }),
+    apiFetch<{ ok: boolean }>(`/api/templates/${templateId}/use`, { method: 'POST', timeoutMs: 15_000 }),
 
   decodeVin: (vin: string) =>
     apiFetch<{

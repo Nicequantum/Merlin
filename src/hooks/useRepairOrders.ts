@@ -54,6 +54,7 @@ export function useRepairOrders({
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingROImages, setPendingROImages] = useState<PendingImage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingLineId, setGeneratingLineId] = useState<string | null>(null);
   const [lastGeneratedStoryByLine, setLastGeneratedStoryByLine] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [openingROId, setOpeningROId] = useState<string | null>(null);
@@ -189,6 +190,8 @@ export function useRepairOrders({
           setLastGeneratedStoryByLine({});
           generateStorySeqRef.current += 1;
           storyGenerationInFlightRef.current = false;
+          setIsGenerating(false);
+          setGeneratingLineId(null);
           setView('home');
         }
         toast.success('Repair order deleted');
@@ -214,6 +217,8 @@ export function useRepairOrders({
         setLastGeneratedStoryByLine({});
         generateStorySeqRef.current += 1;
         storyGenerationInFlightRef.current = false;
+        setIsGenerating(false);
+        setGeneratingLineId(null);
         setAllROs((prev) => {
           const idx = prev.findIndex((r) => r.id === normalized.id);
           if (idx >= 0) {
@@ -843,6 +848,7 @@ export function useRepairOrders({
 
       const seq = ++generateStorySeqRef.current;
       storyGenerationInFlightRef.current = true;
+      setGeneratingLineId(lineId);
       setIsGenerating(true);
       try {
         const { warrantyStory } = await api.generateStory(roId, lineId);
@@ -874,6 +880,7 @@ export function useRepairOrders({
         if (seq === generateStorySeqRef.current) {
           storyGenerationInFlightRef.current = false;
           setIsGenerating(false);
+          setGeneratingLineId(null);
         }
       }
     },
@@ -889,6 +896,8 @@ export function useRepairOrders({
     currentLineId && lastGeneratedStoryByLine[currentLineId]
       ? lastGeneratedStoryByLine[currentLineId]
       : null;
+
+  const isGeneratingForLine = isGenerating && generatingLineId === currentLineId;
 
   const filteredROs = allROs
     .filter(
@@ -926,6 +935,7 @@ export function useRepairOrders({
     pendingROImages,
     setPendingROImages,
     isGenerating,
+    isGeneratingForLine,
     lastGeneratedStoryForLine,
     openingROId,
     filteredROs,

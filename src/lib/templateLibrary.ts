@@ -189,6 +189,12 @@ function scoreKnowledgeEntry(
     if (haystack.includes(token)) score += 2;
   }
 
+  const contentSample = [entry.cleanTemplate, entry.fullOriginalText].join(' ').slice(0, 800);
+  const contentTokens = tokenize(contentSample);
+  for (const token of contentTokens.slice(0, 12)) {
+    if (haystack.includes(token)) score += 1;
+  }
+
   return score;
 }
 

@@ -852,19 +852,19 @@ export function useRepairOrders({
       const result = removeImageAtIndex(latestRO.xentryImages || [], latestRO.xentryOcrTexts || [], imageId);
       if (!result) return;
 
-      const firstLine = latestRO.repairLines[0];
-      const updatedLines = firstLine
-        ? latestRO.repairLines.map((l, idx) =>
-            idx === 0
-              ? {
-                  ...l,
-                  xentryImages: result.nextImages,
-                  xentryOcrTexts: result.nextOcr,
-                  extractedData: result.rebuilt,
-                }
-              : l
-          )
-        : latestRO.repairLines;
+      const updatedLines = latestRO.repairLines.map((l, idx) => {
+        if (idx !== 0) return l;
+        const lineImages = l.xentryImages || [];
+        if (!lineImages.some((img) => img.id === imageId)) return l;
+        const lineResult = removeImageAtIndex(lineImages, l.xentryOcrTexts || [], imageId);
+        if (!lineResult) return l;
+        return {
+          ...l,
+          xentryImages: lineResult.nextImages,
+          xentryOcrTexts: lineResult.nextOcr,
+          extractedData: lineResult.rebuilt,
+        };
+      });
 
       await saveROImmediate({
         ...latestRO,

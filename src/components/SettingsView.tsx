@@ -28,6 +28,7 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
   const [changingPassword, setChangingPassword] = useState(false);
   const [resetTargetId, setResetTargetId] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState('');
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const isManager = session.role === 'manager';
   const isAdmin = session.isAdmin === true;
@@ -101,6 +102,28 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
       await loadUsers();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update account');
+    }
+  };
+
+  const handleDeleteUser = async (user: TechnicianUser) => {
+    const confirmed = window.confirm(
+      `Permanently delete ${user.name} (${user.d7Number})?\n\nThis removes their account and all repair orders they created. This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeletingUserId(user.id);
+    try {
+      await api.deleteUser(user.id);
+      toast.success('Account permanently deleted');
+      if (resetTargetId === user.id) {
+        setResetTargetId(null);
+        setResetPassword('');
+      }
+      await loadUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete account');
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
@@ -330,6 +353,13 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
                           className={`text-[10px] px-2 py-1 rounded ${user.isActive ? 'text-[#ff9f0a]' : 'text-[#30d158]'}`}
                         >
                           {user.isActive ? 'DEACTIVATE' : 'REACTIVATE'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(user)}
+                          disabled={deletingUserId === user.id}
+                          className="text-[10px] px-2 py-1 rounded text-[#ff3b30] disabled:opacity-50"
+                        >
+                          {deletingUserId === user.id ? 'DELETING...' : 'DELETE'}
                         </button>
                       </div>
                     )}

@@ -17,6 +17,7 @@ export type AuditAction =
   | 'user.create'
   | 'user.deactivate'
   | 'user.reactivate'
+  | 'user.delete'
   | 'user.password_reset'
   | 'image.upload'
   | 'advisor.resolve'

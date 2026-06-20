@@ -2,7 +2,7 @@ import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { revokeTechnicianSessions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { parseBody, updateUserSchema } from '@/lib/validation';
 
@@ -62,5 +62,48 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       };
     },
     { rateLimitKey: 'users.update', requireManager: true }
+  );
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  return withAuth(
+    request,
+    async (session) => {
+      if (session.role !== 'manager' && !session.isAdmin) {
+        return apiError(FORBIDDEN_ERROR, 403);
+      }
+
+      if (id === session.technicianId) {
+        return apiError('You cannot delete your own account.', 400);
+      }
+
+      const user = await prisma.technician.findFirst({
+        where: { id, dealershipId: session.dealershipId },
+      });
+
+      if (!user) {
+        return apiError(NOT_FOUND_ERROR, 404);
+      }
+
+      await prisma.$transaction([
+        prisma.repairOrder.deleteMany({ where: { technicianId: id } }),
+        prisma.technician.delete({ where: { id } }),
+      ]);
+
+      await writeAuditLog({
+        action: 'user.delete',
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        entityType: 'technician',
+        entityId: id,
+        metadata: { d7Number: user.d7Number, name: user.name, role: user.role },
+        ipAddress: getRequestIp(request),
+      });
+
+      return { ok: true };
+    },
+    { rateLimitKey: 'users.delete' }
   );
 }

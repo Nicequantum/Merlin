@@ -332,6 +332,7 @@ export const AUDIT_ACTIONS = [
   'user.create',
   'user.deactivate',
   'user.reactivate',
+  'user.delete',
   'user.password_reset',
   'image.upload',
   'advisor.resolve',

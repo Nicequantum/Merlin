@@ -242,6 +242,11 @@ export const api = {
       body: JSON.stringify({ newPassword }),
     }),
 
+  deleteUser: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/api/users/${id}`, {
+      method: 'DELETE',
+    }),
+
   listAuditLogs: (params: {
     technicianId?: string;
     action?: string;

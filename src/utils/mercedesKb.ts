@@ -1,4 +1,5 @@
-import type { MercedesSuggestions, RepairOrder } from '../types';
+import type { MercedesSuggestions, RepairOrder, VehicleInfo } from '../types';
+import { inferVehicleFamily } from '@/lib/advisorIntelligence/nameUtils';
 
 const MERCEDES_KB: Record<
   string,
@@ -121,19 +122,74 @@ const MERCEDES_KB: Record<
   },
 };
 
-export function getSuggestions(ro: RepairOrder): MercedesSuggestions {
-  const model = (ro.vehicle.model || '').toUpperCase();
-  const miles = parseInt(ro.vehicle.mileageIn || '0', 10) || 0;
-  let kb = MERCEDES_KB.default;
-  let famKey = 'default';
+const INFERRED_FAMILY_TO_KB_KEY: Record<string, string> = {
+  GLE: 'GLE',
+  GLS: 'GLE',
+  GLC: 'GLE',
+  GLA: 'C',
+  'C-Class': 'C',
+  'E-Class': 'E',
+  'S-Class': 'S',
+  Maybach: 'S',
+};
+
+const ENGINE_MODEL_TO_KB_KEY: Array<{ pattern: RegExp; key: string }> = [
+  { pattern: /\bM260\b|\bM282\b/, key: 'C' },
+  { pattern: /\bM264\b/, key: 'C' },
+  { pattern: /\bM256\b|\bM278\b|\bM177\b/, key: 'S' },
+  { pattern: /\bM276\b/, key: 'GLE' },
+];
+
+function buildVehicleDescriptor(vehicle: VehicleInfo): string {
+  return [vehicle.make, vehicle.model, vehicle.engine, vehicle.vin].filter(Boolean).join(' ').toUpperCase();
+}
+
+function resolveKbKeyFromEngine(engine: string | undefined): string | null {
+  const engineUpper = (engine || '').toUpperCase();
+  if (!engineUpper) return null;
+  for (const { pattern, key } of ENGINE_MODEL_TO_KB_KEY) {
+    if (pattern.test(engineUpper)) return key;
+  }
+  return null;
+}
+
+function resolveKbKeyFromFamilies(descriptor: string): string | null {
   for (const [key, val] of Object.entries(MERCEDES_KB)) {
     if (key === 'default') continue;
-    if (val.families.some((f) => model.includes(f)) || model.includes(key)) {
-      kb = val;
-      famKey = key;
-      break;
+    for (const family of val.families) {
+      if (new RegExp(`\\b${family}\\b`).test(descriptor)) return key;
     }
+    if (new RegExp(`\\b${key}\\b`).test(descriptor)) return key;
   }
+  return null;
+}
+
+/** Resolve Mercedes knowledge-base family from decoded vehicle fields (not naive substring matching). */
+export function resolveMercedesKbKey(vehicle: VehicleInfo): { key: string; label: string } {
+  const descriptor = buildVehicleDescriptor(vehicle);
+  const inferred = inferVehicleFamily(vehicle.make || '', vehicle.model || '');
+  if (inferred && INFERRED_FAMILY_TO_KB_KEY[inferred]) {
+    return { key: INFERRED_FAMILY_TO_KB_KEY[inferred], label: inferred };
+  }
+
+  const fromFamilies = resolveKbKeyFromFamilies(descriptor);
+  if (fromFamilies) {
+    return { key: fromFamilies, label: fromFamilies };
+  }
+
+  const fromEngine = resolveKbKeyFromEngine(vehicle.engine);
+  if (fromEngine) {
+    return { key: fromEngine, label: vehicle.engine?.match(/\bM\d{3}\b/i)?.[0]?.toUpperCase() || fromEngine };
+  }
+
+  return { key: 'default', label: 'Mercedes-Benz (unspecified model)' };
+}
+
+export function getSuggestions(ro: RepairOrder): MercedesSuggestions {
+  const miles = parseInt(ro.vehicle.mileageIn || '0', 10) || 0;
+  const { key: famKey, label: familyLabel } = resolveMercedesKbKey(ro.vehicle);
+  const kb = MERCEDES_KB[famKey] ?? MERCEDES_KB.default;
+
   let band = kb.mileageBands[kb.mileageBands.length - 1];
   for (const b of kb.mileageBands) {
     if (miles >= b.min && miles <= b.max) {
@@ -141,6 +197,9 @@ export function getSuggestions(ro: RepairOrder): MercedesSuggestions {
       break;
     }
   }
-  const bandNote = `${famKey} • ${miles ? miles + ' mi' : 'mileage unknown'} band`;
+
+  const yearPart = ro.vehicle.year ? `${ro.vehicle.year} ` : '';
+  const milesPart = miles ? `${miles.toLocaleString()} mi` : 'mileage unknown';
+  const bandNote = `${yearPart}${familyLabel} • ${milesPart}`;
   return { issues: band.commonIssues, tests: band.standardTests, bandNote };
 }

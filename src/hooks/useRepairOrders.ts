@@ -959,10 +959,6 @@ export function useRepairOrders({
           );
           const updated = { ...latestRO, repairLines: updatedLines };
           await saveROImmediate(updated);
-          const updatedLine = updatedLines.find((l) => l.id === lineId);
-          if (updatedLine && (!updatedLine.technicianNotes || updatedLine.technicianNotes.trim().length < 5)) {
-            setTimeout(() => applySmartDefaultsToLine(lineId), 60);
-          }
           toast.success(`${files.length} diagnostic photo(s) analyzed`);
         } catch (err) {
           toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
@@ -972,7 +968,7 @@ export function useRepairOrders({
       };
       input.click();
     },
-    [currentRO, flushPendingSave, processXentryImages, saveROImmediate, onOcrStart, onOcrFinish, applySmartDefaultsToLine]
+    [currentRO, flushPendingSave, processXentryImages, saveROImmediate, onOcrStart, onOcrFinish]
   );
 
   const addROXentryPhotos = useCallback(() => {

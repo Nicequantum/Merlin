@@ -48,8 +48,8 @@ export function inferVehicleFamily(make: string, model: string): string | null {
   if (/\bGLC\b/.test(blob)) return 'GLC';
   if (/\bGLA\b/.test(blob)) return 'GLA';
   if (/\bEQE\b|\bEQS\b|\bEQB\b/.test(blob)) return 'EQ';
-  if (/\bS\s*\d{2,3}\b/.test(blob)) return 'S-Class';
-  if (/\bE\s*\d{2,3}\b/.test(blob)) return 'E-Class';
-  if (/\bC\s*\d{2,3}\b/.test(blob)) return 'C-Class';
+  if (/\bS[- ]CLASS\b/.test(blob) || /\bS\s*\d{2,3}\b/.test(blob)) return 'S-Class';
+  if (/\bE[- ]CLASS\b/.test(blob) || /\bE\s*\d{2,3}\b/.test(blob)) return 'E-Class';
+  if (/\bC[- ]CLASS\b/.test(blob) || /\bC\s*\d{2,3}\b/.test(blob)) return 'C-Class';
   return null;
 }

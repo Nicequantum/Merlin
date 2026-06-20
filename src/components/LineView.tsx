@@ -211,9 +211,16 @@ export function LineView({
               ADD TO NOTES
             </button>
           </div>
-          <div className="text-[10px] text-[#8e8e93]">
-            {suggestions.bandNote} — {suggestions.issues.slice(0, 2).join(', ')}... Typical:{' '}
-            {suggestions.tests.slice(0, 2).map((t) => t.label).join(' / ')}
+          <div className="text-[10px] text-[#8e8e93] space-y-1">
+            <div className="font-medium text-[#aeaeb2]">{suggestions.bandNote}</div>
+            <div>
+              <span className="text-[#666]">Common issues: </span>
+              {suggestions.issues.join(' • ')}
+            </div>
+            <div>
+              <span className="text-[#666]">Typical specs: </span>
+              {suggestions.tests.map((t) => `${t.label}: ${t.spec}`).join(' • ')}
+            </div>
           </div>
           <div className="text-[9px] mt-1 text-[#666]">
             Reference only — not used as performed work unless you document actual results in notes or OCR.

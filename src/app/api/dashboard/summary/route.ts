@@ -18,7 +18,7 @@ export async function GET(request: Request) {
             repairOrder: { dealershipId },
           },
         }),
-        prisma.technician.count({ where: { dealershipId, isActive: true } }),
+        prisma.technician.count({ where: { dealershipId, isActive: true, deletedAt: null } }),
         prisma.repairOrder.findMany({
           where: { dealershipId },
           include: {

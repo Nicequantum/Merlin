@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { normalizeD7Number } from './d7Number';
+import { isTechnicianAccountActive } from './technicianAccounts';
 import { prisma } from './db';
 import { logger } from './logger';
 
@@ -97,7 +98,7 @@ async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<Sess
     include: { dealership: true },
   });
 
-  if (!tech || !tech.isActive) return null;
+  if (!tech || !isTechnicianAccountActive(tech)) return null;
   if (tech.sessionVersion !== tokenPayload.sessionVersion) return null;
 
   return {
@@ -168,7 +169,7 @@ export async function loginTechnician(d7Number: string, password: string): Promi
     where: { d7Number: normalizedD7 },
     include: { dealership: true },
   });
-  if (!tech || !tech.isActive) return null;
+  if (!tech || !isTechnicianAccountActive(tech)) return null;
   const valid = await verifyPassword(password, tech.passwordHash);
   if (!valid) return null;
   return {

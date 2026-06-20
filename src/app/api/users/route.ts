@@ -21,6 +21,7 @@ export async function GET(request: Request) {
           isActive: true,
           createdAt: true,
           consentAt: true,
+          deletedAt: true,
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
           ...u,
           createdAt: u.createdAt.toISOString(),
           consentAt: u.consentAt?.toISOString() ?? null,
+          deletedAt: u.deletedAt?.toISOString() ?? null,
         })),
       };
     },

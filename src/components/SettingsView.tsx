@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, BarChart3, Building2, KeyRound, LogOut, ScrollText, Shield, User, UserPlus, UserRound, Users } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -32,6 +32,7 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
 
   const isManager = session.role === 'manager';
   const isAdmin = session.isAdmin === true;
+  const visibleUsers = useMemo(() => users.filter((user) => !user.deletedAt), [users]);
 
   const loadUsers = useCallback(async () => {
     if (!isManager) return;
@@ -107,21 +108,21 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
 
   const handleDeleteUser = async (user: TechnicianUser) => {
     const confirmed = window.confirm(
-      `Permanently delete ${user.name} (${user.d7Number})?\n\nThis removes their account and all repair orders they created. This action cannot be undone.`
+      `Remove ${user.name} (${user.d7Number}) from Technician Accounts?\n\nThey will be deactivated and hidden from this list. Their repair orders and audit history are preserved.`
     );
     if (!confirmed) return;
 
     setDeletingUserId(user.id);
     try {
       await api.deleteUser(user.id);
-      toast.success('Account permanently deleted');
+      toast.success('Technician removed');
       if (resetTargetId === user.id) {
         setResetTargetId(null);
         setResetPassword('');
       }
       await loadUsers();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to delete account');
+      toast.error(err instanceof Error ? err.message : 'Failed to remove technician');
     } finally {
       setDeletingUserId(null);
     }
@@ -323,11 +324,11 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
 
           {usersLoading ? (
             <div className="text-xs text-[#8e8e93]">Loading accounts...</div>
-          ) : users.length === 0 ? (
+          ) : visibleUsers.length === 0 ? (
             <div className="text-xs text-[#8e8e93]">No accounts found.</div>
           ) : (
             <div className="space-y-2">
-              {users.map((user) => (
+              {visibleUsers.map((user) => (
                 <div key={user.id} className="bg-[#1c1c1e] rounded px-3 py-2">
                   <div className="flex items-center justify-between">
                     <div>
@@ -359,7 +360,7 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
                           disabled={deletingUserId === user.id}
                           className="text-[10px] px-2 py-1 rounded text-[#ff3b30] disabled:opacity-50"
                         >
-                          {deletingUserId === user.id ? 'DELETING...' : 'DELETE'}
+                          {deletingUserId === user.id ? 'REMOVING...' : 'REMOVE TECHNICIAN'}
                         </button>
                       </div>
                     )}

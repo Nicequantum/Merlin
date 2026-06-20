@@ -26,6 +26,7 @@ export interface TechnicianUser {
   isActive: boolean;
   createdAt: string;
   consentAt?: string | null;
+  deletedAt?: string | null;
 }
 
 export class ApiError extends Error {

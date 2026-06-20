@@ -65,7 +65,7 @@ export async function getUsageAnalytics(dealershipId: string): Promise<UsageAnal
 
   const [technicians, dailyLogs, weeklyLogs] = await Promise.all([
     prisma.technician.findMany({
-      where: { dealershipId, isActive: true },
+      where: { dealershipId, isActive: true, deletedAt: null },
       select: { id: true, name: true, d7Number: true, role: true },
       orderBy: { name: 'asc' },
     }),

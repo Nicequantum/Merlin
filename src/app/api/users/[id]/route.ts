@@ -87,10 +87,22 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      await prisma.$transaction([
-        prisma.repairOrder.deleteMany({ where: { technicianId: id } }),
-        prisma.technician.delete({ where: { id } }),
-      ]);
+      if (user.deletedAt) {
+        return { ok: true };
+      }
+
+      // Previous behavior (hard delete) — preserved for reference; replaced by soft delete below.
+      // await prisma.$transaction([
+      //   prisma.repairOrder.deleteMany({ where: { technicianId: id } }),
+      //   prisma.technician.delete({ where: { id } }),
+      // ]);
+
+      const removedAt = new Date();
+      await prisma.technician.update({
+        where: { id },
+        data: { deletedAt: removedAt, isActive: false },
+      });
+      await revokeTechnicianSessions(id);
 
       await writeAuditLog({
         action: 'user.delete',
@@ -98,7 +110,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         technicianId: session.technicianId,
         entityType: 'technician',
         entityId: id,
-        metadata: { d7Number: user.d7Number, name: user.name, role: user.role },
+        metadata: { d7Number: user.d7Number, name: user.name, role: user.role, softDelete: true, deletedAt: removedAt.toISOString() },
         ipAddress: getRequestIp(request),
       });
 

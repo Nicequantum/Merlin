@@ -142,6 +142,16 @@ export function LineView({
       }
 
       exportWarrantyStoryPdf(ro, line, storyText, auditHash, technicianName);
+
+      void fetch('/api/audit-logs/pdf-export', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repairLineId: line.id, repairOrderId: ro.id }),
+      }).catch((err) => {
+        console.warn('Could not record PDF export audit log:', err);
+      });
+
       toast.success('PDF downloaded successfully');
     } catch (err) {
       console.error(err);

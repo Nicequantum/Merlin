@@ -160,6 +160,11 @@ export const saveTemplateFromStorySchema = z.object({
   lineId: safeIdOptional(64),
 });
 
+export const pdfExportAuditSchema = z.object({
+  repairLineId: safeId(64),
+  repairOrderId: safeId(64),
+});
+
 export const auditLogQuerySchema = z.object({
   technicianId: safeIdOptional(64),
   action: safeIdOptional(64),

@@ -329,6 +329,7 @@ export const AUDIT_ACTIONS = [
   'story.generate',
   'story.review',
   'story.edit',
+  'story.pdf_export',
   'user.create',
   'user.deactivate',
   'user.reactivate',

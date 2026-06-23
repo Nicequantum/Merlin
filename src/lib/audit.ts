@@ -14,6 +14,7 @@ export type AuditAction =
   | 'story.generate'
   | 'story.review'
   | 'story.edit'
+  | 'story.pdf_export'
   | 'user.create'
   | 'user.deactivate'
   | 'user.reactivate'

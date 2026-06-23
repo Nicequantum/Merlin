@@ -1,4 +1,5 @@
 import { list } from '@vercel/blob';
+import { validateEnvironment } from './env';
 import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey';
 import { encryptPII, decryptPII } from './encryption';
 import { prisma } from './db';
@@ -16,6 +17,30 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ result: T; latencyMs: n
   const start = Date.now();
   const result = await fn();
   return { result, latencyMs: Date.now() - start };
+}
+
+export function checkEnvironmentConfig(): DependencyCheck {
+  try {
+    const { missing, warnings } = validateEnvironment({ throwOnError: false });
+    if (missing.length > 0) {
+      return {
+        status: 'error',
+        detail: `Missing required env: ${missing.join(', ')}`,
+      };
+    }
+    if (warnings.length > 0) {
+      return {
+        status: 'warn',
+        detail: warnings.join('; '),
+      };
+    }
+    return { status: 'ok' };
+  } catch (error) {
+    return {
+      status: 'error',
+      detail: error instanceof Error ? error.message : 'environment validation failed',
+    };
+  }
 }
 
 export async function checkDatabase(): Promise<DependencyCheck> {
@@ -203,6 +228,7 @@ export async function checkKvStore(): Promise<DependencyCheck> {
 }
 
 export async function runAllHealthChecks(): Promise<Record<string, DependencyCheck>> {
+  const environment = checkEnvironmentConfig();
   const [database, encryption, session, blob, grok, kv, advisorIntelligence] = await Promise.all([
     checkDatabase(),
     checkEncryption(),
@@ -213,7 +239,7 @@ export async function runAllHealthChecks(): Promise<Record<string, DependencyChe
     checkAdvisorIntelligence(),
   ]);
 
-  return { database, encryption, session, blob, grok, kv, advisorIntelligence };
+  return { environment, database, encryption, session, blob, grok, kv, advisorIntelligence };
 }
 
 export function aggregateHealthStatus(

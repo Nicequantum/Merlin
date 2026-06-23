@@ -1,4 +1,4 @@
-# Benz Tech — Mercedes-Benz Warranty Story Generator
+# Merlin — Mercedes-Benz Warranty Story Generator
 
 **Secure AI-Powered Warranty Documentation Platform for Mercedes-Benz Dealerships**
 
@@ -51,14 +51,14 @@ flowchart TD
         B1 --> B2 --> B3 --> B4
     end
 
-    subgraph Services["Data & Services"]
+    subgraph Services["External Services"]
         S1[(PostgreSQL)]
         S2[Vercel Blob]
         S3[xAI Grok API]
     end
 
     subgraph Audit["Audit Trail"]
-        A1[SHA-256 Hash Chain per Dealership]
+        A1[SHA-256 Hash-Chained Logging]
     end
 
     T2 --> Backend
@@ -87,8 +87,7 @@ flowchart TD
 git clone https://github.com/Nicequantum/viti-ai-clone.git
 cd viti-ai-clone
 npm install
-cp .env.example .env
-npm run db:migrate:deploy
+cp .env.example .env.local
 npm run dev
 ```
 

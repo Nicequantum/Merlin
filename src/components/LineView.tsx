@@ -118,14 +118,33 @@ export function LineView({
     }
   };
 
-  const handlePdf = () => {
+  const handlePdf = async () => {
     const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
     const storyText = storyEl?.value ?? line.warrantyStory ?? '';
-    if (!storyText.trim()) return;
+    if (!storyText.trim()) {
+      toast.error('No warranty story to export');
+      return;
+    }
+
     try {
-      exportWarrantyStoryPdf(ro, line, storyText, undefined, technicianName);
-      toast.success('PDF downloaded');
-    } catch {
+      let auditHash: string | undefined;
+
+      try {
+        const res = await fetch(`/api/audit-logs/latest?repairLineId=${encodeURIComponent(line.id)}`, {
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { hash?: string | null };
+          auditHash = data.hash ?? undefined;
+        }
+      } catch (err) {
+        console.warn('Could not fetch audit hash for PDF:', err);
+      }
+
+      exportWarrantyStoryPdf(ro, line, storyText, auditHash, technicianName);
+      toast.success('PDF downloaded successfully');
+    } catch (err) {
+      console.error(err);
       toast.error('PDF export failed');
     }
   };

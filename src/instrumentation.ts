@@ -8,12 +8,16 @@ export async function register() {
       throwOnError: isProduction,
       production: isProduction,
     });
+    const { logger } = await import('./lib/logger');
     const config = getRuntimeConfig(PROMPT_VERSION);
-    console.log(
-      `[merlin:startup] v${config.appVersion} prompt=${config.promptVersion} commit=${config.buildCommit} maintenance=${config.maintenanceMode}`
-    );
+    logger.info('merlin.startup', {
+      version: config.appVersion,
+      promptVersion: config.promptVersion,
+      commit: config.buildCommit,
+      maintenance: config.maintenanceMode,
+    });
     if (!result.valid) {
-      console.error('[merlin:startup] Environment validation failed — see logs above');
+      logger.error('merlin.startup.env_invalid');
     }
   }
 }

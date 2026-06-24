@@ -14,6 +14,8 @@ import {
   StoryQualityStaleBanner,
 } from '@/components/StoryQualityPanel';
 import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
+import { BenzEmptyState } from '@/components/BenzEmptyState';
+import { clientLog } from '@/lib/clientLog';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult, TemplateCategory } from '@/types';
 import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
@@ -126,7 +128,7 @@ export function LineView({
     const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
     const storyText = storyEl?.value ?? line.warrantyStory ?? '';
     if (!storyText.trim()) {
-      toast.error('No warranty story to export');
+      toast.error(isCustomerPayLine ? 'No story to export yet' : 'No warranty story to export');
       return;
     }
 
@@ -144,7 +146,7 @@ export function LineView({
           promptVersion = data.promptVersion ?? undefined;
         }
       } catch (err) {
-        console.warn('Could not fetch audit hash for PDF:', err);
+        clientLog.warn('Could not fetch audit hash for PDF', err);
       }
 
       const pdfStartedAt = performance.now();
@@ -157,13 +159,13 @@ export function LineView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ repairLineId: line.id, repairOrderId: ro.id, durationMs }),
       }).catch((err) => {
-        console.warn('Could not record PDF export audit log:', err);
+        clientLog.warn('Could not record PDF export audit log', err);
       });
 
       toast.success('PDF downloaded successfully');
     } catch (err) {
-      console.error(err);
-      toast.error('PDF export failed');
+      clientLog.error('PDF export failed', err);
+      toast.error('PDF export failed — try again');
     }
   };
 
@@ -322,14 +324,19 @@ export function LineView({
               {isCustomerPayLine ? 'Change Customer Pay template' : 'Browse template library'}
             </button>
             {isCustomerPayLine && onClearCustomerPayMode && (
-              <button
-                type="button"
-                onClick={() => void onClearCustomerPayMode()}
-                disabled={isGenerating || isReviewing}
-                className="benz-tertiary-link text-benz-amber disabled:opacity-50"
-              >
-                Switch to warranty AI
-              </button>
+              <div className="benz-cp-switch-banner w-full">
+                <p className="text-xs text-benz-secondary leading-relaxed">
+                  Need a full warranty narrative with AI quality review?
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void onClearCustomerPayMode()}
+                  disabled={isGenerating || isReviewing}
+                  className="secondary-btn benz-btn-accent-outline h-10 w-full mt-2 text-sm font-medium disabled:opacity-50"
+                >
+                  Switch to warranty AI
+                </button>
+              </div>
             )}
             {canSaveAsTemplate && lastGeneratedStoryText && (
               <button
@@ -350,8 +357,23 @@ export function LineView({
           </p>
         </div>
 
+        {!line.warrantyStory?.trim() && (
+          <BenzEmptyState
+            icon={isCustomerPayLine ? Zap : Sparkles}
+            title={isCustomerPayLine ? 'No Customer Pay story yet' : 'No warranty story yet'}
+            hint={
+              isCustomerPayLine
+                ? 'Pick an instant template from the library — no AI wait time.'
+                : 'Generate with Grok or browse templates to start your 3 C\'s narrative.'
+            }
+            actionLabel={isCustomerPayLine ? 'Browse Customer Pay templates' : 'Generate warranty story'}
+            onAction={() => (isCustomerPayLine ? setShowTemplateLibrary(true) : onGenerateStory())}
+            className="benz-story-empty-state"
+          />
+        )}
+
         {line.warrantyStory && (
-          <div className="story-card p-5 sm:p-6">
+          <div className={`story-card p-5 sm:p-6 ${isCustomerPayLine ? 'story-card-cp' : ''}`}>
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-2">
                 <div className="benz-section-title tracking-[0.12em]">

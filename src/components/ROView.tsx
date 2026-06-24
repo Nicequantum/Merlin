@@ -1,5 +1,7 @@
-import { Camera, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { Camera, ChevronRight, ClipboardList, FileText, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
+import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
 import { XentryImageGallery } from '@/components/XentryImageGallery';
@@ -234,7 +236,15 @@ export function ROView({
               })}
             </div>
           ) : (
-            <div className="text-sm text-benz-secondary mb-2">No complaints extracted. Add or rescan.</div>
+            <BenzEmptyState
+              compact
+              icon={ClipboardList}
+              title="No complaints yet"
+              hint="Add manually or rescan the repair order to extract A, B, C…"
+              actionLabel="Add complaint"
+              onAction={onAddComplaint}
+              className="mb-2"
+            />
           )}
           <button onClick={onAddComplaint} className="benz-link text-xs mt-2">
             + Add another complaint
@@ -286,9 +296,17 @@ export function ROView({
                 <div className="text-xs text-benz-secondary mt-1 truncate max-w-[260px]">{line.customerConcern}</div>
               )}
               {line.warrantyStory && (
-                <div className="inline-flex items-center gap-1 text-xs font-semibold text-benz-green mt-1.5">
-                  Story ready
-                </div>
+                isCustomerPayRepairLine(line) ? (
+                  <span className="benz-story-badge benz-story-badge-cp benz-story-badge-compact mt-1.5">
+                    <FileText size={12} aria-hidden />
+                    Instant story
+                  </span>
+                ) : (
+                  <span className="benz-story-badge benz-story-badge-ai benz-story-badge-compact mt-1.5">
+                    <Sparkles size={12} aria-hidden />
+                    AI story ready
+                  </span>
+                )
               )}
             </div>
             <ChevronRight size={20} className="text-benz-muted shrink-0" />

@@ -24,6 +24,7 @@ const nextConfig = {
     return config;
   },
   experimental: {
+    optimizePackageImports: ['lucide-react'],
     serverActions: {
       bodySizeLimit: '10mb',
     },

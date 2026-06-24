@@ -66,7 +66,12 @@ export function StableInput({
         onChange={(e) => commit(e.target.value)}
         className={`${showVoice ? 'flex-1 ' : ''}touch-manipulation ${className}`}
       />
-      {showVoice && <VoiceInputButton targetRef={inputRef} onTranscript={commit} />}
+      {showVoice && (
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="benz-voice-field-label">Voice</span>
+          <VoiceInputButton targetRef={inputRef} onTranscript={commit} className="benz-voice-prominent" prominent />
+        </div>
+      )}
     </div>
   );
 }

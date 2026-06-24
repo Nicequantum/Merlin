@@ -1,24 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDisplayDate } from '@/lib/dateFormat';
 
 interface StatusPayload {
   version?: string;
   promptVersion?: string;
   buildCommit?: string;
   buildDate?: string;
-}
-
-function formatBuildDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
 }
 
 export function AppFooter() {
@@ -44,7 +33,7 @@ export function AppFooter() {
 
   const version = status?.version ?? process.env.NEXT_PUBLIC_APP_VERSION ?? '3.0.1';
   const commit = status?.buildCommit ?? process.env.NEXT_PUBLIC_BUILD_COMMIT ?? 'dev';
-  const built = status?.buildDate ? formatBuildDate(status.buildDate) : null;
+  const built = status?.buildDate ? formatDisplayDate(status.buildDate) : null;
 
   return (
     <footer className="benz-app-footer" aria-label="Application version">

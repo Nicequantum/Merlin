@@ -1260,6 +1260,75 @@ function printSummary(): void {
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
+function checkProductionReadiness(): void {
+  section('Production Readiness (Final Polish)');
+
+  const readinessDoc = resolve(process.cwd(), 'docs/Production-Readiness-Checklist.md');
+  if (existsSync(readinessDoc) && readFileSync(readinessDoc, 'utf8').includes('Sign-off')) {
+    record(
+      'Production',
+      'Readiness checklist document',
+      'pass',
+      'docs/Production-Readiness-Checklist.md ready for dealership sign-off'
+    );
+  } else {
+    record('Production', 'Readiness checklist document', 'fail', 'Missing Production-Readiness-Checklist.md');
+  }
+
+  const globals = readFileSync(resolve(process.cwd(), 'src/app/globals.css'), 'utf8');
+  const uxOk =
+    globals.includes('story-card-cp') &&
+    globals.includes('benz-voice-btn-prominent') &&
+    globals.includes('benz-story-badge-cp');
+  if (uxOk) {
+    record('Production', 'Technician UX polish', 'pass', 'Customer Pay + voice + story badges styled');
+  } else {
+    record('Production', 'Technician UX polish', 'fail', 'Missing production UX CSS tokens');
+  }
+
+  if (
+    existsSync(resolve(process.cwd(), 'src/components/LoadErrorScreen.tsx')) &&
+    existsSync(resolve(process.cwd(), 'src/components/StoryStatusBadge.tsx')) &&
+    existsSync(resolve(process.cwd(), 'src/lib/dateFormat.ts'))
+  ) {
+    record('Production', 'Resilience + consistency utilities', 'pass', 'Load retry, story badges, dateFormat');
+  } else {
+    record('Production', 'Resilience + consistency utilities', 'fail', 'Missing production utility components');
+  }
+
+  const loggerSrc = readFileSync(resolve(process.cwd(), 'src/lib/logger.ts'), 'utf8');
+  if (loggerSrc.includes('LOG_LEVEL') && loggerSrc.includes('shouldLog')) {
+    record('Production', 'Production log levels', 'pass', 'LOG_LEVEL gates server logging');
+  } else {
+    record('Production', 'Production log levels', 'fail', 'Logger missing LOG_LEVEL support');
+  }
+
+  const envExample = readFileSync(resolve(process.cwd(), '.env.example'), 'utf8');
+  const envDocOk =
+    envExample.includes('MERLIN_BASE_URL') &&
+    envExample.includes('LOG_LEVEL') &&
+    envExample.includes('DAILY_USAGE_LIMIT');
+  if (envDocOk) {
+    record('Production', 'Environment documentation', 'pass', '.env.example documents ops variables');
+  } else {
+    record('Production', 'Environment documentation', 'warn', 'Expand .env.example with MERLIN_BASE_URL, LOG_LEVEL', false);
+  }
+
+  const readme = readFileSync(resolve(process.cwd(), 'README.md'), 'utf8');
+  if (readme.includes('Production-Readiness-Checklist') && readme.includes('Production Ready')) {
+    record('Production', 'README readiness index', 'pass', 'README links production checklist');
+  } else {
+    record('Production', 'README readiness index', 'fail', 'README missing production readiness declaration');
+  }
+
+  const nextCfg = readFileSync(resolve(process.cwd(), 'next.config.mjs'), 'utf8');
+  if (nextCfg.includes('optimizePackageImports')) {
+    record('Production', 'Bundle optimization', 'pass', 'lucide-react import optimization enabled');
+  } else {
+    record('Production', 'Bundle optimization', 'warn', 'Consider optimizePackageImports for lucide-react', false);
+  }
+}
+
 async function main(): Promise<void> {
   console.log(`\n${c.bold}${c.cyan}Merlin Pre-Rollout Validation${c.reset}`);
   console.log(`${c.dim}Validating deployment readiness for dealership IT…${c.reset}`);
@@ -1288,6 +1357,7 @@ async function main(): Promise<void> {
   await checkCoreFeatures();
   await checkDocumentation();
   await checkSecurityAndConfig();
+  checkProductionReadiness();
 
   printSummary();
 

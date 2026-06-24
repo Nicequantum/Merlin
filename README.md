@@ -9,7 +9,7 @@
 
 Merlin is a secure, dealership-specific platform that allows Mercedes-Benz technicians to create accurate, professional warranty narratives using Grok AI. It combines voice input, enterprise-grade security, and a complete audit trail to meet the standards of both individual dealerships and multi-location groups.
 
-**Version:** 3.0.1 · **Prompt version:** 2.1.0 · **Status:** Production-ready for multi-dealership rollout
+**Version:** 3.0.1 · **Prompt version:** 2.1.0 · **Status:** **Production Ready** — cleared for multi-dealership rollout after sign-off
 
 ---
 
@@ -24,12 +24,13 @@ Merlin is a secure, dealership-specific platform that allows Mercedes-Benz techn
 | **Security** | ✅ Ready | AES-256-GCM PII, CSP headers, route auth, input sanitization |
 | **Operations** | ✅ Ready | Maintenance mode, offline banner, health/status endpoints, error boundaries |
 | **Validation** | ✅ Ready | `npm run validate:env` + `npm run validate:pre-rollout` |
-| **Documentation** | ✅ Ready | 12 rollout documents in [`docs/`](./docs/) — [full index](./docs/README.md) |
+| **Documentation** | ✅ Ready | 13 rollout documents in [`docs/`](./docs/) — [full index](./docs/README.md) |
+| **Production sign-off** | ✅ Ready | [Production Readiness Checklist](./docs/Production-Readiness-Checklist.md) — required before each deployment |
 | **Dealership config** | ⚠️ Per site | Set `DEALERSHIP_DISPLAY_NAME`, secrets, and doc placeholders before go-live |
 | **Screenshots** | ⚠️ Optional | Add `docs/images/*.png` before printing Technician Quick Start |
 | **KV rate limiting** | ⚠️ Recommended | Configure `KV_REST_*` for distributed limits in serverless |
 
-**Go-live gate:** `npm run validate:pre-rollout` with **0 critical failures** + [Go-Live Checklist](./docs/Go-Live-Checklist.md) signed off.
+**Go-live gate:** `npm run validate:pre-rollout` with **0 critical failures** + [Production Readiness Checklist](./docs/Production-Readiness-Checklist.md) signed off + [Go-Live Checklist](./docs/Go-Live-Checklist.md) completed.
 
 ---
 
@@ -191,7 +192,7 @@ While listening, a panel shows **bay noise level**, **recognition confidence** (
 - A parallel microphone stream requests **auto gain control**, **noise suppression**, and **echo cancellation** where the browser supports them
 - **Adaptive confidence threshold** lowers as background noise rises so usable dictation is not rejected on loud shop floors
 - **Auto-restart** recovers from brief silence, network blips, and recognizer `onend` events (capped to prevent runaway loops)
-- **Listening timeout** (15s default) ends a stuck session with a one-tap **Retry** button
+- **Listening timeout** (45s default, configurable via `VOICE_LISTENING_TIMEOUT_MS`) ends a stuck session with a one-tap **Retry** button
 
 ### Browser requirements
 

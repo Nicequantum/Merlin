@@ -9,6 +9,7 @@ import { HomeView } from '@/components/HomeView';
 import { LineView } from '@/components/LineView';
 import { LoginView } from '@/components/LoginView';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
+import { LoadErrorScreen } from '@/components/LoadErrorScreen';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { ManagerDashboard } from '@/components/ManagerDashboard';
 import { RepairOrderList } from '@/components/RepairOrderList';
@@ -36,8 +37,19 @@ export function BenzTechApp() {
     return <LoadingScreen label="Starting Merlin" sublabel="Verifying your session..." />;
   }
 
-  if (ro.loading) {
+  if (ro.loading && !ro.listError) {
     return <LoadingScreen label="Loading repair orders" sublabel="Syncing dealership data..." />;
+  }
+
+  if (ro.listError) {
+    return (
+      <LoadErrorScreen
+        title="Could not load repair orders"
+        message={ro.listError}
+        onRetry={() => void ro.retryListLoad()}
+        retrying={ro.listRetrying}
+      />
+    );
   }
 
   if (!session) {

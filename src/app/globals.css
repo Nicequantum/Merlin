@@ -119,6 +119,52 @@
     box-shadow: 0 0 0 1px rgba(0, 173, 239, 0.06), var(--benz-shadow-lg);
   }
 
+  .story-card-cp {
+    border-color: rgba(52, 211, 153, 0.4);
+    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.08), var(--benz-shadow-lg);
+  }
+
+  .benz-story-empty-state {
+    @apply rounded-xl border border-dashed p-6;
+    border-color: var(--benz-border-strong);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .benz-story-badge {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide;
+  }
+
+  .benz-story-badge-compact {
+    font-size: 0.65rem;
+  }
+
+  .benz-story-badge-cp {
+    background: rgba(52, 211, 153, 0.15);
+    border: 1px solid rgba(52, 211, 153, 0.35);
+    color: var(--benz-green);
+  }
+
+  .benz-story-badge-ai {
+    background: var(--benz-blue-glow);
+    border: 1px solid var(--benz-border-accent);
+    color: var(--benz-blue);
+  }
+
+  .benz-story-badge-mixed {
+    background: var(--benz-surface-2);
+    border: 1px solid var(--benz-border);
+    color: var(--benz-text-secondary);
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 0.65rem;
+  }
+
+  .benz-cp-switch-banner {
+    @apply rounded-xl p-3.5 text-left;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    background: var(--benz-amber-dim);
+  }
+
   .stat-card {
     background: linear-gradient(165deg, var(--benz-surface-2) 0%, var(--benz-surface) 100%);
     border: 1px solid var(--benz-border);
@@ -154,9 +200,9 @@
   }
 
   .benz-hint {
-    font-size: 0.75rem;
-    color: var(--benz-text-muted);
-    line-height: 1.5;
+    font-size: 0.8125rem;
+    color: var(--benz-text-secondary);
+    line-height: 1.55;
   }
 
   .benz-input,
@@ -429,6 +475,20 @@
     display: flex;
     flex-direction: column;
     gap: 2rem;
+  }
+
+  @media (min-width: 768px) {
+    .benz-line-flow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    .benz-line-flow .benz-generate-panel {
+      position: sticky;
+      top: 4.5rem;
+    }
   }
 
   .benz-line-doc-card {
@@ -1080,6 +1140,22 @@
     color: var(--benz-text-muted);
     font-size: 0.7rem;
     max-width: 12rem;
+  }
+
+  .benz-voice-field-label {
+    @apply uppercase font-semibold tracking-wider;
+    font-size: 0.6rem;
+    color: var(--benz-blue);
+  }
+
+  .benz-voice-btn-prominent,
+  .benz-voice-prominent .benz-voice-btn {
+    min-width: 3.25rem;
+    min-height: 3.25rem;
+    padding: 0.75rem;
+    border-width: 2px;
+    border-color: var(--benz-border-accent);
+    box-shadow: 0 0 0 2px var(--benz-blue-glow);
   }
 
   .benz-voice-btn {

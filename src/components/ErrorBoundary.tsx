@@ -2,6 +2,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { toast } from 'sonner';
+import { clientLog } from '@/lib/clientLog';
 
 interface Props {
   children: ReactNode;
@@ -20,7 +21,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('Merlin error boundary:', error, info);
+    clientLog.error('Merlin error boundary', { error, info });
     toast.error('An unexpected error occurred. You can try again.');
   }
 
@@ -34,12 +35,23 @@ export class ErrorBoundary extends Component<Props, State> {
               Something unexpected happened on this screen. Your typed notes are still on the repair order.
             </p>
             <p className="text-xs text-benz-muted mb-5">{this.state.message}</p>
-            <button
-              onClick={() => this.setState({ hasError: false, message: '' })}
-              className="primary-btn px-6 h-11 text-sm touch-target"
-            >
-              Try again
-            </button>
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={() => this.setState({ hasError: false, message: '' })}
+                className="primary-btn px-6 h-11 text-sm touch-target"
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = '/';
+                }}
+                className="secondary-btn h-11 text-sm touch-target"
+              >
+                Go to home
+              </button>
+            </div>
           </div>
         </div>
       );

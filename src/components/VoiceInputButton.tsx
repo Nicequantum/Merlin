@@ -9,6 +9,8 @@ interface VoiceInputButtonProps {
   targetRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement | null>;
   onTranscript: (value: string) => void;
   className?: string;
+  /** Larger tap target and visual emphasis for primary dictation fields. */
+  prominent?: boolean;
 }
 
 function formatConfidence(value: number | null): string {
@@ -23,7 +25,12 @@ function noiseLabel(level: number): string {
   return 'Very noisy';
 }
 
-export function VoiceInputButton({ targetRef, onTranscript, className = '' }: VoiceInputButtonProps) {
+export function VoiceInputButton({
+  targetRef,
+  onTranscript,
+  className = '',
+  prominent = false,
+}: VoiceInputButtonProps) {
   const pushActiveRef = useRef(false);
   const {
     isListening,
@@ -214,7 +221,7 @@ export function VoiceInputButton({ targetRef, onTranscript, className = '' }: Vo
           title={micTitle}
           aria-label={micTitle}
           aria-pressed={isListening}
-          className={`benz-voice-btn touch-target active:scale-95 ${isListening ? 'benz-voice-btn-active' : ''} ${listeningState === 'restarting' ? 'benz-voice-btn-restarting' : ''}`}
+          className={`benz-voice-btn touch-target active:scale-95 ${prominent ? 'benz-voice-btn-prominent' : ''} ${isListening ? 'benz-voice-btn-active' : ''} ${listeningState === 'restarting' ? 'benz-voice-btn-restarting' : ''}`}
           {...micHandlers}
         >
           <span className="benz-voice-btn-inner">
@@ -222,10 +229,10 @@ export function VoiceInputButton({ targetRef, onTranscript, className = '' }: Vo
               <>
                 <span className="benz-voice-pulse" aria-hidden />
                 <span className="benz-voice-pulse benz-voice-pulse-delay" aria-hidden />
-                <MicOff size={18} />
+                <MicOff size={prominent ? 22 : 18} />
               </>
             ) : (
-              <Mic size={18} />
+              <Mic size={prominent ? 22 : 18} />
             )}
           </span>
         </button>

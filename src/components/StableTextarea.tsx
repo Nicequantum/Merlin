@@ -91,7 +91,19 @@ export function StableTextarea({
         onChange={(e) => handleChange(e.target.value)}
         className={`flex-1 touch-manipulation ${className}`}
       />
-      {showVoice && <VoiceInputButton targetRef={textareaRef} onTranscript={handleChange} className="mt-2 shrink-0" />}
+      {showVoice && (
+        <div className="flex flex-col items-end gap-1 shrink-0 mt-1">
+          <span className="benz-voice-field-label" title="Hands-free dictation for shop-floor tablets">
+            Voice
+          </span>
+          <VoiceInputButton
+            targetRef={textareaRef}
+            onTranscript={handleChange}
+            className="benz-voice-prominent"
+            prominent
+          />
+        </div>
+      )}
     </div>
   );
 }

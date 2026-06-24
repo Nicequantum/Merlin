@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { clientLog } from '@/lib/clientLog';
 import { runDiagnosticOCR, runMultiPassOCR } from '@/services/ocr';
 import type {
   AppView,
@@ -79,6 +80,8 @@ export function useRepairOrders({
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewingLineId, setReviewingLineId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [listRetrying, setListRetrying] = useState(false);
   const [openingROId, setOpeningROId] = useState<string | null>(null);
   const scanCancelledRef = useRef(false);
   const scanInFlightRef = useRef(false);
@@ -105,16 +108,32 @@ export function useRepairOrders({
   }, []);
 
   const refreshList = useCallback(async () => {
-    const { repairOrders } = await api.listRepairOrders();
-    setAllROs(repairOrders.map(normalizeRepairOrder));
-    setLoading(false);
+    setListError(null);
+    try {
+      const { repairOrders } = await api.listRepairOrders();
+      setAllROs(repairOrders.map(normalizeRepairOrder));
+    } catch (error) {
+      setListError('Could not load repair orders. Check your connection and try again.');
+      throw error;
+    } finally {
+      setLoading(false);
+      setListRetrying(false);
+    }
   }, [normalizeRepairOrder]);
 
+  const retryListLoad = useCallback(async () => {
+    setListRetrying(true);
+    setLoading(true);
+    try {
+      await refreshList();
+    } catch {
+      toast.error('Still unable to load repair orders — check Wi‑Fi or ask your manager.');
+    }
+  }, [refreshList]);
+
   useEffect(() => {
-    refreshList().catch((error) => {
-      console.error('[useRepairOrders] refreshList failed', error);
+    refreshList().catch(() => {
       toast.error('Could not load repair orders — check your connection');
-      setLoading(false);
     });
   }, [refreshList]);
 
@@ -354,7 +373,7 @@ export function useRepairOrders({
         setScanStatusMessage('Starting on-device OCR and AI vision in parallel…');
         const ocrPromise = runClientOcr();
         const grokPromise = api.extractRO(imagePathnames).catch((error) => {
-          console.warn('Server RO extraction failed or timed out', error);
+          clientLog.warn('Server RO extraction failed or timed out', error);
           return null;
         });
 
@@ -406,7 +425,7 @@ export function useRepairOrders({
         setPendingROImages([]);
       } catch (error) {
         if (!isActiveSession()) return;
-        console.error('RO scan error', error);
+        clientLog.error('RO scan error', error);
         toast.error(error instanceof Error ? error.message : 'Scan failed. Try fewer pages or sharper photos.');
         if (!createdSuccessfully) {
           setPendingROImages(images);
@@ -456,7 +475,7 @@ export function useRepairOrders({
           `Added ${newImages.length} page${newImages.length === 1 ? '' : 's'} (${total} total). Tap Process RO when ready.`
         );
       } catch (error) {
-        console.error('Scan file preparation failed', error);
+        clientLog.error('Scan file preparation failed', error);
         toast.error(error instanceof Error ? error.message : 'Could not prepare files for scan.');
       }
     },
@@ -740,7 +759,7 @@ export function useRepairOrders({
         text = formatExtractionAsOcrText(grokData);
         onProgress(50);
       } catch (err) {
-        console.warn('Grok diagnostic extraction failed, falling back to OCR', err);
+        clientLog.warn('Grok diagnostic extraction failed, falling back to OCR', err);
       }
 
       try {
@@ -751,7 +770,7 @@ export function useRepairOrders({
           text = text ? `${text}\n\n[OCR SUPPLEMENT]\n${ocrText}` : ocrText;
         }
       } catch (err) {
-        console.warn('Diagnostic OCR failed for one image', err);
+        clientLog.warn('Diagnostic OCR failed for one image', err);
       }
 
       if (!text.trim()) {
@@ -781,7 +800,7 @@ export function useRepairOrders({
           updatedExtracted = mergeExtracted(updatedExtracted, result.extracted);
           updatedOcrTexts = [...updatedOcrTexts, result.text];
         } catch (err) {
-          console.warn('Xentry analysis failed for one image', err);
+          clientLog.warn('Xentry analysis failed for one image', err);
           updatedOcrTexts = [...updatedOcrTexts, '[Analysis failed for this image]'];
         }
       }
@@ -1067,6 +1086,9 @@ export function useRepairOrders({
     currentLine,
     allROs,
     loading,
+    listError,
+    listRetrying,
+    retryListLoad,
     refreshList,
     searchTerm,
     setSearchTerm,

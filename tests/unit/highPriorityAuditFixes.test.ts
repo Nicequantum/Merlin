@@ -54,9 +54,9 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.ok(!encSrc.includes("return scryptSync(secret, 'benz-tech-pii-salt', 32)"));
   });
 
-  it('H8: production KV requirement', () => {
+  it('H8: production KV recommendation with in-memory fallback', () => {
     const envSrc = readSrc('src/lib/env.ts');
-    assert.ok(envSrc.includes('PRODUCTION_REQUIRED_ENV_VARS'));
+    assert.ok(envSrc.includes('PRODUCTION_RECOMMENDED_ENV_VARS'));
     const rateSrc = readSrc('src/lib/rate-limit.ts');
     assert.ok(rateSrc.includes('effectiveRateLimitConfig'));
   });

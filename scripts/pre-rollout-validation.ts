@@ -655,7 +655,7 @@ async function checkHighPriorityAuditFixes(): Promise<void> {
 
   const envSrc = readFileSync(resolve(process.cwd(), 'src/lib/env.ts'), 'utf8');
   const rateSrc = readFileSync(resolve(process.cwd(), 'src/lib/rate-limit.ts'), 'utf8');
-  if (envSrc.includes('PRODUCTION_REQUIRED_ENV_VARS') && rateSrc.includes('effectiveRateLimitConfig')) {
+  if (envSrc.includes('PRODUCTION_RECOMMENDED_ENV_VARS') && rateSrc.includes('effectiveRateLimitConfig')) {
     record('High Priority', 'H8 KV rate limiting', 'pass', 'KV required in production + stricter memory fallback');
   } else {
     record('High Priority', 'H8 KV rate limiting', 'fail', 'Rate limit production hardening incomplete');

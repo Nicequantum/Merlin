@@ -7,8 +7,8 @@ const REQUIRED_ENV_VARS = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'] a
 
 const RECOMMENDED_ENV_VARS = ['GROK_API_KEY', 'BLOB_READ_WRITE_TOKEN'] as const;
 
-/** H8: KV required in production for distributed rate limiting across serverless instances. */
-const PRODUCTION_REQUIRED_ENV_VARS = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'] as const;
+/** H8: KV recommended in production for distributed rate limiting across serverless instances. */
+const PRODUCTION_RECOMMENDED_ENV_VARS = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'] as const;
 
 export interface EnvironmentValidationResult {
   missing: string[];
@@ -85,14 +85,16 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     }
   }
 
-  if (isProduction) {
-    for (const key of PRODUCTION_REQUIRED_ENV_VARS) {
+  const kvConfigured =
+    Boolean(process.env.KV_REST_API_URL?.trim()) && Boolean(process.env.KV_REST_API_TOKEN?.trim());
+  if (!kvConfigured) {
+    warnings.push('KV_REST_API_URL/KV_REST_API_TOKEN not configured — distributed rate limiting disabled');
+  } else if (isProduction) {
+    for (const key of PRODUCTION_RECOMMENDED_ENV_VARS) {
       if (!process.env[key]?.trim()) {
-        missing.push(key);
+        warnings.push(`${key} not configured — distributed rate limiting disabled`);
       }
     }
-  } else if (!process.env.KV_REST_API_URL?.trim() || !process.env.KV_REST_API_TOKEN?.trim()) {
-    warnings.push('KV_REST_API_URL/KV_REST_API_TOKEN not configured — distributed rate limiting disabled');
   }
 
   if (isTruthyEnv(process.env.NEXT_PUBLIC_GROK_API_KEY) || isTruthyEnv(process.env.NEXT_PUBLIC_XAI_API_KEY)) {

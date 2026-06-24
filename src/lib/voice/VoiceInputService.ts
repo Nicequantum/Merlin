@@ -1,9 +1,7 @@
 import { computeAdaptiveConfidenceThreshold, passesConfidenceGate } from './confidence';
 import { resolveVoiceErrorMessage, shouldAutoRestartAfterError } from './errors';
-import { NoiseMonitor } from './noiseMonitor';
 import { getSpeechRecognitionCtor } from './speechRecognition';
 import type {
-  SpeechRecognitionErrorCode,
   SpeechRecognitionEventLike,
   SpeechRecognitionInstance,
   TranscriptMeta,
@@ -33,12 +31,11 @@ const INITIAL_STATE: VoiceInputState = {
 };
 
 /**
- * Encapsulates Web Speech API recognition, noise monitoring, adaptive confidence,
+ * Encapsulates Web Speech API recognition, adaptive confidence,
  * auto-restart, and cleanup for Merlin repair-line voice entry.
  */
 export class VoiceInputService {
   private recognition: SpeechRecognitionInstance | null = null;
-  private noiseMonitor = new NoiseMonitor((level) => this.handleNoiseLevel(level));
   private state: VoiceInputState = { ...INITIAL_STATE };
   private callbacks: VoiceInputCallbacks | null = null;
   private target: VoiceInputTargetContext | null = null;
@@ -129,13 +126,10 @@ export class VoiceInputService {
       restartCount: 0,
     });
 
-    try {
-      // M16: probe mic permission, then release stream before SpeechRecognition claims the mic.
-      await this.noiseMonitor.start(this.settings);
-      await this.refreshPermission();
-      await this.noiseMonitor.stop();
-    } catch {
-      await this.noiseMonitor.stop();
+    const micGranted = await this.probeMicrophonePermission();
+    await this.refreshPermission();
+
+    if (!micGranted) {
       this.patchState({
         listeningState: 'error',
         isListening: false,
@@ -152,7 +146,6 @@ export class VoiceInputService {
     const started = this.startRecognition(Ctor);
     if (!started) {
       this.detachManualEditGuard();
-      await this.noiseMonitor.stop();
     }
     return started;
   }
@@ -170,7 +163,6 @@ export class VoiceInputService {
     }
     releaseVoiceSession(this.sessionHandle);
     this.detachManualEditGuard();
-    void this.noiseMonitor.stop();
     this.patchState({
       isListening: false,
       listeningState: 'idle',
@@ -186,7 +178,6 @@ export class VoiceInputService {
     this.disposeRecognition();
     releaseVoiceSession(this.sessionHandle);
     this.detachManualEditGuard();
-    void this.noiseMonitor.stop();
     this.callbacks = null;
     this.target = null;
     this.targetElement = null;
@@ -196,8 +187,27 @@ export class VoiceInputService {
   /** Retry after listening timeout or error UX. */
   async retry(): Promise<boolean> {
     if (!this.targetElement || !this.callbacks) return false;
+    this.userStopped = false;
     this.patchState({ restartCount: 0, errorMessage: null, errorCode: null });
     return this.start(this.targetElement, this.callbacks);
+  }
+
+  private async probeMicrophonePermission(): Promise<boolean> {
+    if (!navigator.mediaDevices?.getUserMedia) return false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          autoGainControl: this.settings.autoGainControl,
+          noiseSuppression: this.settings.noiseSuppression,
+          echoCancellation: this.settings.echoCancellation,
+        },
+        video: false,
+      });
+      stream.getTracks().forEach((track) => track.stop());
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private startRecognition(Ctor: NonNullable<ReturnType<typeof getSpeechRecognitionCtor>>): boolean {
@@ -266,7 +276,6 @@ export class VoiceInputService {
       this.resetListeningTimeout();
       return true;
     } catch {
-      void this.noiseMonitor.stop();
       this.patchState({ listeningState: 'error', isListening: false });
       return false;
     }
@@ -356,15 +365,10 @@ export class VoiceInputService {
     this.manualEditListener = null;
   }
 
-  private handleNoiseLevel(level: number): void {
-    const threshold = computeAdaptiveConfidenceThreshold(level, this.settings);
-    this.patchState({ noiseLevel: level, confidenceThreshold: threshold });
-  }
-
   private scheduleRestart(): void {
     this.clearRestartTimer();
     const nextCount = this.state.restartCount + 1;
-    this.patchState({ listeningState: 'restarting', restartCount: nextCount, interimText: '' });
+    this.patchState({ listeningState: 'restarting', restartCount: nextCount });
 
     this.restartTimer = setTimeout(() => {
       if (this.userStopped || this.destroyed) return;
@@ -376,17 +380,28 @@ export class VoiceInputService {
 
   private resetListeningTimeout(): void {
     this.clearTimeoutTimer();
+    if (this.settings.listeningTimeoutMs <= 0) return;
+
     this.timeoutTimer = setTimeout(() => {
       if (this.userStopped || !this.state.isListening) return;
-      this.userStopped = true;
-      this.recognition?.stop();
-      void this.noiseMonitor.stop();
-      this.patchState({
-        isListening: false,
-        listeningState: 'timeout',
-        errorMessage: 'Listening timed out. Tap Retry or use the keyboard.',
-        errorCode: 'no-speech',
-      });
+
+      const canRestart =
+        this.state.mode === 'toggle' &&
+        this.settings.continuous &&
+        this.state.restartCount < this.settings.maxAutoRestarts;
+
+      if (canRestart) {
+        this.scheduleRestart();
+      } else {
+        this.userStopped = true;
+        this.recognition?.stop();
+        this.patchState({
+          isListening: false,
+          listeningState: 'timeout',
+          errorMessage: 'Listening timed out. Tap the mic or use the keyboard.',
+          errorCode: 'no-speech',
+        });
+      }
     }, this.settings.listeningTimeoutMs);
   }
 

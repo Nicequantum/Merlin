@@ -17,16 +17,16 @@ export function computeAdaptiveConfidenceThreshold(
 }
 
 /**
- * M19: When Chrome omits confidence, accept in noisy bays but gate in quiet conditions
- * where low-quality hallucinations are more likely without a score signal.
+ * Accept transcripts when Web Speech omits confidence (common in Chrome).
+ * Gate only when a low confidence score is explicitly provided.
  */
 export function passesConfidenceGate(
   confidence: number | null | undefined,
   threshold: number,
-  noiseLevel = 0
+  _noiseLevel = 0
 ): boolean {
   if (confidence == null || Number.isNaN(confidence)) {
-    return noiseLevel >= 20;
+    return true;
   }
   return confidence >= threshold;
 }

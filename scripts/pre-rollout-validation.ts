@@ -690,8 +690,8 @@ async function checkHighPriorityAuditFixes(): Promise<void> {
   }
 
   const voiceSrc = readFileSync(resolve(process.cwd(), 'src/lib/voice/VoiceInputService.ts'), 'utf8');
-  if (voiceSrc.includes('if (!started)') && voiceSrc.includes('noiseMonitor.stop')) {
-    record('High Priority', 'H13 voice cleanup', 'pass', 'Noise monitor stopped when recognition fails');
+  if (voiceSrc.includes('if (!started)') && voiceSrc.includes('detachManualEditGuard')) {
+    record('High Priority', 'H13 voice cleanup', 'pass', 'Manual edit guard detached when recognition fails');
   } else {
     record('High Priority', 'H13 voice cleanup', 'fail', 'Voice start failure cleanup incomplete');
   }
@@ -773,7 +773,10 @@ function checkMediumAuditFixes(): void {
   }
 
   const voiceSrc = readFileSync(resolve(process.cwd(), 'src/lib/voice/voiceSettings.ts'), 'utf8');
-  if (voiceSrc.includes('45_000') && readFileSync(resolve(process.cwd(), 'src/hooks/repairOrders/useROPersistence.ts'), 'utf8').includes('useROPersistence')) {
+  const voiceLongForm =
+    (voiceSrc.includes('listeningTimeoutMs: 0') || voiceSrc.includes('maxAutoRestarts: 60')) &&
+    readFileSync(resolve(process.cwd(), 'src/hooks/repairOrders/useROPersistence.ts'), 'utf8').includes('useROPersistence');
+  if (voiceLongForm) {
     record('Medium', 'M15–M21 voice/hooks', 'pass', 'Voice guards + hook decomposition');
   } else {
     record('Medium', 'M15–M21 voice/hooks', 'fail', 'Voice/hook medium fixes incomplete');
@@ -1278,7 +1281,7 @@ function checkProductionReadiness(): void {
   const globals = readFileSync(resolve(process.cwd(), 'src/app/globals.css'), 'utf8');
   const uxOk =
     globals.includes('story-card-cp') &&
-    globals.includes('benz-voice-btn-prominent') &&
+    globals.includes('benz-voice-inline-btn') &&
     globals.includes('benz-story-badge-cp');
   if (uxOk) {
     record('Production', 'Technician UX polish', 'pass', 'Customer Pay + voice + story badges styled');

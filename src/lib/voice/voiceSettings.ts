@@ -7,6 +7,7 @@ export interface VoiceInputSettings {
   enabled: boolean;
   language: string;
   continuous: boolean;
+  /** Inactivity timeout (ms). 0 = disabled — mic stays on until user taps stop. */
   listeningTimeoutMs: number;
   silenceRestartDelayMs: number;
   maxAutoRestarts: number;
@@ -26,15 +27,15 @@ export const DEFAULT_VOICE_INPUT_SETTINGS: VoiceInputSettings = {
   enabled: true,
   language: 'en-US',
   continuous: true,
-  listeningTimeoutMs: 45_000,
-  silenceRestartDelayMs: 600,
-  maxAutoRestarts: 10,
+  listeningTimeoutMs: 0,
+  silenceRestartDelayMs: 400,
+  maxAutoRestarts: 60,
   baseConfidenceThreshold: 0.55,
   minConfidenceThreshold: 0.22,
   noiseAdjustmentFactor: 0.38,
   pushToTalkDefault: false,
-  showNoiseMeter: true,
-  showConfidence: true,
+  showNoiseMeter: false,
+  showConfidence: false,
   autoGainControl: true,
   noiseSuppression: true,
   echoCancellation: true,
@@ -47,9 +48,11 @@ function envBool(key: string, fallback: boolean): boolean {
   return raw === '1' || raw === 'true' || raw === 'yes';
 }
 
-function envNumber(key: string, fallback: number): number {
+function envNumber(key: string, fallback: number, allowZero = false): number {
   const raw = Number(process.env[key]);
-  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+  if (!Number.isFinite(raw)) return fallback;
+  if (allowZero && raw === 0) return 0;
+  return raw > 0 ? raw : fallback;
 }
 
 /** Resolve settings with optional deployment overrides (M18/M19). */
@@ -60,7 +63,8 @@ export function resolveVoiceInputSettings(): VoiceInputSettings {
     language: process.env.VOICE_INPUT_LANGUAGE?.trim() || DEFAULT_VOICE_INPUT_SETTINGS.language,
     listeningTimeoutMs: envNumber(
       'VOICE_LISTENING_TIMEOUT_MS',
-      DEFAULT_VOICE_INPUT_SETTINGS.listeningTimeoutMs
+      DEFAULT_VOICE_INPUT_SETTINGS.listeningTimeoutMs,
+      true
     ),
     baseConfidenceThreshold: envNumber(
       'VOICE_BASE_CONFIDENCE',

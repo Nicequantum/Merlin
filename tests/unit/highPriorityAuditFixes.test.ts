@@ -86,10 +86,10 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.ok(src.includes('EMIT_INTERVAL_MS = 250'));
   });
 
-  it('H13: recognition start failure stops noise monitor', () => {
+  it('H13: recognition start failure detaches manual edit guard', () => {
     const src = readSrc('src/lib/voice/VoiceInputService.ts');
     assert.ok(src.includes('if (!started)'));
-    assert.ok(src.includes('await this.noiseMonitor.stop()'));
+    assert.ok(src.includes('detachManualEditGuard'));
   });
 
   it('H14: template apply requires isCustomerPay flag', () => {

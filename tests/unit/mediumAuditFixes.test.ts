@@ -81,12 +81,14 @@ describe('Medium audit fixes (M1–M30)', () => {
   it('M15/M16/M17: voice service guards', () => {
     const voice = readSrc('src/lib/voice/VoiceInputService.ts');
     assert.ok(voice.includes('attachManualEditGuard'));
-    assert.ok(voice.includes('await this.noiseMonitor.stop()'));
+    assert.ok(voice.includes('probeMicrophonePermission'));
     assert.ok(readSrc('src/hooks/useVoiceInput.ts').includes('pagehide'));
   });
 
-  it('M18: 45s default listening timeout', () => {
-    assert.equal(readSrc('src/lib/voice/voiceSettings.ts').includes('45_000'), true);
+  it('M18: long-form dictation without short listening cutoff', () => {
+    const voice = readSrc('src/lib/voice/voiceSettings.ts');
+    assert.equal(voice.includes('45_000'), false);
+    assert.ok(voice.includes('listeningTimeoutMs: 0') || voice.includes('maxAutoRestarts: 60'));
   });
 
   it('M21: useRepairOrders split into focused hooks', () => {

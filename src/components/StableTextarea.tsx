@@ -69,7 +69,7 @@ export function StableTextarea({
   };
 
   return (
-    <div className="flex gap-2 items-start w-full min-w-0">
+    <div className="relative w-full min-w-0">
       <textarea
         ref={textareaRef}
         {...props}
@@ -89,20 +89,14 @@ export function StableTextarea({
           props.onBlur?.(e);
         }}
         onChange={(e) => handleChange(e.target.value)}
-        className={`flex-1 min-w-0 w-full touch-manipulation ${className}`}
+        className={`w-full min-w-0 touch-manipulation ${showVoice ? 'pr-10 pb-9 ' : ''}${className}`}
       />
       {showVoice && (
-        <div className="flex flex-col items-end gap-1 shrink-0 mt-1">
-          <span className="benz-voice-field-label" title="Hands-free dictation for shop-floor tablets">
-            Voice
-          </span>
-          <VoiceInputButton
-            targetRef={textareaRef}
-            onTranscript={handleChange}
-            className="benz-voice-prominent"
-            prominent
-          />
-        </div>
+        <VoiceInputButton
+          targetRef={textareaRef}
+          onTranscript={handleChange}
+          className="bottom-2 right-2"
+        />
       )}
     </div>
   );

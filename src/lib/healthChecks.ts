@@ -189,16 +189,18 @@ export function checkVoiceInput(): DependencyCheck {
   }
   const lang = VOICE_INPUT_SETTINGS.language;
   const langValid = /^[a-z]{2}(-[A-Z]{2})?$/.test(lang);
-  const timeoutOk = VOICE_INPUT_SETTINGS.listeningTimeoutMs >= 15_000;
+  const timeoutMs = VOICE_INPUT_SETTINGS.listeningTimeoutMs;
+  const timeoutOk = timeoutMs === 0 || timeoutMs >= 600_000;
   const issues: string[] = [];
   if (!langValid) issues.push(`invalid language tag "${lang}"`);
-  if (!timeoutOk) issues.push(`listening timeout ${VOICE_INPUT_SETTINGS.listeningTimeoutMs}ms too low`);
+  if (!timeoutOk) issues.push(`listening timeout ${timeoutMs}ms too low for long dictation`);
   if (issues.length > 0) {
     return { status: 'error', detail: `Voice config invalid: ${issues.join('; ')}` };
   }
+  const timeoutLabel = timeoutMs === 0 ? 'no inactivity cutoff' : `${timeoutMs}ms timeout`;
   return {
     status: 'ok',
-    detail: `Voice ready (${lang}, ${VOICE_INPUT_SETTINGS.listeningTimeoutMs}ms timeout). Requires Chrome/Edge Web Speech API on shop tablets.`,
+    detail: `Voice ready (${lang}, ${timeoutLabel}). Requires Chrome/Edge Web Speech API on shop tablets.`,
   };
 }
 

@@ -45,7 +45,7 @@ export function StableInput({
   );
 
   return (
-    <div className={showVoice ? 'flex gap-2 items-center w-full min-w-0' : 'w-full min-w-0'}>
+    <div className="relative w-full min-w-0">
       <input
         ref={inputRef}
         {...props}
@@ -64,13 +64,14 @@ export function StableInput({
           props.onBlur?.(e);
         }}
         onChange={(e) => commit(e.target.value)}
-        className={`${showVoice ? 'flex-1 min-w-0 w-full ' : 'w-full '}touch-manipulation ${className}`}
+        className={`w-full min-w-0 touch-manipulation ${showVoice ? 'pr-10 ' : ''}${className}`}
       />
       {showVoice && (
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="benz-voice-field-label">Voice</span>
-          <VoiceInputButton targetRef={inputRef} onTranscript={commit} className="benz-voice-prominent" prominent />
-        </div>
+        <VoiceInputButton
+          targetRef={inputRef}
+          onTranscript={commit}
+          className="right-2 top-1/2 -translate-y-1/2"
+        />
       )}
     </div>
   );

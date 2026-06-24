@@ -100,29 +100,40 @@ export function useROStoryWorkflow(
 
   const generateStory = useCallback(
     async (lineId: string) => {
-      if (refs.storyGenerationInFlightRef.current) return;
-      if (refs.storyReviewInFlightRef.current) deps.invalidateReviewRequests();
-      await deps.flushPendingSave();
-      const latestRO = refs.roRef.current;
-      if (!latestRO) return;
-      const targetLine = latestRO.repairLines.find((line) => line.id === lineId);
-      if (!targetLine) {
-        toast.error('Repair line not found — refresh the RO and try again');
-        return;
-      }
-      if (isCustomerPayRepairLine(targetLine)) {
-        toast.error('Clear Customer Pay mode first to generate a warranty story with AI.');
-        return;
-      }
+      console.log('Generate Story clicked', { lineId });
 
-      deps.clearLineQualityState(lineId);
-      deps.invalidateReviewRequests();
+      if (refs.storyGenerationInFlightRef.current) {
+        toast.message('Story generation already in progress…');
+        return;
+      }
 
       const seq = ++refs.generateStorySeqRef.current;
       refs.storyGenerationInFlightRef.current = true;
       setters.setGeneratingLineId(lineId);
       setters.setIsGenerating(true);
+
       try {
+        if (refs.storyReviewInFlightRef.current) deps.invalidateReviewRequests();
+        await deps.flushPendingSave();
+
+        const latestRO = refs.roRef.current;
+        if (!latestRO) {
+          toast.error('Repair order not loaded — go back and reopen the line');
+          return;
+        }
+
+        const targetLine = latestRO.repairLines.find((line) => line.id === lineId);
+        if (!targetLine) {
+          toast.error('Repair line not found — refresh the RO and try again');
+          return;
+        }
+        if (isCustomerPayRepairLine(targetLine)) {
+          toast.error('Clear Customer Pay mode first to generate a warranty story with AI.');
+          return;
+        }
+
+        deps.clearLineQualityState(lineId);
+        deps.invalidateReviewRequests();
         const { warrantyStory, quality } = await api.generateStory(latestRO.id, lineId);
         if (seq !== refs.generateStorySeqRef.current) return;
         setters.setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));

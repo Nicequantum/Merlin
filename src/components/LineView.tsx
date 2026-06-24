@@ -124,6 +124,11 @@ export function LineView({
     }
   };
 
+  const handleGenerateStory = () => {
+    console.log('Generate Story clicked');
+    onGenerateStory();
+  };
+
   const handlePdf = async () => {
     const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
     const storyText = storyEl?.value ?? line.warrantyStory ?? '';
@@ -290,7 +295,7 @@ export function LineView({
           </div>
         )}
 
-        <div className="benz-generate-panel space-y-3">
+        <div className="benz-generate-panel space-y-3 relative z-[5]">
           {isCustomerPayLine ? (
             <div className="benz-cp-instant-banner flex items-start gap-3 p-4 rounded-xl border border-benz-green/30 bg-benz-green/8">
               <Zap size={20} className="text-benz-green shrink-0 mt-0.5" />
@@ -303,7 +308,8 @@ export function LineView({
             </div>
           ) : (
             <button
-              onClick={onGenerateStory}
+              type="button"
+              onClick={handleGenerateStory}
               disabled={isGenerating || isReviewing}
               className="primary-btn w-full h-13 text-base flex items-center justify-center gap-2.5 disabled:opacity-50 touch-target"
             >
@@ -371,7 +377,7 @@ export function LineView({
                 : 'Generate with Grok or browse templates to start your 3 C\'s narrative.'
             }
             actionLabel={isCustomerPayLine ? 'Browse Customer Pay templates' : 'Generate warranty story'}
-            onAction={() => (isCustomerPayLine ? setShowTemplateLibrary(true) : onGenerateStory())}
+            onAction={() => (isCustomerPayLine ? setShowTemplateLibrary(true) : handleGenerateStory())}
             className="benz-story-empty-state"
           />
         )}
@@ -454,7 +460,8 @@ export function LineView({
                     )}
                   </button>
                   <button
-                    onClick={onGenerateStory}
+                    type="button"
+                    onClick={handleGenerateStory}
                     disabled={isGenerating || isReviewing}
                     className="secondary-btn h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
                   >

@@ -198,7 +198,14 @@ export function BenzTechApp() {
           onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
           onDeleteXentryImage={(imageId) => void ro.deleteLineXentryImage(ro.currentLine!.id, imageId)}
           onApplySmartDefaults={() => ro.applySmartDefaultsToLine(ro.currentLine!.id)}
-          onGenerateStory={() => ro.generateStory(ro.currentLine!.id)}
+          onGenerateStory={() => {
+            const lineId = ro.currentLineId;
+            if (!lineId || typeof ro.generateStory !== 'function') {
+              console.error('Generate story unavailable', { lineId, generateStory: ro.generateStory });
+              return;
+            }
+            void ro.generateStory(lineId);
+          }}
           onReviewStory={() => ro.reviewStory(ro.currentLine!.id)}
           onApplyCustomerPayTemplate={(templateId) =>
             ro.applyCustomerPayTemplate(ro.currentLine!.id, templateId)

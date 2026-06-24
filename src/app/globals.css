@@ -540,6 +540,10 @@
       linear-gradient(165deg, var(--benz-surface) 0%, rgba(16, 16, 20, 0.95) 100%);
     border: 1px solid var(--benz-border-strong);
     box-shadow: var(--benz-shadow);
+    position: relative;
+    z-index: 5;
+    isolation: isolate;
+    pointer-events: auto;
   }
 
   .benz-quality-inset {

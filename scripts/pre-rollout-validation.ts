@@ -7,11 +7,16 @@
  * credentials — does not mutate customer data (read-only DB probe + in-memory tests).
  *
  * Usage:
+ *   cp .env.example .env.local   # first-time setup
  *   npm run validate:pre-rollout
  *   MERLIN_BASE_URL=https://your-deployment.example npm run validate:pre-rollout
+ *
+ * This script depends on `.env.local` at the repo root (same as `npm run dev`).
+ * DATABASE_URL and other secrets must never be hardcoded here.
  */
 
 import { execSync } from 'node:child_process';
+import { config as loadDotenv } from 'dotenv';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { jsPDF } from 'jspdf';
@@ -32,13 +37,15 @@ import {
   isMaintenanceModeEnabled,
   validateEnvironment,
 } from '../src/lib/env';
+import type { PrismaClient } from '@prisma/client';
 import { isKvConfigured, RATE_LIMITS } from '../src/lib/rate-limit';
-
-import { prisma } from '../src/lib/db';
 import { SYSTEM_PROMPT, buildWarrantyStoryUserMessage } from '../src/prompts/warrantyStory';
 import { PROMPT_VERSION } from '../src/prompts/version';
 import { normalizeWarrantyStoryText } from '../src/utils/pdfExport';
 import { createRepairOrderFromScan } from '../src/utils/repairOrderFactory';
+
+let prisma: PrismaClient | null = null;
+let databaseConfigError: string | null = null;
 
 // ─── Console styling ───────────────────────────────────────────────────────────
 
@@ -83,21 +90,80 @@ function section(title: string): void {
 
 // ─── Environment bootstrap ─────────────────────────────────────────────────────
 
-function loadDotEnvFile(filename: string): void {
-  const path = resolve(process.cwd(), filename);
-  if (!existsSync(path)) return;
-  const content = readFileSync(path, 'utf8');
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (!process.env[key]) process.env[key] = value;
+/** Load `.env` then `.env.local` (overrides) — mirrors Next.js / local dev conventions. */
+function loadEnvironment(): void {
+  const root = process.cwd();
+  loadDotenv({ path: resolve(root, '.env') });
+  const localPath = resolve(root, '.env.local');
+  if (!existsSync(localPath)) {
+    console.warn(
+      `${c.yellow}⚠ .env.local not found — copy .env.example to .env.local and configure DATABASE_URL.${c.reset}`
+    );
+  }
+  loadDotenv({ path: localPath, override: true });
+  loadDotenv({ path: resolve(root, '.env.production'), override: true });
+}
+
+/**
+ * Validate and normalize DATABASE_URL from the environment.
+ * Remote hosts (Prisma Data Platform, Neon, Vercel Postgres, etc.) get sslmode=require
+ * when omitted so SSL handshakes succeed.
+ */
+function resolveDatabaseUrl(): string {
+  const raw = process.env.DATABASE_URL?.trim();
+  if (!raw) {
+    throw new Error(
+      'DATABASE_URL is not set. Add it to .env.local (see .env.example). ' +
+        'Example: postgresql://user:pass@host:5432/db?sslmode=require'
+    );
+  }
+
+  const normalizedScheme = raw.replace(/^textpostgres:\/\//i, 'postgresql://');
+  if (!/^postgres(ql)?:\/\//i.test(normalizedScheme)) {
+    throw new Error(
+      'DATABASE_URL must start with postgresql:// or postgres://. ' +
+        'Check .env.local for typos (e.g. textpostgres://).'
+    );
+  }
+
+  let url: URL;
+  try {
+    url = new URL(normalizedScheme);
+  } catch {
+    throw new Error('DATABASE_URL is malformed. Verify the connection string in .env.local.');
+  }
+
+  if (!url.hostname) {
+    throw new Error('DATABASE_URL is missing a hostname. Verify the connection string in .env.local.');
+  }
+
+  const isLocal =
+    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+  if (!isLocal && !url.searchParams.has('sslmode')) {
+    url.searchParams.set('sslmode', 'require');
+  }
+
+  return url.toString();
+}
+
+function describeDatabaseHost(connectionUrl: string): string {
+  try {
+    return new URL(connectionUrl).hostname;
+  } catch {
+    return 'unknown-host';
+  }
+}
+
+async function initPrismaFromEnvironment(): Promise<PrismaClient | null> {
+  try {
+    const databaseUrl = resolveDatabaseUrl();
+    process.env.DATABASE_URL = databaseUrl;
+    const { prisma: client } = await import('../src/lib/db');
+    return client;
+  } catch (error) {
+    databaseConfigError =
+      error instanceof Error ? error.message : 'DATABASE_URL is missing or invalid';
+    return null;
   }
 }
 
@@ -162,17 +228,33 @@ async function checkEnvironment(): Promise<void> {
 async function checkCoreSystems(): Promise<void> {
   section('Core System Health');
 
-  try {
-    const started = Date.now();
-    await prisma.$queryRaw`SELECT 1`;
-    record('Core Systems', 'Database connection', 'pass', `Responded in ${Date.now() - started}ms`);
-  } catch (error) {
+  if (!prisma) {
     record(
       'Core Systems',
       'Database connection',
       'fail',
-      error instanceof Error ? error.message : 'Connection failed'
+      databaseConfigError ??
+        'DATABASE_URL not configured — add a valid PostgreSQL URL to .env.local'
     );
+  } else {
+    try {
+      const started = Date.now();
+      await prisma.$queryRaw`SELECT 1`;
+      const host = describeDatabaseHost(process.env.DATABASE_URL ?? '');
+      const ssl = process.env.DATABASE_URL?.includes('sslmode=') ? 'SSL on' : 'SSL not specified';
+      record(
+        'Core Systems',
+        'Database connection',
+        'pass',
+        `PostgreSQL OK in ${Date.now() - started}ms (${host}, ${ssl})`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Connection failed';
+      const hint = message.includes('localhost')
+        ? ' Start local Postgres or point DATABASE_URL in .env.local at your remote database.'
+        : ' Verify DATABASE_URL in .env.local includes ?sslmode=require for remote hosts.';
+      record('Core Systems', 'Database connection', 'fail', `${message}${hint}`);
+    }
   }
 
   try {
@@ -379,14 +461,21 @@ async function checkCoreFeatures(): Promise<void> {
         : { status: 'warn', detail: 'KV not configured' },
     };
 
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-      serviceChecks.database = { status: 'ok', detail: 'SELECT 1 OK' };
-    } catch (error) {
+    if (!prisma) {
       serviceChecks.database = {
         status: 'error',
-        detail: error instanceof Error ? error.message : 'DB failed',
+        detail: databaseConfigError ?? 'DATABASE_URL not configured',
       };
+    } else {
+      try {
+        await prisma.$queryRaw`SELECT 1`;
+        serviceChecks.database = { status: 'ok', detail: 'SELECT 1 OK' };
+      } catch (error) {
+        serviceChecks.database = {
+          status: 'error',
+          detail: error instanceof Error ? error.message : 'DB failed',
+        };
+      }
     }
 
     try {
@@ -612,9 +701,7 @@ async function main(): Promise<void> {
   console.log(`\n${c.bold}${c.cyan}Merlin Pre-Rollout Validation${c.reset}`);
   console.log(`${c.dim}Validating deployment readiness for dealership IT…${c.reset}`);
 
-  loadDotEnvFile('.env');
-  loadDotEnvFile('.env.local');
-  loadDotEnvFile('.env.production');
+  loadEnvironment();
 
   if (!process.env.NEXT_PUBLIC_BUILD_COMMIT) {
     try {
@@ -627,6 +714,8 @@ async function main(): Promise<void> {
     process.env.NEXT_PUBLIC_BUILD_DATE = new Date().toISOString();
   }
 
+  prisma = await initPrismaFromEnvironment();
+
   await checkEnvironment();
   await checkCoreSystems();
   await checkCoreFeatures();
@@ -635,7 +724,7 @@ async function main(): Promise<void> {
   printSummary();
 
   const criticalFails = results.filter((r) => r.status === 'fail' && r.critical).length;
-  await prisma.$disconnect().catch(() => undefined);
+  await prisma?.$disconnect().catch(() => undefined);
   process.exit(criticalFails > 0 ? 1 : 0);
 }
 

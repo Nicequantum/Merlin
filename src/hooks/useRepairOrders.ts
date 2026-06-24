@@ -152,7 +152,7 @@ export function useRepairOrders({
     }
   }, [view, currentRO, currentLineId]);
 
-  const { flushPendingSave, applyROUpdate, saveROImmediate } = useROPersistence(
+  const { flushPendingSave, applyROUpdate, saveROImmediate, persistRO } = useROPersistence(
     allROs,
     setAllROs,
     roRef,

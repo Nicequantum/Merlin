@@ -187,6 +187,9 @@ export function BenzTechApp() {
           onApplySmartDefaults={() => ro.applySmartDefaultsToLine(ro.currentLine!.id)}
           onGenerateStory={() => ro.generateStory(ro.currentLine!.id)}
           onReviewStory={() => ro.reviewStory(ro.currentLine!.id)}
+          onApplyCustomerPayTemplate={(templateId) =>
+            ro.applyCustomerPayTemplate(ro.currentLine!.id, templateId)
+          }
           onAcknowledgeStoryBaseline={(text) => ro.acknowledgeStoryBaseline(ro.currentLine!.id, text)}
         />
       )}

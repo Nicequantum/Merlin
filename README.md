@@ -88,6 +88,7 @@ All rollout and go-live materials live in [`docs/`](./docs/). See the [**Documen
 ## Key Features
 
 - Voice-first input designed for busy service bays
+- **Customer Pay templates** — 12+ instant pre-written stories (no AI, no quality audit)
 - Grok AI for high-quality, policy-aligned warranty stories
 - AES-256-GCM encryption of sensitive data at rest
 - Immutable SHA-256 hash-chained audit trail
@@ -138,9 +139,19 @@ flowchart LR
 1. Technician logs in and opens a repair order
 2. Captures symptoms and repair details using voice or form
 3. Data is transmitted over HTTPS; sensitive fields are encrypted server-side before storage
-4. Grok AI generates a professional warranty narrative from a sanitized prompt
-5. All actions are recorded in a tamper-evident audit log
-6. Technician reviews and exports a branded PDF ready for submission
+4. **Warranty lines:** Grok AI generates a professional narrative from a sanitized prompt (with MI 2.0 quality review)
+5. **Customer Pay lines:** Pick an instant template from the library — pre-written story applied with no AI call
+6. All warranty AI actions are recorded in a tamper-evident audit log; Customer Pay uses a lightweight `customerPayTemplateApplied` entry
+7. Technician reviews and exports a branded PDF ready for submission
+
+### Customer Pay vs Warranty
+
+| | Customer Pay | Warranty (AI) |
+|---|--------------|-----------------|
+| **Story source** | Pre-written template (`src/prompts/templates/customerPayTemplates.ts`) | Grok AI generation |
+| **Quality audit** | Skipped (non-warranty work) | MI 2.0 review optional |
+| **Audit action** | `customerPayTemplateApplied` (no Merlin `promptVersion`) | `story.generate` / `story.review` with `promptVersion` |
+| **UI** | Green “Customer Pay · Instant” badge | Generate + Review with AI |
 
 ---
 

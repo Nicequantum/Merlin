@@ -918,6 +918,33 @@
     border-color: var(--benz-border-accent);
   }
 
+  .benz-tab-btn-customer.benz-tab-btn-active {
+    border-color: rgba(52, 211, 153, 0.45);
+    background: rgba(52, 211, 153, 0.08);
+    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.12);
+  }
+
+  .benz-tab-btn-warranty.benz-tab-btn-active {
+    border-color: var(--benz-border-accent);
+    background: var(--benz-blue-glow);
+  }
+
+  .benz-cp-badge {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide;
+    background: rgba(52, 211, 153, 0.15);
+    border: 1px solid rgba(52, 211, 153, 0.35);
+    color: var(--benz-green);
+  }
+
+  .benz-btn-customer-pay {
+    background: linear-gradient(135deg, rgba(52, 211, 153, 0.9), rgba(16, 185, 129, 0.85)) !important;
+    border-color: rgba(52, 211, 153, 0.5) !important;
+  }
+
+  .benz-cp-instant-banner {
+    background: rgba(52, 211, 153, 0.08);
+  }
+
   .benz-alert-warn {
     border-color: rgba(245, 158, 11, 0.35) !important;
     background: var(--benz-amber-dim) !important;

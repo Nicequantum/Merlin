@@ -161,6 +161,8 @@ model RepairLine {
   xentryOcrTextsEncrypted   String      @default("")
   extractedDataEncrypted    String      @default("{}")
   warrantyStoryEncrypted    String?
+  /** True when story came from a Customer Pay template — skips AI generation and quality audit. */
+  isCustomerPay             Boolean     @default(false)
   createdAt                 DateTime    @default(now())
   updatedAt                 DateTime    @updatedAt
 
@@ -172,6 +174,10 @@ model Template {
   title        String
   category     String
   contentEncrypted String @db.Text
+  /** Customer Pay templates bypass Merlin AI — instant pre-written stories. */
+  isCustomerPay Boolean  @default(false)
+  templateType  String   @default("Warranty")
+  description   String?
   source       String    @default("seed")
   dealershipId String    @default("__global__")
   createdById  String?

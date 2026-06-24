@@ -38,6 +38,8 @@ export interface RepairLine {
   xentryOcrTexts?: string[];
   extractedData?: ExtractedData;
   warrantyStory?: string;
+  /** Set when a Customer Pay template was applied — bypasses AI generation and quality audit. */
+  isCustomerPay?: boolean;
 }
 
 export interface VehicleWarrantyInfo {
@@ -96,6 +98,9 @@ export interface StoryTemplate {
   title: string;
   category: TemplateCategory;
   content: string;
+  isCustomerPay?: boolean;
+  templateType?: 'Warranty' | 'CustomerPay';
+  description?: string | null;
   source?: string;
   dealershipId?: string;
   useCount?: number;
@@ -340,4 +345,5 @@ export const AUDIT_ACTIONS = [
   'advisor.resolve',
   'advisor.capture',
   'template.save',
+  'customerPayTemplateApplied',
 ] as const;

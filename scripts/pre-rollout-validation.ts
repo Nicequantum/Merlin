@@ -41,6 +41,9 @@ import { PrismaClient } from '@prisma/client';
 import { isKvConfigured, RATE_LIMITS } from '../src/lib/rate-limit';
 import { SYSTEM_PROMPT, buildWarrantyStoryUserMessage } from '../src/prompts/warrantyStory';
 import { PROMPT_VERSION } from '../src/prompts/version';
+import { CUSTOMER_PAY_TEMPLATES } from '../src/prompts/templates/customerPayTemplates';
+import { CUSTOMER_PAY_AUDIT_ACTIONS, STORY_PROMPT_AUDIT_ACTIONS } from '../src/lib/audit';
+import { AUDIT_CUSTOMER_PAY_SENTINEL } from '../src/lib/auditChain';
 import { normalizeWarrantyStoryText } from '../src/utils/pdfExport';
 import { createRepairOrderFromScan } from '../src/utils/repairOrderFactory';
 
@@ -438,6 +441,70 @@ async function checkCoreSystems(): Promise<void> {
     record('Core Systems', 'Prompt version in SYSTEM_PROMPT', 'pass', 'Warranty story system prompt references version');
   } else {
     record('Core Systems', 'Prompt version in SYSTEM_PROMPT', 'fail', 'SYSTEM_PROMPT missing PROMPT_VERSION');
+  }
+}
+
+async function checkCustomerPayTemplates(): Promise<void> {
+  section('Customer Pay Templates');
+
+  if (CUSTOMER_PAY_TEMPLATES.length >= 12) {
+    record(
+      'Customer Pay',
+      'Template library size',
+      'pass',
+      `${CUSTOMER_PAY_TEMPLATES.length} instant Customer Pay templates defined`
+    );
+  } else {
+    record(
+      'Customer Pay',
+      'Template library size',
+      'fail',
+      `Expected ≥12 Customer Pay templates, found ${CUSTOMER_PAY_TEMPLATES.length}`
+    );
+  }
+
+  const sample = CUSTOMER_PAY_TEMPLATES[0];
+  const hasStructure =
+    !!sample?.preWrittenStory?.trim().startsWith('Performed') &&
+    CUSTOMER_PAY_TEMPLATES.every((t) => t.preWrittenStory.trim().length > 80);
+  if (hasStructure) {
+    record('Customer Pay', 'Template story structure', 'pass', 'Polished correction narratives on pre-written stories');
+  } else {
+    record('Customer Pay', 'Template story structure', 'fail', 'Missing polished pre-written story content');
+  }
+
+  if (
+    CUSTOMER_PAY_AUDIT_ACTIONS.has('customerPayTemplateApplied') &&
+    !STORY_PROMPT_AUDIT_ACTIONS.has('customerPayTemplateApplied')
+  ) {
+    record(
+      'Customer Pay',
+      'Audit action separation',
+      'pass',
+      `customerPayTemplateApplied uses sentinel (not Merlin prompt) — ${AUDIT_CUSTOMER_PAY_SENTINEL}`
+    );
+  } else {
+    record(
+      'Customer Pay',
+      'Audit action separation',
+      'fail',
+      'customerPayTemplateApplied must bypass Merlin story prompt audit actions'
+    );
+  }
+
+  const cpModule = readFileSync(
+    resolve(process.cwd(), 'src/lib/customerPayTemplate.ts'),
+    'utf8'
+  );
+  if (cpModule.includes('No Grok') || cpModule.includes('bypasses Grok')) {
+    record(
+      'Customer Pay',
+      'AI bypass documented in code',
+      'pass',
+      'customerPayTemplate.ts documents compliance bypass'
+    );
+  } else {
+    record('Customer Pay', 'AI bypass documented in code', 'warn', 'Add bypass comments to customerPayTemplate.ts', false);
   }
 }
 
@@ -919,6 +986,7 @@ async function main(): Promise<void> {
 
   await checkEnvironment();
   await checkCoreSystems();
+  await checkCustomerPayTemplates();
   await checkCoreFeatures();
   await checkDocumentation();
   await checkSecurityAndConfig();

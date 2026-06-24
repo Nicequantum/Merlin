@@ -42,6 +42,14 @@ export async function POST(
       const line = mapped.repairLines.find((l) => l.id === lineId);
       if (!line) return apiError(NOT_FOUND_ERROR, 404);
 
+      const dbLine = ro.repairLines.find((l) => l.id === lineId);
+      if (dbLine?.isCustomerPay) {
+        return apiError(
+          'Customer Pay stories do not require AI quality review. Edit the text directly if needed.',
+          400
+        );
+      }
+
       let review;
       try {
         review = await reviewWarrantyStory(mapped, line, warrantyStory);

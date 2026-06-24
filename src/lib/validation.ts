@@ -163,6 +163,10 @@ export const saveTemplateFromStorySchema = z.object({
   lineId: safeIdOptional(64),
 });
 
+export const applyCustomerPayTemplateSchema = z.object({
+  templateId: safeId(64),
+});
+
 export const pdfExportAuditSchema = z.object({
   repairLineId: safeId(64),
   repairOrderId: safeId(64),

@@ -147,6 +147,7 @@ export function dbToRepairLine(line: DbLine): RepairLine {
     xentryOcrTexts: decryptStringArray(line.xentryOcrTextsEncrypted),
     extractedData: decryptJsonObject<ExtractedData>(line.extractedDataEncrypted, emptyExtractedData()),
     warrantyStory: decryptOptionalSensitiveText(line.warrantyStoryEncrypted),
+    isCustomerPay: line.isCustomerPay ?? false,
   };
 }
 
@@ -196,5 +197,6 @@ export function repairLineToDbFields(line: RepairLine) {
     xentryOcrTextsEncrypted: encryptStringArray(line.xentryOcrTexts || []),
     extractedDataEncrypted: encryptJsonObject(line.extractedData || emptyExtractedData()),
     warrantyStoryEncrypted: encryptOptionalSensitiveText(line.warrantyStory),
+    isCustomerPay: line.isCustomerPay ?? false,
   };
 }

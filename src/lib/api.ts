@@ -190,6 +190,13 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: 120_000 }
     ),
 
+  /** Customer Pay — instant pre-written story; bypasses Grok and quality audit. */
+  applyCustomerPayTemplate: (roId: string, lineId: string, templateId: string) =>
+    apiFetch<{ warrantyStory: string; templateTitle: string; isCustomerPay: true }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/apply-customer-pay-template`,
+      { method: 'POST', body: JSON.stringify({ templateId }), timeoutMs: 15_000 }
+    ),
+
   listTemplates: (category?: TemplateCategory) => {
     const query = category ? `?category=${category}` : '';
     return apiFetch<{ templates: StoryTemplate[] }>(`/api/templates${query}`, { timeoutMs: 30_000 });

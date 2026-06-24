@@ -45,6 +45,14 @@ export async function POST(
       const line = mapped.repairLines.find((l) => l.id === lineId);
       if (!line) return apiError(NOT_FOUND_ERROR, 404);
 
+      const dbLine = ro.repairLines.find((l) => l.id === lineId);
+      if (dbLine?.isCustomerPay) {
+        return apiError(
+          'This line uses a Customer Pay template. AI warranty generation is not required — edit the story or clear Customer Pay mode from the template library.',
+          400
+        );
+      }
+
       let historyContext = '';
       const similar = await prisma.repairOrder.findMany({
         where: {

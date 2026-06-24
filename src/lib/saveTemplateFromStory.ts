@@ -34,6 +34,8 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
     update: {
       category: input.category,
       contentEncrypted: encryptSensitiveText(input.finalText),
+      isCustomerPay: input.category === 'customer',
+      templateType: input.category === 'customer' ? 'CustomerPay' : 'Warranty',
       source: 'user',
       updatedAt: now,
     },
@@ -41,6 +43,8 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
       title: input.title,
       category: input.category,
       contentEncrypted: encryptSensitiveText(input.finalText),
+      isCustomerPay: input.category === 'customer',
+      templateType: input.category === 'customer' ? 'CustomerPay' : 'Warranty',
       source: 'user',
       dealershipId: input.dealershipId,
       createdById: input.createdById,

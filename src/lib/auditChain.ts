@@ -8,6 +8,12 @@ export const AUDIT_LEGACY_PROMPT_VERSION = 'legacy';
 /** Non-AI audit events (login, RO CRUD, etc.) that do not invoke Merlin prompts. */
 export const AUDIT_NON_AI_PROMPT_VERSION = 'n/a';
 
+/**
+ * Customer Pay template applications — not Merlin AI output.
+ * Hash chain retains a sentinel for immutability; warranty auditors ignore this value.
+ */
+export const AUDIT_CUSTOMER_PAY_SENTINEL = 'customer-pay-instant';
+
 export interface AuditChainPayload {
   id: string;
   action: string;

@@ -1047,6 +1047,51 @@ export function useRepairOrders({
     });
   }, []);
 
+  const applyCustomerPayTemplate = useCallback(
+    async (lineId: string, templateId: string) => {
+      flushPendingSave();
+      const latestRO = roRef.current;
+      if (!latestRO) return;
+      const roId = latestRO.id;
+      const line = latestRO.repairLines.find((l) => l.id === lineId);
+      if (!line) {
+        toast.error('Repair line not found — refresh the RO and try again');
+        return;
+      }
+
+      clearLineQualityState(lineId);
+      invalidateReviewRequests();
+      setStoryReviewByLine((prev) => {
+        if (!prev[lineId]) return prev;
+        const next = { ...prev };
+        delete next[lineId];
+        return next;
+      });
+
+      try {
+        const result = await api.applyCustomerPayTemplate(roId, lineId, templateId);
+        applyROUpdate(
+          (ro) => {
+            if (ro.id !== roId) return ro;
+            return {
+              ...ro,
+              repairLines: ro.repairLines.map((l) =>
+                l.id === lineId
+                  ? { ...l, warrantyStory: result.warrantyStory, isCustomerPay: true }
+                  : l
+              ),
+            };
+          },
+          { immediate: true }
+        );
+        toast.success(`"${result.templateTitle}" applied — Customer Pay instant story`);
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : 'Failed to apply Customer Pay template');
+      }
+    },
+    [applyROUpdate, clearLineQualityState, flushPendingSave, invalidateReviewRequests]
+  );
+
   const generateStory = useCallback(
     async (lineId: string) => {
       if (storyGenerationInFlightRef.current) return;
@@ -1057,9 +1102,13 @@ export function useRepairOrders({
       const latestRO = roRef.current;
       if (!latestRO) return;
       const roId = latestRO.id;
-      const lineExists = latestRO.repairLines.some((line) => line.id === lineId);
-      if (!lineExists) {
+      const targetLine = latestRO.repairLines.find((line) => line.id === lineId);
+      if (!targetLine) {
         toast.error('Repair line not found — refresh the RO and try again');
+        return;
+      }
+      if (targetLine.isCustomerPay) {
+        toast.error('Customer Pay line — story is already set. Edit directly or pick another template.');
         return;
       }
 
@@ -1137,6 +1186,11 @@ export function useRepairOrders({
       }
       flushPendingSave();
       const latestRO = roRef.current;
+      const targetLine = latestRO?.repairLines.find((l) => l.id === lineId);
+      if (targetLine?.isCustomerPay) {
+        toast.message('Customer Pay stories skip AI review — edit the text if needed.');
+        return;
+      }
       if (!latestRO) return;
       const roId = latestRO.id;
       const line = latestRO.repairLines.find((l) => l.id === lineId);
@@ -1292,6 +1346,7 @@ export function useRepairOrders({
     addROXentryPhotos,
     deleteLineXentryImage,
     deleteROXentryImage,
+    applyCustomerPayTemplate,
     generateStory,
     reviewStory,
     acknowledgeStoryBaseline,

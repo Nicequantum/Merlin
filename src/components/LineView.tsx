@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BookOpen, BookmarkPlus, Camera, Copy, Download, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowLeft, BookOpen, BookmarkPlus, Camera, Copy, Download, FileText, Loader2, RefreshCw, Sparkles, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
 import { StableInput } from '@/components/StableInput';
@@ -38,6 +38,7 @@ interface LineViewProps {
   onApplySmartDefaults: () => void;
   onGenerateStory: () => void;
   onReviewStory: () => void;
+  onApplyCustomerPayTemplate: (templateId: string) => void | Promise<void>;
   onAcknowledgeStoryBaseline: (text: string) => void;
 }
 
@@ -70,8 +71,10 @@ export function LineView({
   onApplySmartDefaults,
   onGenerateStory,
   onReviewStory,
+  onApplyCustomerPayTemplate,
   onAcknowledgeStoryBaseline,
 }: LineViewProps) {
+  const isCustomerPayLine = line.isCustomerPay === true;
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
   const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} mi` : '';
   const suggestions = getSuggestions(ro);
@@ -97,10 +100,8 @@ export function LineView({
   }, [line.description]);
 
   const handleInsertTemplate = (content: string, _title: string, category: TemplateCategory) => {
-    if (category === 'customer') {
-      onUpdateLine({ warrantyStory: content });
-      return;
-    }
+    // Warranty templates append to the story field — Customer Pay uses onApplyCustomerPayTemplate instead.
+    if (category === 'customer') return;
     const existing = line.warrantyStory?.trim();
     const next = existing ? `${existing}\n\n${content}` : content;
     onUpdateLine({ warrantyStory: next });
@@ -281,20 +282,32 @@ export function LineView({
         )}
 
         <div className="benz-generate-panel space-y-3">
-          <button
-            onClick={onGenerateStory}
-            disabled={isGenerating || isReviewing}
-            className="primary-btn w-full h-13 text-base flex items-center justify-center gap-2.5 disabled:opacity-50 touch-target"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 size={20} className="animate-spin" />
-                Generating with Grok…
-              </>
-            ) : (
-              'Generate warranty story'
-            )}
-          </button>
+          {isCustomerPayLine ? (
+            <div className="benz-cp-instant-banner flex items-start gap-3 p-4 rounded-xl border border-benz-green/30 bg-benz-green/8">
+              <Zap size={20} className="text-benz-green shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm font-semibold text-benz-primary">Customer Pay — instant story</div>
+                <p className="text-xs text-benz-secondary mt-1 leading-relaxed">
+                  Pre-written narrative applied. No AI generation or quality audit required — edit and copy to CDK.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={onGenerateStory}
+              disabled={isGenerating || isReviewing}
+              className="primary-btn w-full h-13 text-base flex items-center justify-center gap-2.5 disabled:opacity-50 touch-target"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Generating with Grok…
+                </>
+              ) : (
+                'Generate warranty story'
+              )}
+            </button>
+          )}
 
           <div className="flex items-center justify-center gap-4">
             <button
@@ -303,7 +316,7 @@ export function LineView({
               disabled={isGenerating || isReviewing}
               className="benz-tertiary-link disabled:opacity-50"
             >
-              Browse template library
+              {isCustomerPayLine ? 'Change Customer Pay template' : 'Browse template library'}
             </button>
             {canSaveAsTemplate && lastGeneratedStoryText && (
               <button
@@ -318,14 +331,25 @@ export function LineView({
           </div>
 
           <p className="benz-hint text-center">
-            Generate MI 2.0–ready stories, review with AI, edit, then save to grow your knowledge base.
+            {isCustomerPayLine
+              ? 'Customer Pay templates skip AI — pick another template or edit the story below.'
+              : 'Generate MI 2.0–ready stories, review with AI, edit, then save to grow your knowledge base.'}
           </p>
         </div>
 
         {line.warrantyStory && (
           <div className="story-card p-5 sm:p-6">
             <div className="flex justify-between items-center mb-4">
-              <div className="benz-section-title tracking-[0.12em]">Warranty Story · 3 C&apos;s</div>
+              <div className="flex items-center gap-2">
+                <div className="benz-section-title tracking-[0.12em]">
+                  {isCustomerPayLine ? 'Customer Pay Story' : "Warranty Story · 3 C's"}
+                </div>
+                {isCustomerPayLine && (
+                  <span className="benz-cp-badge">
+                    <FileText size={12} /> Customer Pay · Instant
+                  </span>
+                )}
+              </div>
               <div className={`text-xs font-mono font-medium ${charCountColor(storyLen)}`}>
                 {storyLen} / {WARRANTY_STORY_MAX_CHARS}
               </div>
@@ -343,20 +367,22 @@ export function LineView({
               className="benz-textarea text-[15px] leading-relaxed mb-4 min-h-[220px]"
               placeholder="Edit warranty story before DMS submission..."
             />
-            <div className="benz-quality-inset">
-              {isGenerating && <StoryQualityLoadingPanel mode="generating" />}
-              {!isGenerating && isReviewing && <StoryQualityLoadingPanel mode="reviewing" />}
-              {!isGenerating && !isReviewing && storyQuality && (
-                <StoryQualityPanel
-                  quality={storyQuality}
-                  review={storyReview}
-                  panelKey={`${line.id}:${storyQuality.scoredAgainstStory ?? ''}:${storyQuality.score}`}
-                />
-              )}
-              {!isGenerating && !isReviewing && !storyQuality && storyQualityStale && (
-                <StoryQualityStaleBanner onReview={onReviewStory} />
-              )}
-            </div>
+            {!isCustomerPayLine && (
+              <div className="benz-quality-inset">
+                {isGenerating && <StoryQualityLoadingPanel mode="generating" />}
+                {!isGenerating && isReviewing && <StoryQualityLoadingPanel mode="reviewing" />}
+                {!isGenerating && !isReviewing && storyQuality && (
+                  <StoryQualityPanel
+                    quality={storyQuality}
+                    review={storyReview}
+                    panelKey={`${line.id}:${storyQuality.scoredAgainstStory ?? ''}:${storyQuality.score}`}
+                  />
+                )}
+                {!isGenerating && !isReviewing && !storyQuality && storyQualityStale && (
+                  <StoryQualityStaleBanner onReview={onReviewStory} />
+                )}
+              </div>
+            )}
 
             <div className="mt-4 pt-4 benz-divider space-y-3">
               <button
@@ -368,32 +394,34 @@ export function LineView({
                 Copy for CDK
               </button>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={onReviewStory}
-                  disabled={isGenerating || isReviewing || !line.warrantyStory?.trim()}
-                  className="secondary-btn benz-btn-accent-outline h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-                >
-                  {isReviewing ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" /> Reviewing…
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={16} /> Review with AI
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={onGenerateStory}
-                  disabled={isGenerating || isReviewing}
-                  className="secondary-btn h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-                >
-                  {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                  Regenerate
-                </button>
-              </div>
+              {!isCustomerPayLine && (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={onReviewStory}
+                    disabled={isGenerating || isReviewing || !line.warrantyStory?.trim()}
+                    className="secondary-btn benz-btn-accent-outline h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                  >
+                    {isReviewing ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" /> Reviewing…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={16} /> Review with AI
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={onGenerateStory}
+                    disabled={isGenerating || isReviewing}
+                    className="secondary-btn h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                  >
+                    {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                    Regenerate
+                  </button>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center justify-center gap-1 pt-1">
                 <button
@@ -426,6 +454,8 @@ export function LineView({
         open={showTemplateLibrary}
         onClose={() => setShowTemplateLibrary(false)}
         onInsert={handleInsertTemplate}
+        onApplyCustomerPay={onApplyCustomerPayTemplate}
+        defaultTab={isCustomerPayLine ? 'customer' : 'warranty'}
       />
 
       {lastGeneratedStoryText && (

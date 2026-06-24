@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { prisma } from './db';
 import {
+  AUDIT_CUSTOMER_PAY_SENTINEL,
   AUDIT_GENESIS_HASH,
   AUDIT_LEGACY_PROMPT_VERSION,
   AUDIT_NON_AI_PROMPT_VERSION,
@@ -29,7 +30,11 @@ export type AuditAction =
   | 'image.upload'
   | 'advisor.resolve'
   | 'advisor.capture'
-  | 'template.save';
+  | 'template.save'
+  | 'customerPayTemplateApplied';
+
+/** Customer Pay — lightweight audit; no Merlin promptVersion (see writeCustomerPayTemplateAudit). */
+export const CUSTOMER_PAY_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set(['customerPayTemplateApplied']);
 
 /** AI warranty story actions must record the active Merlin PROMPT_VERSION for audit defensibility. */
 export const STORY_PROMPT_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
@@ -61,6 +66,7 @@ export interface AuditLogInput {
 function resolvePromptVersion(input: AuditLogInput): string {
   const explicit = input.promptVersion?.trim();
   if (explicit) return explicit;
+  if (CUSTOMER_PAY_AUDIT_ACTIONS.has(input.action)) return AUDIT_CUSTOMER_PAY_SENTINEL;
   if (STORY_PROMPT_AUDIT_ACTIONS.has(input.action)) return PROMPT_VERSION;
   return AUDIT_NON_AI_PROMPT_VERSION;
 }
@@ -78,6 +84,42 @@ function assertPromptVersionValid(action: AuditAction, promptVersion: string): v
       );
     }
   }
+
+  if (CUSTOMER_PAY_AUDIT_ACTIONS.has(action) && promptVersion === PROMPT_VERSION) {
+    throw new Error(
+      `Audit log rejected: customer pay action "${action}" must not use Merlin prompt version`
+    );
+  }
+}
+
+export interface CustomerPayTemplateAuditInput {
+  dealershipId: string;
+  technicianId: string;
+  repairLineId: string;
+  repairOrderId: string;
+  templateId: string;
+  templateTitle: string;
+  ipAddress?: string;
+}
+
+/**
+ * Lightweight audit for Customer Pay template application.
+ * Does not record Merlin PROMPT_VERSION — non-warranty work is outside AI compliance scope.
+ */
+export async function writeCustomerPayTemplateAudit(input: CustomerPayTemplateAuditInput): Promise<void> {
+  await writeAuditLog({
+    action: 'customerPayTemplateApplied',
+    dealershipId: input.dealershipId,
+    technicianId: input.technicianId,
+    entityType: 'repairLine',
+    entityId: input.repairLineId,
+    metadata: {
+      templateId: input.templateId,
+      templateTitle: input.templateTitle,
+      repairOrderId: input.repairOrderId,
+    },
+    ipAddress: input.ipAddress,
+  });
 }
 
 export async function writeAuditLog(input: AuditLogInput): Promise<void> {

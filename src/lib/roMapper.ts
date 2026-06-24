@@ -136,6 +136,7 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
     xentryOcrTexts: decryptStringArray(ro.xentryOcrTextsEncrypted),
     repairLines: ro.repairLines.sort((a, b) => a.lineNumber - b.lineNumber).map(dbToRepairLine),
     createdAt: ro.createdAt.toISOString(),
+    updatedAt: ro.updatedAt.toISOString(),
     technicianId: ro.technicianId,
     technicianName: undefined,
   };

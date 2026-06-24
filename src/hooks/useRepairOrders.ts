@@ -201,8 +201,8 @@ export function useRepairOrders({
           cursor: append ? previousCursor ?? undefined : undefined,
         });
         const normalized = repairOrders.map(normalizeRepairOrder);
-        setPreviousROs((prev) => (append ? mergeRepairOrders([prev, normalized]) : normalized));
-        setAllROs((prev) => mergeRepairOrders([prev, normalized]));
+        setPreviousROs((prev) => (append ? mergeRepairOrders(prev, normalized) : normalized));
+        setAllROs((prev) => mergeRepairOrders(prev, normalized));
         setPreviousCursor(nextCursor ?? null);
         setPreviousHasMore(Boolean(hasMore));
         if (todayStart) setTodayStartIso(todayStart);
@@ -273,7 +273,7 @@ export function useRepairOrders({
         .listRepairOrders({ q, limit: SEARCH_PAGE_SIZE })
         .then(({ repairOrders, todayStart }) => {
           const normalized = repairOrders.map(normalizeRepairOrder);
-          setAllROs((prev) => mergeRepairOrders([prev, normalized]));
+          setAllROs((prev) => mergeRepairOrders(prev, normalized));
           if (todayStart) setTodayStartIso(todayStart);
         })
         .catch((error: unknown) => {

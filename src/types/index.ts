@@ -87,6 +87,7 @@ export interface RepairOrder {
   xentryOcrTexts?: string[];
   repairLines: RepairLine[];
   createdAt?: string;
+  updatedAt?: string;
   technicianId?: string;
   technicianName?: string;
 }

@@ -192,6 +192,35 @@ Open [http://localhost:3000](http://localhost:3000) after configuring environmen
 
 Build-time validation runs automatically via `npm run validate:env` (also part of `npm run build`).
 
+### Pre-rollout validation (dealership IT)
+
+Run the full validation suite **after build, before go-live** — and again after any production config change.
+
+```bash
+# Local / staging (uses .env.local + in-process health checks)
+npm run validate:pre-rollout
+
+# Against a deployed instance (adds live /api/health probe)
+MERLIN_BASE_URL=https://your-dealership-url.example npm run validate:pre-rollout
+```
+
+| When to run | Who |
+|-------------|-----|
+| After `npm run build` succeeds on the release candidate | Dealership IT / deploy engineer |
+| After setting Vercel environment variables | Dealership IT |
+| After database migration on production | Dealership IT |
+| Before handing tablets to technicians | Service manager + IT sign-off |
+
+The script prints **green ✔ pass**, **yellow ⚠ warn**, and **red ✖ fail** for each check and exits with code **1** if any critical check fails. It validates:
+
+- Environment variables, maintenance mode off, build metadata
+- Database, encryption, audit chain, prompt version
+- PDF generation, voice configuration, prompt assembly, rate limits
+- CSP headers, Grok route rate limiting, route authentication
+- Health checks (in-process; optional live `/api/health` via `MERLIN_BASE_URL`)
+
+**Manual steps still required after the script passes:** shop-floor tablet voice/mic test, end-to-end story generation with a real RO, and PDF download on a tablet.
+
 ### Production (Vercel + PostgreSQL)
 
 1. Connect repo, deploy branch `main`
@@ -210,6 +239,7 @@ curl -s https://your-dealership-url/api/status | jq '.version, .buildCommit, .ma
 ### Pre-production checklist
 
 **Infrastructure**
+- [ ] Pre-rollout validation passes (`npm run validate:pre-rollout`)
 - [ ] `DATABASE_URL`, `SESSION_SECRET`, `ENCRYPTION_KEY` set and validated (`npm run validate:env`)
 - [ ] `GROK_API_KEY` configured server-side (no `NEXT_PUBLIC_*` xAI keys)
 - [ ] `KV_REST_API_URL` + `KV_REST_API_TOKEN` set for distributed rate limiting

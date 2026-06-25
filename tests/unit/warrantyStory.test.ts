@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   STORY_TEMPLATES,
   SYSTEM_PROMPT,
+  WARRANTY_STORY_MAX_TOKENS,
   WARRANTY_WORKFLOW_STEPS,
   buildWarrantyStoryUserMessage,
 } from '../../src/prompts/warrantyStory';
@@ -77,7 +78,7 @@ describe('warranty story prompts', () => {
     assert.match(message, /Initial test drive to confirm\/reproduce/i);
     assert.match(message, /Disconnect battery charger and XENTRY/i);
     assert.match(message, /natural paragraph form/i);
-    assert.match(message, /NO visible headings/i);
+    assert.match(message, /no visible headings/i);
     assert.match(message, /28450 → 28458/);
     assert.match(message, /P0300/);
     assert.match(message, /Chronological narrative/);
@@ -90,5 +91,9 @@ describe('warranty story prompts', () => {
   test('buildWarrantyStoryUserMessage selects template by index', () => {
     const explicit = buildWarrantyStoryUserMessage(baseRo, baseLine, '', 2);
     assert.match(explicit, /Concise audit record/);
+  });
+
+  test('WARRANTY_STORY_MAX_TOKENS limits generation output', () => {
+    assert.equal(WARRANTY_STORY_MAX_TOKENS, 800);
   });
 });

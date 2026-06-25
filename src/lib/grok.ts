@@ -16,6 +16,7 @@ import {
 import { PROMPT_VERSION } from '@/prompts/version';
 import {
   SYSTEM_PROMPT,
+  WARRANTY_STORY_MAX_TOKENS,
   WARRANTY_STORY_TEMPERATURE,
   buildWarrantyStoryUserMessage,
 } from '@/prompts/warrantyStory';
@@ -29,8 +30,14 @@ import { parseStructuredROText } from '@/utils/roExtractor';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
-/** xAI chat model — Grok 4.3 for story generation, scoring, and vision extraction. */
+/**
+ * xAI chat model — `grok-4.3` per https://docs.x.ai/docs/models (console.x.ai alias).
+ * Used for story generation, scoring, and vision extraction.
+ */
 export const GROK_CHAT_MODEL = 'grok-4.3';
+
+/** JSON quality score responses rarely exceed ~500 tokens. */
+export const WARRANTY_STORY_SCORE_MAX_TOKENS = 650;
 
 export function isGrokConfigured(): boolean {
   try {
@@ -114,7 +121,12 @@ export async function generateWarrantyStory(
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ],
-    { temperature: WARRANTY_STORY_TEMPERATURE, max_tokens: 1200, timeoutMs: 110_000, perfLabel: 'grok.story.generate' }
+    {
+      temperature: WARRANTY_STORY_TEMPERATURE,
+      max_tokens: WARRANTY_STORY_MAX_TOKENS,
+      timeoutMs: 110_000,
+      perfLabel: 'grok.story.generate',
+    }
   );
   return story || 'No story generated.';
 }
@@ -129,7 +141,12 @@ export async function scoreWarrantyStory(
       { role: 'system', content: STORY_SCORE_SYSTEM_PROMPT },
       { role: 'user', content: buildStoryScoreUserMessage(ro, line, warrantyStory) },
     ],
-    { temperature: 0.1, max_tokens: 900, timeoutMs: 60_000, perfLabel: 'grok.story.score' }
+    {
+      temperature: 0.1,
+      max_tokens: WARRANTY_STORY_SCORE_MAX_TOKENS,
+      timeoutMs: 60_000,
+      perfLabel: 'grok.story.score',
+    }
   );
   return parseStoryQualityResponse(raw);
 }

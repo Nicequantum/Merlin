@@ -19,6 +19,7 @@ import { clientLog } from '@/lib/clientLog';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult, TemplateCategory } from '@/types';
 import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
+import { useStoryGenerationPhase } from '@/hooks/useStoryGenerationPhase';
 import { copyFormattedStory, exportWarrantyStoryPdf } from '@/utils/pdfExport';
 
 interface LineViewProps {
@@ -84,6 +85,7 @@ export function LineView({
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
   const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} mi` : '';
   const storyLen = line.warrantyStory?.length ?? 0;
+  const generationPhase = useStoryGenerationPhase(isGenerating);
   const advisorName = ro.serviceAdvisor?.displayName || ro.serviceAdvisorName;
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -284,21 +286,28 @@ export function LineView({
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={handleGenerateStory}
-              disabled={isGenerating || isReviewing}
-              className="primary-btn w-full h-13 text-base flex items-center justify-center gap-2.5 disabled:opacity-50 touch-target"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  Generating MI 4.3…
-                </>
-              ) : (
-                'Generate MI 4.3'
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleGenerateStory}
+                disabled={isGenerating || isReviewing}
+                className="primary-btn w-full h-13 text-base flex items-center justify-center gap-2.5 disabled:opacity-50 touch-target"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    {generationPhase.message}
+                  </>
+                ) : (
+                  'Generate MI 4.3'
+                )}
+              </button>
+              {isGenerating && (
+                <div className="benz-gen-progress" role="progressbar" aria-valuenow={Math.round(generationPhase.progress)} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="benz-gen-progress-bar" style={{ width: `${generationPhase.progress}%` }} />
+                </div>
               )}
-            </button>
+            </div>
           )}
 
           <div className="flex items-center justify-center gap-4 flex-wrap">
@@ -342,6 +351,13 @@ export function LineView({
               ? 'Customer Pay templates skip AI — pick another template or edit the story below.'
               : 'Generate MI 4.3–ready stories, review with AI, edit, then save to grow your knowledge base.'}
           </p>
+          {isGenerating && !isCustomerPayLine && !line.warrantyStory?.trim() && (
+            <StoryQualityLoadingPanel
+              mode="generating"
+              statusMessage={generationPhase.message}
+              progress={generationPhase.progress}
+            />
+          )}
         </div>
 
         {!line.warrantyStory?.trim() && (
@@ -401,7 +417,13 @@ export function LineView({
             </div>
             {!isCustomerPayLine && (
               <div className="benz-quality-inset">
-                {isGenerating && <StoryQualityLoadingPanel mode="generating" />}
+                {isGenerating && (
+                  <StoryQualityLoadingPanel
+                    mode="generating"
+                    statusMessage={generationPhase.message}
+                    progress={generationPhase.progress}
+                  />
+                )}
                 {!isGenerating && isReviewing && <StoryQualityLoadingPanel mode="reviewing" />}
                 {!isGenerating && !isReviewing && storyQuality && (
                   <StoryQualityPanel

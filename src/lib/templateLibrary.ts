@@ -297,11 +297,24 @@ export function selectRelevantKnowledgeEntries(
   return [...dealershipUser, ...remainder].slice(0, limit).map((item) => item.entry);
 }
 
-export function formatKnowledgeBaseForPrompt(entries: KnowledgeBaseRecord[]): string {
+function truncateKbField(text: string, maxLen: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen)}…`;
+}
+
+export function formatKnowledgeBaseForPrompt(
+  entries: KnowledgeBaseRecord[],
+  options?: { maxEntryChars?: number }
+): string {
   if (entries.length === 0) return '';
 
+  const maxEntryChars = options?.maxEntryChars;
+  const clip = (text: string) =>
+    maxEntryChars ? truncateKbField(text, maxEntryChars) : text.trim();
+
   const blocks = entries.map((entry, index) => {
-    const approvedStory = entry.fullOriginalText.trim() || entry.cleanTemplate.trim();
+    const approvedStory = clip(entry.fullOriginalText.trim() || entry.cleanTemplate.trim());
     const lines = [
       `### Reference ${index + 1}: ${entry.title} (${entry.category}, ${entry.source})`,
       `Tags: ${entry.tags.join(', ')}`,
@@ -314,11 +327,11 @@ export function formatKnowledgeBaseForPrompt(entries: KnowledgeBaseRecord[]): st
       lines.push(
         '',
         'GROK DRAFT BEFORE TECHNICIAN EDITS (shows what was refined — prefer final story phrasing, learn from edits):',
-        entry.generatedText
+        clip(entry.generatedText)
       );
     }
 
-    lines.push('', 'CLEAN INSERT TEMPLATE:', entry.cleanTemplate);
+    lines.push('', 'CLEAN INSERT TEMPLATE:', clip(entry.cleanTemplate));
     return lines.join('\n');
   });
 

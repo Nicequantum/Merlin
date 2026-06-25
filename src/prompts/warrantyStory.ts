@@ -4,7 +4,24 @@ import { MI_AUDIT_GUIDELINES, MI_GENERATION_STYLE_RULES } from './miAuditGuideli
 import { STYLE_VARIATION_SYSTEM_RULES, buildStoryStyleVariationBlock } from './storyStyleVariation';
 import { PROMPT_VERSION, getDealershipPromptRules } from './version';
 
-export const WARRANTY_STORY_TEMPERATURE = 0.25;
+/** Slightly lower than 0.25 — faster sampling while style-variation block preserves uniqueness. */
+export const WARRANTY_STORY_TEMPERATURE = 0.2;
+
+/** Typical warranty stories are 400–900 tokens; cap output to reduce latency. */
+export const WARRANTY_STORY_MAX_TOKENS = 800;
+
+const PROMPT_FIELD_LIMITS = {
+  ocr: 1_200,
+  history: 600,
+  notes: 2_500,
+  concern: 1_200,
+} as const;
+
+function truncatePromptField(text: string, maxLen: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen)}… [truncated]`;
+}
 
 /** Standard Mercedes-Benz warranty workflow — every story must cover these in order. */
 export const WARRANTY_WORKFLOW_STEPS = [
@@ -94,12 +111,13 @@ export function buildWarrantyStoryUserMessage(
 
   const rawXentryOcr =
     line.xentryOcrTexts && line.xentryOcrTexts.length > 0
-      ? '\nRaw OCR from line diagnostic photos:\n' + line.xentryOcrTexts.join('\n---\n')
+      ? '\nLine OCR:\n' +
+        truncatePromptField(line.xentryOcrTexts.join('\n---\n'), PROMPT_FIELD_LIMITS.ocr)
       : '';
 
   const roRawXentryOcr =
     ro.xentryOcrTexts && ro.xentryOcrTexts.length > 0
-      ? '\nRO-level Xentry / Quick Test OCR (from RO page scan):\n' + ro.xentryOcrTexts.join('\n---\n')
+      ? '\nRO OCR:\n' + truncatePromptField(ro.xentryOcrTexts.join('\n---\n'), PROMPT_FIELD_LIMITS.ocr)
       : '';
 
   const idx = templateIndex ?? Math.floor(Math.random() * STORY_TEMPLATES.length);
@@ -111,45 +129,32 @@ export function buildWarrantyStoryUserMessage(
     ? `Components referenced in diagnostic data: ${line.extractedData.components.join(', ')}`
     : '';
 
-  return `Generate a professional, audit-ready Mercedes-Benz warranty story for this repair line.
-Prompt version: ${PROMPT_VERSION}
+  const concern = truncatePromptField(
+    line.customerConcern || line.description || '[NOT PROVIDED]',
+    PROMPT_FIELD_LIMITS.concern
+  );
+  const notes = truncatePromptField(line.technicianNotes || '[NOT PROVIDED]', PROMPT_FIELD_LIMITS.notes);
+  const trimmedHistory = historyContext
+    ? truncatePromptField(historyContext, PROMPT_FIELD_LIMITS.history)
+    : '';
 
-**Repair order details:**
-- RO number: ${ro.roNumber}
-- Vehicle: ${vehicleInfo}
-- Current line: Line ${line.lineNumber} — ${line.description}
+  return `Write the warranty story for Line ${line.lineNumber} only.
 
-**RO complaints (A, B, C from scan):**
-${(ro.complaints || []).join('\n') || '[NOT PROVIDED]'}
+RO ${ro.roNumber} | ${vehicleInfo}
+Line: ${line.lineNumber} — ${line.description}
+Complaints (A/B/C): ${(ro.complaints || []).join(' | ') || '[NOT PROVIDED]'}
+Other lines: ${allRepairs || '[NOT PROVIDED]'}
 
-**All repairs on this RO:**
-${allRepairs || '[NOT PROVIDED]'}
-
-**Customer concern (this line):**
-${line.customerConcern || line.description || '[NOT PROVIDED]'}
-
-**Technician notes / diagnostic findings:**
-${line.technicianNotes || '[NOT PROVIDED]'}
-${partsFromNotes ? `\n${partsFromNotes}` : ''}
-
-**XENTRY / diagnostic evidence (structured + OCR):**
-${xentryText || '[NOT PROVIDED]'}
-${rawXentryOcr}
-${roRawXentryOcr}
-${historyContext ? `\n**Historical context / similar cases:**\n${historyContext}\n` : ''}${advisorContext ? `\n**Advisor intelligence (style reference for opening paragraphs only):**\n${advisorContext}\n` : ''}
-**Required workflow (include ALL 10 steps in this order — weave into natural paragraphs):**
+Customer concern: ${concern}
+Technician notes: ${notes}
+${partsFromNotes ? `${partsFromNotes}\n` : ''}Diagnostics: ${xentryText || '[NOT PROVIDED]'}${rawXentryOcr}${roRawXentryOcr}
+${trimmedHistory ? `\nStyle reference (do NOT copy facts):\n${trimmedHistory}\n` : ''}${advisorContext ? `\nAdvisor opening style only:\n${advisorContext}\n` : ''}
+Required workflow (ALL 10 steps in order — weave into natural paragraphs):
 ${workflowChecklist}
 
-**Audit-safe requirements:**
-- Use ONLY the data above. Never invent numbers, codes, test results, part numbers, or procedures.
-- Write in natural paragraph form. NO visible headings or section labels in the story output.
-- Cover the 3 C's (complaint, cause, correction) within flowing prose.
-- Reference labeled complaints (A, B, C…) when relevant to this line.
-- For undocumented voltage, Quick Test, guided tests, repairs, or drives, use [NOT DOCUMENTED] or [NOT PROVIDED].
-- Vary phrasing across steps. Narrative style: ${selectedTemplate}
-- If Knowledge Base references are in the system prompt, prioritize dealership-saved stories for tone and sequencing.
+Format: natural paragraph form, no visible headings, 3 C's in prose. Facts from data above only; use [NOT DOCUMENTED] / [NOT PROVIDED] for gaps. Narrative style: ${selectedTemplate}. Follow Knowledge Base tone in system prompt when present.
 
 ${buildStoryStyleVariationBlock()}
 
-Write only the warranty story for this specific line.`;
+Output the warranty story only.`;
 }

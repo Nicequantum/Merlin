@@ -23,6 +23,8 @@ interface StoryQualityPanelProps {
 
 interface StoryQualityLoadingProps {
   mode: 'generating' | 'reviewing';
+  statusMessage?: string;
+  progress?: number;
 }
 
 interface StoryQualityStaleProps {
@@ -55,19 +57,27 @@ function scoreRingClass(score: number): string {
   return `benz-score-${tier}`;
 }
 
-export function StoryQualityLoadingPanel({ mode }: StoryQualityLoadingProps) {
+export function StoryQualityLoadingPanel({ mode, statusMessage, progress = 0 }: StoryQualityLoadingProps) {
   const label =
-    mode === 'generating'
+    statusMessage ??
+    (mode === 'generating'
       ? 'Generating story and scoring against MI 4.3…'
-      : 'Reviewing story against MI 4.3 audit criteria…';
+      : 'Reviewing story against MI 4.3 audit criteria…');
 
   return (
-    <div className="benz-card p-4 flex items-center gap-3.5">
-      <Loader2 size={22} className="animate-spin text-benz-blue shrink-0" />
-      <div>
-        <div className="benz-section-title">MI 4.3 Quality</div>
-        <p className="text-sm text-benz-silver mt-1">{label}</p>
+    <div className="benz-card p-4">
+      <div className="flex items-center gap-3.5">
+        <Loader2 size={22} className="animate-spin text-benz-blue shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="benz-section-title">{mode === 'generating' ? 'Generating with Grok 4.3' : 'MI 4.3 Quality'}</div>
+          <p className="text-sm text-benz-silver mt-1">{label}</p>
+        </div>
       </div>
+      {mode === 'generating' && progress > 0 && (
+        <div className="benz-gen-progress mt-3" aria-hidden>
+          <div className="benz-gen-progress-bar" style={{ width: `${progress}%` }} />
+        </div>
+      )}
     </div>
   );
 }

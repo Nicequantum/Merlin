@@ -63,22 +63,21 @@ export async function POST(
           model: ro.model ? { contains: ro.model.split(' ')[0] } : undefined,
         },
         include: { repairLines: true },
-        take: 2,
+        take: 1,
       });
 
       if (similar.length > 0) {
         historyContext =
-          '\n\nFor writing style reference only (do NOT copy facts from these — use only current line data):\n' +
           similar
             .map((r) => {
               const m = dbToRepairOrder(r);
               return m.repairLines
                 // M5: exclude Customer Pay stories from warranty style reference.
                 .filter((l) => l.warrantyStory && !l.isCustomerPay)
-                .map((l) => `For ${l.description}: ${l.warrantyStory!.substring(0, 250)}...`)
+                .map((l) => `${l.description}: ${l.warrantyStory!.substring(0, 160)}…`)
                 .join('\n');
             })
-            .join('\n---\n');
+            .join('\n');
       }
 
       const advisorCtx = await loadAdvisorPromptContextForRepairOrder(id);
@@ -94,8 +93,8 @@ export async function POST(
         orderBy: [{ source: 'desc' }, { updatedAt: 'desc' }],
       });
       const kbEntries = kbRows.map(mapKnowledgeBase);
-      const relevantKb = selectRelevantKnowledgeEntries(mapped, line, kbEntries, session.dealershipId);
-      const knowledgeBaseContext = formatKnowledgeBaseForPrompt(relevantKb);
+      const relevantKb = selectRelevantKnowledgeEntries(mapped, line, kbEntries, session.dealershipId, 3);
+      const knowledgeBaseContext = formatKnowledgeBaseForPrompt(relevantKb, { maxEntryChars: 420 });
 
       let warrantyStory: string;
       let cdkSanitized = false;
@@ -124,7 +123,7 @@ export async function POST(
 
       // C3: durable audit trail before persisting story — if audit fails, story is not saved.
       const historyContextLineCount = historyContext
-        ? historyContext.split('\n').filter((row) => row.startsWith('For ')).length
+        ? historyContext.split('\n').filter((row) => row.trim().length > 0).length
         : 0;
 
       await writeAuditLog({

@@ -115,6 +115,7 @@ export function useROStoryWorkflow(
       refs.storyGenerationInFlightRef.current = true;
       setters.setGeneratingLineId(lineId);
       setters.setIsGenerating(true);
+      toast.message('Grok 4.3 is working on your story…');
 
       try {
         if (refs.storyReviewInFlightRef.current) deps.invalidateReviewRequests();

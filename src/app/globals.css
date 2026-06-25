@@ -533,6 +533,20 @@
     border-radius: var(--benz-radius-lg);
   }
 
+  .benz-gen-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(0, 173, 239, 0.12);
+    overflow: hidden;
+  }
+
+  .benz-gen-progress-bar {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--benz-blue), rgba(0, 173, 239, 0.55));
+    transition: width 0.35s ease;
+  }
+
   .benz-generate-panel {
     padding: 1.5rem 1.25rem;
     border-radius: var(--benz-radius-xl);

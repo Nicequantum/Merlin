@@ -24,8 +24,8 @@ export const RO_EXTRACT_GROK_MS = 120_000;
 export const RO_EXTRACT_ROUTE_MAX_DURATION_S = 130;
 export const RO_EXTRACT_CLIENT_MS = RO_EXTRACT_ROUTE_MAX_DURATION_S * 1000 + CLIENT_BUFFER_MS;
 
-/** Target <15s story generation — Grok call only, no reasoning tokens. */
-export const STORY_GENERATE_GROK_MS = 45_000;
+/** Fail fast — non-reasoning model should answer in <25s; abort rather than hang minutes. */
+export const STORY_GENERATE_GROK_MS = 25_000;
 /** Sync with `maxDuration` in `generate-story/route.ts` */
 export const STORY_GENERATE_ROUTE_MAX_DURATION_S = 60;
 export const STORY_GENERATE_CLIENT_MS =

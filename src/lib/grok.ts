@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { getGrokApiKey } from '@/lib/grokApiKey';
+import { GROK_CHAT_MODEL, GROK_STORY_MODEL } from '@/lib/grokModels';
 import { DIAGNOSTIC_EXTRACTION_PROMPT } from '@/prompts/diagnosticExtraction';
 import { RO_EXTRACTION_PROMPT } from '@/prompts/roExtraction';
 import {
@@ -35,14 +36,7 @@ import { parseStructuredROText } from '@/utils/roExtractor';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
-/**
- * Fast non-reasoning model for warranty story generate/score — pre-4.3 latency profile.
- * grok-4.3 reasoning tokens caused multi-minute delays even with reasoning_effort: none.
- */
-export const GROK_STORY_MODEL = 'grok-3';
-
-/** Vision + extraction — grok-4.3 supports image input. */
-export const GROK_CHAT_MODEL = 'grok-4.3';
+export { GROK_CHAT_MODEL, GROK_STORY_MODEL };
 
 /** JSON quality score responses rarely exceed ~500 tokens. */
 export const WARRANTY_STORY_SCORE_MAX_TOKENS = 650;
@@ -86,7 +80,8 @@ async function grokChat(
     temperature: options.temperature,
     max_tokens: options.max_tokens,
   };
-  if (model.includes('grok-4')) {
+  // Only reasoning-capable grok-4 models accept this param; non-reasoning variants must omit it.
+  if (model.includes('grok-4') && !model.includes('non-reasoning')) {
     requestBody.reasoning_effort = reasoningEffort;
   }
 

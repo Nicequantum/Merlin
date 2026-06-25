@@ -46,12 +46,13 @@ const baseLine: RepairLine = {
 };
 
 describe('story generation performance settings', () => {
-  test('uses grok-3 for story generate/score and grok-4.3 for vision', () => {
+  test('uses non-reasoning story model and grok-4.3 for vision', () => {
     const grokSrc = readFileSync(join(process.cwd(), 'src/lib/grok.ts'), 'utf8');
-    assert.match(grokSrc, /GROK_STORY_MODEL = 'grok-3'/);
-    assert.match(grokSrc, /GROK_CHAT_MODEL = 'grok-4\.3'/);
+    const modelsSrc = readFileSync(join(process.cwd(), 'src/lib/grokModels.ts'), 'utf8');
+    assert.match(modelsSrc, /grok-4\.20-0309-non-reasoning/);
+    assert.match(modelsSrc, /GROK_CHAT_MODEL = 'grok-4\.3'/);
     assert.match(grokSrc, /model: GROK_STORY_MODEL/);
-    assert.match(grokSrc, /model\.includes\('grok-4'\)/);
+    assert.match(grokSrc, /!model\.includes\('non-reasoning'\)/);
   });
 
   test('caps generation output tokens for fast responses', () => {

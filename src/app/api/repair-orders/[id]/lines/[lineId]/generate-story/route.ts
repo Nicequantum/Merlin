@@ -10,6 +10,8 @@ import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
+import { logPerformance } from '@/lib/perf';
+import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 60;
@@ -47,10 +49,18 @@ export async function POST(
         );
       }
 
+      const pipelineAudit = auditStoryGenerationPipeline(mapped, line);
+      logPerformance('story.generate.pipeline', 0, { ...pipelineAudit });
+
       let warrantyStory: string;
       let cdkSanitized = false;
       try {
+        const grokStartedAt = Date.now();
         const rawStory = await generateWarrantyStory(mapped, line);
+        logPerformance('grok.story.generate.route', Date.now() - grokStartedAt, {
+          model: pipelineAudit.model,
+          promptChars: pipelineAudit.totalPromptChars,
+        });
         const cleaned = sanitizeForCDKWithMeta(rawStory);
         warrantyStory = cleaned.text;
         cdkSanitized = cleaned.wasModified;

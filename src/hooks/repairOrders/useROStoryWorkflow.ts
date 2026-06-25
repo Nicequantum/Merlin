@@ -30,7 +30,7 @@ export function useROStoryWorkflow(
   refs: StoryWorkflowRefs,
   setters: StoryWorkflowSetters,
   deps: {
-    flushPendingSave: () => Promise<void>;
+    flushPendingSave: (options?: { maxWaitMs?: number }) => Promise<void>;
     applyROUpdate: (
       updater: (ro: RepairOrder) => RepairOrder,
       options?: { immediate?: boolean }
@@ -115,11 +115,12 @@ export function useROStoryWorkflow(
       refs.storyGenerationInFlightRef.current = true;
       setters.setGeneratingLineId(lineId);
       setters.setIsGenerating(true);
-      toast.message('Grok 4.3 is working on your story…');
+      toast.message('Generating warranty story…');
 
       try {
         if (refs.storyReviewInFlightRef.current) deps.invalidateReviewRequests();
-        await deps.flushPendingSave();
+        // Never block generation on a stuck save queue (was causing multi-minute waits).
+        await deps.flushPendingSave({ maxWaitMs: 2_500 });
 
         const latestRO = refs.roRef.current;
         if (!latestRO) {

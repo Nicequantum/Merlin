@@ -4,7 +4,11 @@ import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStat
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { debounce } from '@/lib/debounce';
-import { awaitRepairOrderSaveQueue, enqueueRepairOrderSave } from '@/lib/repairOrderSaveQueue';
+import {
+  awaitRepairOrderSaveQueue,
+  awaitRepairOrderSaveQueueWithTimeout,
+  enqueueRepairOrderSave,
+} from '@/lib/repairOrderSaveQueue';
 import type { RepairOrder } from '@/types';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
 
@@ -70,8 +74,13 @@ export function useROPersistence(
     }, 450)
   );
 
-  const flushPendingSave = useCallback(async () => {
+  const flushPendingSave = useCallback(async (options?: { maxWaitMs?: number }) => {
     await debouncedPersistRef.current.flush();
+    const maxWaitMs = options?.maxWaitMs;
+    if (maxWaitMs && maxWaitMs > 0) {
+      await awaitRepairOrderSaveQueueWithTimeout(maxWaitMs);
+      return;
+    }
     await awaitRepairOrderSaveQueue();
   }, []);
 

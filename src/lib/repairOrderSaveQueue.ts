@@ -16,3 +16,18 @@ export function enqueueRepairOrderSave<T>(task: () => Promise<T>): Promise<T> {
 export async function awaitRepairOrderSaveQueue(): Promise<void> {
   await saveChain;
 }
+
+/** Prevent story generation from blocking on a stuck PUT chain. */
+export async function awaitRepairOrderSaveQueueWithTimeout(timeoutMs: number): Promise<boolean> {
+  try {
+    await Promise.race([
+      saveChain,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('repair order save queue timeout')), timeoutMs)
+      ),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}

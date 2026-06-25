@@ -12,6 +12,30 @@ import {
 import type { RepairOrder } from '@/types';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
 
+/** Keep in-memory stories when a stale queued PUT returns before the server caught up. */
+export function preserveClientWarrantyStories(
+  persisted: RepairOrder,
+  client: RepairOrder | null
+): RepairOrder {
+  if (!client || client.id !== persisted.id) return persisted;
+
+  let changed = false;
+  const repairLines = persisted.repairLines.map((line) => {
+    const clientLine = client.repairLines.find((l) => l.id === line.id);
+    const clientStory = clientLine?.warrantyStory?.trim();
+    if (!clientStory) return line;
+
+    const persistedStory = line.warrantyStory?.trim();
+    if (!persistedStory) {
+      changed = true;
+      return { ...line, warrantyStory: clientLine!.warrantyStory };
+    }
+    return line;
+  });
+
+  return changed ? { ...persisted, repairLines } : persisted;
+}
+
 /** M21: persistence, debounced save, and serialized PUT queue extracted from useRepairOrders. */
 export function useROPersistence(
   allROs: RepairOrder[],
@@ -22,18 +46,20 @@ export function useROPersistence(
   const persistRO = useCallback(
     async (ro: RepairOrder): Promise<RepairOrder> => {
       return enqueueRepairOrderSave(async () => {
-        const isNew = !allROs.some((r) => r.id === ro.id) || ro.id.startsWith('ro-');
-        if (isNew && ro.id.startsWith('ro-')) {
-          const { repairOrder } = await api.createRepairOrder(ro);
-          setAllROs((prev) => [repairOrder, ...prev.filter((r) => r.id !== ro.id)]);
+        // Always PUT the latest in-memory RO — stale queue entries must not wipe generated stories.
+        const payload = roRef.current?.id === ro.id ? roRef.current : ro;
+        const isNew = !allROs.some((r) => r.id === payload.id) || payload.id.startsWith('ro-');
+        if (isNew && payload.id.startsWith('ro-')) {
+          const { repairOrder } = await api.createRepairOrder(payload);
+          setAllROs((prev) => [repairOrder, ...prev.filter((r) => r.id !== payload.id)]);
           return repairOrder;
         }
-        const { repairOrder } = await api.updateRepairOrder(ro.id, ro);
+        const { repairOrder } = await api.updateRepairOrder(payload.id, payload);
         setAllROs((prev) => prev.map((r) => (r.id === repairOrder.id ? repairOrder : r)));
         return repairOrder;
       });
     },
-    [allROs, setAllROs]
+    [allROs, roRef, setAllROs]
   );
 
   const saveROImmediate = useCallback(
@@ -41,11 +67,12 @@ export function useROPersistence(
       if (ro) {
         try {
           const persisted = await persistRO(ro);
-          const saved = ensureComplaintIds(
+          let saved = ensureComplaintIds(
             ro.complaintIds && ro.complaintIds.length === persisted.complaints.length
               ? { ...persisted, complaintIds: ro.complaintIds }
               : persisted
           );
+          saved = preserveClientWarrantyStories(saved, roRef.current);
           roRef.current = saved;
           setCurrentRO(saved);
           setAllROs((prev) => {

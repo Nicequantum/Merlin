@@ -153,13 +153,11 @@ export function useROStoryWorkflow(
             return next;
           });
         }
-        deps.applyROUpdate(
-          (ro) => ({
-            ...ro,
-            repairLines: ro.repairLines.map((l) => (l.id === lineId ? { ...l, warrantyStory } : l)),
-          }),
-          { immediate: true }
-        );
+        // Local state only — generate-story API already persisted the story; avoid racing PUTs.
+        deps.applyROUpdate((ro) => ({
+          ...ro,
+          repairLines: ro.repairLines.map((l) => (l.id === lineId ? { ...l, warrantyStory } : l)),
+        }));
         if (cdkSanitized) {
           toast.message('Story cleaned for CDK compatibility');
         }

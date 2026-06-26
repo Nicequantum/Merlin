@@ -29,7 +29,7 @@
  *
  * See prisma/schema.prisma "PII PLAINTEXT MIGRATION PLAN" for phased cutover.
  */
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type RepairLine, type ServiceAdvisor } from '@prisma/client';
 import { fileURLToPath } from 'node:url';
 import {
   isLikelyEncryptedPayload,
@@ -290,12 +290,13 @@ async function countPendingS2Rows(): Promise<S2MigrationResults['pendingAfterRun
 
   cursor = undefined;
   for (;;) {
-    const rows = await prisma.repairLine.findMany({
-      take: BATCH_SIZE,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      orderBy: { id: 'asc' },
-      select: { id: true, description: true, descriptionEncrypted: true },
-    });
+    const rows: Pick<RepairLine, 'id' | 'description' | 'descriptionEncrypted'>[] =
+      await prisma.repairLine.findMany({
+        take: BATCH_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: 'asc' },
+        select: { id: true, description: true, descriptionEncrypted: true },
+      });
     if (rows.length === 0) break;
     cursor = rows[rows.length - 1]?.id;
     for (const row of rows) {
@@ -306,12 +307,13 @@ async function countPendingS2Rows(): Promise<S2MigrationResults['pendingAfterRun
 
   cursor = undefined;
   for (;;) {
-    const rows = await prisma.serviceAdvisor.findMany({
-      take: BATCH_SIZE,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      orderBy: { id: 'asc' },
-      select: { id: true, displayName: true, displayNameEncrypted: true },
-    });
+    const rows: Pick<ServiceAdvisor, 'id' | 'displayName' | 'displayNameEncrypted'>[] =
+      await prisma.serviceAdvisor.findMany({
+        take: BATCH_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: 'asc' },
+        select: { id: true, displayName: true, displayNameEncrypted: true },
+      });
     if (rows.length === 0) break;
     cursor = rows[rows.length - 1]?.id;
     for (const row of rows) {

@@ -1,0 +1,27 @@
+import * as Sentry from '@sentry/nextjs';
+
+export function getSentryDsn(): string | undefined {
+  return process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN;
+}
+
+export function initSentryServer(): void {
+  const dsn = getSentryDsn();
+  if (!dsn) return;
+
+  Sentry.init({
+    dsn,
+    tracesSampleRate: 1.0,
+    debug: false,
+  });
+}
+
+export function initSentryEdge(): void {
+  const dsn = getSentryDsn();
+  if (!dsn) return;
+
+  Sentry.init({
+    dsn,
+    tracesSampleRate: process.env.NODE_ENV === 'development' ? 1.0 : 0.1,
+    debug: false,
+  });
+}

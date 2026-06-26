@@ -1,5 +1,6 @@
 import { Settings } from 'lucide-react';
 import { DealershipBranding } from '@/components/DealershipBranding';
+import { MerlinLogo } from '@/components/MerlinLogo';
 import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ScanROSection } from '@/components/ScanROSection';
 import type { PendingImage, RepairOrder } from '../types';
@@ -76,7 +77,7 @@ export function HomeView({
       <div className="pt-10">
         <div className="text-center mb-8">
           <div className="benz-logo-ring w-[4.5rem] h-[4.5rem] mx-auto mb-4">
-            <img src="/icon-512.png" alt="Merlin - Mercedes-Benz" className="w-full h-full rounded-[18px]" />
+            <MerlinLogo />
           </div>
           <DealershipBranding size="lg" className="mb-2" />
           <p className="text-benz-secondary text-sm">{technicianName || 'Technician'}</p>

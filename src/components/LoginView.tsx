@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DealershipBranding } from '@/components/DealershipBranding';
+import { MerlinLogo } from '@/components/MerlinLogo';
 import { toast } from 'sonner';
 
 interface LoginViewProps {
@@ -33,7 +34,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
 
         <div className="text-center mb-8">
           <div className="benz-logo-ring w-20 h-20 mx-auto mb-5">
-            <img src="/icon-512.png" alt="Merlin" className="w-full h-full rounded-[18px]" />
+            <MerlinLogo />
           </div>
           <DealershipBranding size="lg" />
         </div>

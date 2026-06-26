@@ -35,3 +35,8 @@ export const STORY_SCORE_GROK_MS = 30_000;
 /** Sync with `maxDuration` in `score-story/route.ts` */
 export const STORY_SCORE_ROUTE_MAX_DURATION_S = 45;
 export const STORY_SCORE_CLIENT_MS = STORY_SCORE_ROUTE_MAX_DURATION_S * 1000 + CLIENT_BUFFER_MS;
+
+export const STORY_REVIEW_GROK_MS = 90_000;
+/** Sync with `maxDuration` in `review-story/route.ts` */
+export const STORY_REVIEW_ROUTE_MAX_DURATION_S = 120;
+export const STORY_REVIEW_CLIENT_MS = STORY_REVIEW_ROUTE_MAX_DURATION_S * 1000 + CLIENT_BUFFER_MS;

@@ -18,6 +18,8 @@ export const GROK_UNAVAILABLE_ERROR =
   'AI story generation is temporarily unavailable. Check bay Wi‑Fi or type your notes manually.';
 export const PAYLOAD_TOO_LARGE_ERROR = 'Request is too large. Reduce attachments or split your input.';
 export const OFFLINE_ERROR = 'No network connection. Your typed notes are safe — reconnect and try again.';
+export const CONFLICT_ERROR =
+  'This repair order was updated elsewhere. Reload the repair order to get the latest version.';
 
 export function apiError(message: string, status: number): NextResponse {
   return NextResponse.json({ error: message }, { status });

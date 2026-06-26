@@ -41,6 +41,7 @@ export function buildRepairOrderListWhere(
     return {
       ...roleWhere,
       OR: [
+        // S2 PLAINTEXT SEARCH: queries RepairOrder.roNumber directly — migrate to search token in Phase 3.
         { roNumber: { contains: term, mode: 'insensitive' } },
         { year: { contains: term, mode: 'insensitive' } },
         { make: { contains: term, mode: 'insensitive' } },

@@ -251,6 +251,7 @@ export async function POST(request: Request) {
           technicianId: session.technicianId,
           entityType: 'repairOrder',
           entityId: created.id,
+          // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
           metadata: { roNumber: created.roNumber },
           ipAddress: getRequestIp(request),
         });

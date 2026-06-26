@@ -88,10 +88,15 @@ async function checkKvRateLimit(key: string, config: RateLimitConfig): Promise<R
 }
 
 export function isKvConfigured(): boolean {
-  return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  return Boolean(process.env.KV_REST_API_URL?.trim() && process.env.KV_REST_API_TOKEN?.trim());
 }
 
-function effectiveRateLimitConfig(config: RateLimitConfig): RateLimitConfig {
+function isProductionEnv(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+}
+
+/** Dev-only: weaker per-instance limits when KV is not configured locally. */
+function devMemoryRateLimitConfig(config: RateLimitConfig): RateLimitConfig {
   if (isKvConfigured()) return config;
   return {
     limit: Math.max(1, Math.floor(config.limit / 2)),
@@ -112,18 +117,24 @@ export async function checkRateLimit(
       return await checkKvRateLimit(key, config);
     } catch (error) {
       logger.warn('rate_limit.kv_fallback', {
+        routeKey,
         error: error instanceof Error ? error.message : 'unknown',
       });
+      // Transient KV errors: per-instance memory preserves 429 behavior and limit values.
+      return checkMemoryRateLimit(key, config);
     }
-  } else if (process.env.NODE_ENV === 'production') {
-    logger.warn('rate_limit.memory_only', {
-      routeKey,
-      detail:
-        'KV_REST_API_URL/TOKEN not configured — limits are per serverless instance at 50% strength',
-    });
   }
 
-  return checkMemoryRateLimit(key, effectiveRateLimitConfig(config));
+  if (!isProductionEnv()) {
+    return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
+  }
+
+  // Production without KV should be blocked at build time; log and skip limiting if misconfigured at runtime.
+  logger.error('rate_limit.kv_required', {
+    routeKey,
+    detail: 'KV_REST_API_URL/TOKEN not configured in production — rate limiting disabled for this request',
+  });
+  return null;
 }
 
 export function getRequestIp(request: Request): string {

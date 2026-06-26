@@ -102,6 +102,7 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
 
   const roNumberEncrypted = (ro as DbRO & { roNumberEncrypted?: string }).roNumberEncrypted;
   const decryptedRoNumber = roNumberEncrypted ? decryptPII(roNumberEncrypted) : '';
+  // S2 PLAINTEXT READ FALLBACK: ro.roNumber until Phase 3 encrypted-only reads (see schema.prisma migration plan).
   const roNumber = decryptedRoNumber || ro.roNumber;
 
   return {
@@ -131,6 +132,7 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
           matchConfidence: ro.advisorMatchConfidence ?? undefined,
         }
       : undefined,
+    // S2 PLAINTEXT READ: ServiceAdvisor.displayName join fallback until displayNameEncrypted is populated on write.
     serviceAdvisorName: advisorName || ro.serviceAdvisor?.displayName,
     xentryImages: parseImageAttachments(ro.xentryImageUrls),
     xentryOcrTexts: decryptStringArray(ro.xentryOcrTextsEncrypted),
@@ -144,6 +146,7 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
 
 export function dbToRepairLine(line: DbLine): RepairLine {
   const descriptionEncrypted = (line as DbLine & { descriptionEncrypted?: string }).descriptionEncrypted;
+  // S2 PLAINTEXT READ FALLBACK: line.description until Phase 3 encrypted-only reads.
   const description =
     descriptionEncrypted && descriptionEncrypted.trim()
       ? decryptSensitiveText(descriptionEncrypted)
@@ -186,6 +189,7 @@ export function repairOrderToDbFields(
   input: RepairOrderInput & { serviceAdvisorName?: string }
 ) {
   return {
+    // S2 PLAINTEXT WRITE (dual-storage): roNumber kept for list search — see schema.prisma migration plan.
     roNumber: input.roNumber,
     roNumberEncrypted: encryptPII(input.roNumber),
     vinEncrypted: encryptPII(input.vehicle.vin),
@@ -208,6 +212,7 @@ export function repairOrderToDbFields(
 export function repairLineToDbFields(line: RepairLine) {
   return {
     lineNumber: line.lineNumber,
+    // S2 PLAINTEXT WRITE (dual-storage): description kept for legacy read fallback until Phase 4.
     description: line.description,
     descriptionEncrypted: encryptSensitiveText(line.description),
     customerConcernEncrypted: encryptPII(line.customerConcern),

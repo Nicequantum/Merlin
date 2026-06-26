@@ -7,8 +7,10 @@ import {
   type AdvisorExtractionSource,
 } from '@/lib/advisorIntelligence';
 import { prisma } from '@/lib/db';
+import { collectRepairOrderImagePathnames, findForbiddenImagePathname } from '@/lib/imageAccess';
 import { dbToRepairOrder, normalizeImageAttachments, repairLineToDbFields, repairOrderToDbFields } from '@/lib/roMapper';
-import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError, CONFLICT_ERROR, FORBIDDEN_ERROR, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 import { getRequestIp } from '@/lib/rate-limit';
 import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
 import { parseRequestBody, updateRepairOrderSchema } from '@/lib/validation';
@@ -96,6 +98,38 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
       const extractionSource: AdvisorExtractionSource = data.advisorExtractionSource || 'manual';
       const advisorNameToCapture = data.serviceAdvisorName || existingMapped.serviceAdvisorName;
+
+      let forbiddenPathname: string | null;
+      try {
+        forbiddenPathname = await findForbiddenImagePathname(
+          session,
+          collectRepairOrderImagePathnames({
+            xentryImages: data.xentryImages ? normalizeImageAttachments(data.xentryImages) : [],
+            repairLines: data.repairLines
+              ? data.repairLines
+                  .filter((line) => line.id)
+                  .map((line) => ({
+                    xentryImages: normalizeImageAttachments(line.xentryImages),
+                  }))
+              : [],
+          })
+        );
+      } catch (error) {
+        logger.error('ros.update.image_access_failed', {
+          technicianId: session.technicianId,
+          dealershipId: session.dealershipId,
+          repairOrderId: id,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
+        return apiError('Unable to verify image attachments.', 500);
+      }
+      if (forbiddenPathname) {
+        return apiError(FORBIDDEN_ERROR, 403);
+      }
+
+      if (data.updatedAt && existing.updatedAt.toISOString() !== data.updatedAt) {
+        return apiError(CONFLICT_ERROR, 409);
+      }
 
       const advisorCapture = await prisma.$transaction(async (tx) => {
         await tx.repairOrder.update({
@@ -201,6 +235,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         technicianId: session.technicianId,
         entityType: 'repairOrder',
         entityId: id,
+        // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
         metadata: { roNumber: updated!.roNumber },
         ipAddress: getRequestIp(request),
       });
@@ -253,6 +288,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         technicianId: session.technicianId,
         entityType: 'repairOrder',
         entityId: id,
+        // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
         metadata: { roNumber: existing.roNumber },
         ipAddress: getRequestIp(request),
       });

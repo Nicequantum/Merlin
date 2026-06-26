@@ -3,9 +3,16 @@
  * Safe to run multiple times — already-encrypted rows are skipped.
  *
  * Usage: npm run db:reencrypt
+ * S2 dual-storage backfill (roNumber, description, displayName): npm run db:migrate-pii
+ *
  * Requires: DATABASE_URL and ENCRYPTION_KEY in the environment.
  */
 import { PrismaClient } from '@prisma/client';
+import {
+  migrateRepairLinesS2,
+  migrateRepairOrdersS2,
+  migrateServiceAdvisorsS2,
+} from './migrate-pii-to-encrypted';
 import {
   migratePlaintextComplaintsToEncrypted,
   migratePlaintextJsonObjectToEncrypted,
@@ -41,8 +48,6 @@ async function migrateRepairOrders(): Promise<MigrationStats> {
         complaintsEncrypted: true,
         xentryOcrTextsEncrypted: true,
         serviceAdvisorNameEncrypted: true,
-        roNumberEncrypted: true,
-        roNumber: true,
       },
     });
     if (rows.length === 0) break;
@@ -50,30 +55,27 @@ async function migrateRepairOrders(): Promise<MigrationStats> {
 
     for (const row of rows) {
       scanned += 1;
-    const data: Record<string, string> = {};
+      const data: Record<string, string> = {};
 
-    const vin = migratePlaintextToEncrypted(row.vinEncrypted);
-    if (vin !== row.vinEncrypted) data.vinEncrypted = vin;
+      const vin = migratePlaintextToEncrypted(row.vinEncrypted);
+      if (vin !== row.vinEncrypted) data.vinEncrypted = vin;
 
-    const customerName = migratePlaintextToEncrypted(row.customerNameEncrypted);
-    if (customerName !== row.customerNameEncrypted) data.customerNameEncrypted = customerName;
+      const customerName = migratePlaintextToEncrypted(row.customerNameEncrypted);
+      if (customerName !== row.customerNameEncrypted) data.customerNameEncrypted = customerName;
 
-    const complaints = migratePlaintextComplaintsToEncrypted(row.complaintsEncrypted);
-    if (complaints !== row.complaintsEncrypted) data.complaintsEncrypted = complaints;
+      const complaints = migratePlaintextComplaintsToEncrypted(row.complaintsEncrypted);
+      if (complaints !== row.complaintsEncrypted) data.complaintsEncrypted = complaints;
 
-    const ocrTexts = migratePlaintextStringArrayToEncrypted(row.xentryOcrTextsEncrypted);
-    if (ocrTexts !== row.xentryOcrTextsEncrypted) data.xentryOcrTextsEncrypted = ocrTexts;
+      const ocrTexts = migratePlaintextStringArrayToEncrypted(row.xentryOcrTextsEncrypted);
+      if (ocrTexts !== row.xentryOcrTextsEncrypted) data.xentryOcrTextsEncrypted = ocrTexts;
 
-    const advisorName = migratePlaintextToEncrypted(row.serviceAdvisorNameEncrypted);
-    if (advisorName !== row.serviceAdvisorNameEncrypted) data.serviceAdvisorNameEncrypted = advisorName;
+      const advisorName = migratePlaintextToEncrypted(row.serviceAdvisorNameEncrypted);
+      if (advisorName !== row.serviceAdvisorNameEncrypted) data.serviceAdvisorNameEncrypted = advisorName;
 
-    const roNumberEnc = migratePlaintextToEncrypted(row.roNumberEncrypted || row.roNumber);
-    if (roNumberEnc && roNumberEnc !== row.roNumberEncrypted) data.roNumberEncrypted = roNumberEnc;
-
-    if (Object.keys(data).length > 0) {
-      await prisma.repairOrder.update({ where: { id: row.id }, data });
-      updated += 1;
-    }
+      if (Object.keys(data).length > 0) {
+        await prisma.repairOrder.update({ where: { id: row.id }, data });
+        updated += 1;
+      }
     }
     if (rows.length < BATCH_SIZE) break;
   }
@@ -93,8 +95,6 @@ async function migrateRepairLines(): Promise<MigrationStats> {
       orderBy: { id: 'asc' },
       select: {
         id: true,
-        description: true,
-        descriptionEncrypted: true,
         customerConcernEncrypted: true,
         technicianNotesEncrypted: true,
         xentryOcrTextsEncrypted: true,
@@ -107,30 +107,27 @@ async function migrateRepairLines(): Promise<MigrationStats> {
 
     for (const row of rows) {
       scanned += 1;
-    const data: Record<string, string | null> = {};
+      const data: Record<string, string | null> = {};
 
-    const customerConcern = migratePlaintextToEncrypted(row.customerConcernEncrypted);
-    if (customerConcern !== row.customerConcernEncrypted) data.customerConcernEncrypted = customerConcern;
+      const customerConcern = migratePlaintextToEncrypted(row.customerConcernEncrypted);
+      if (customerConcern !== row.customerConcernEncrypted) data.customerConcernEncrypted = customerConcern;
 
-    const technicianNotes = migratePlaintextToEncrypted(row.technicianNotesEncrypted);
-    if (technicianNotes !== row.technicianNotesEncrypted) data.technicianNotesEncrypted = technicianNotes;
+      const technicianNotes = migratePlaintextToEncrypted(row.technicianNotesEncrypted);
+      if (technicianNotes !== row.technicianNotesEncrypted) data.technicianNotesEncrypted = technicianNotes;
 
-    const ocrTexts = migratePlaintextStringArrayToEncrypted(row.xentryOcrTextsEncrypted);
-    if (ocrTexts !== row.xentryOcrTextsEncrypted) data.xentryOcrTextsEncrypted = ocrTexts;
+      const ocrTexts = migratePlaintextStringArrayToEncrypted(row.xentryOcrTextsEncrypted);
+      if (ocrTexts !== row.xentryOcrTextsEncrypted) data.xentryOcrTextsEncrypted = ocrTexts;
 
-    const extractedData = migratePlaintextJsonObjectToEncrypted(row.extractedDataEncrypted);
-    if (extractedData !== row.extractedDataEncrypted) data.extractedDataEncrypted = extractedData;
+      const extractedData = migratePlaintextJsonObjectToEncrypted(row.extractedDataEncrypted);
+      if (extractedData !== row.extractedDataEncrypted) data.extractedDataEncrypted = extractedData;
 
-    const warrantyStory = migratePlaintextOptionalToEncrypted(row.warrantyStoryEncrypted);
-    if (warrantyStory !== row.warrantyStoryEncrypted) data.warrantyStoryEncrypted = warrantyStory;
+      const warrantyStory = migratePlaintextOptionalToEncrypted(row.warrantyStoryEncrypted);
+      if (warrantyStory !== row.warrantyStoryEncrypted) data.warrantyStoryEncrypted = warrantyStory;
 
-    const descriptionEnc = migratePlaintextToEncrypted(row.descriptionEncrypted || row.description);
-    if (descriptionEnc && descriptionEnc !== row.descriptionEncrypted) data.descriptionEncrypted = descriptionEnc;
-
-    if (Object.keys(data).length > 0) {
-      await prisma.repairLine.update({ where: { id: row.id }, data });
-      updated += 1;
-    }
+      if (Object.keys(data).length > 0) {
+        await prisma.repairLine.update({ where: { id: row.id }, data });
+        updated += 1;
+      }
     }
     if (rows.length < BATCH_SIZE) break;
   }
@@ -216,6 +213,11 @@ async function main(): Promise<void> {
   console.log('Re-encrypting legacy plaintext records...');
 
   const results = {
+    s2DualStorage: {
+      repairOrders: await migrateRepairOrdersS2(),
+      repairLines: await migrateRepairLinesS2(),
+      serviceAdvisors: await migrateServiceAdvisorsS2(),
+    },
     repairOrders: await migrateRepairOrders(),
     repairLines: await migrateRepairLines(),
     advisorObservations: await migrateAdvisorObservations(),

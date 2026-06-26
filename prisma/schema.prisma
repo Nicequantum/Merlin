@@ -8,6 +8,77 @@ datasource db {
   directUrl = env("DIRECT_URL") // For Neon: use pooled in DATABASE_URL + direct (non-pooled) in DIRECT_URL for migrations
 }
 
+// ─── PII PLAINTEXT MIGRATION PLAN (audit S2) ─────────────────────────────────
+// Dual-storage: readable columns kept for search/UI while *Encrypted columns are
+// canonical at rest. Do NOT add new plaintext PII write paths.
+//
+// ── Dual-storage inventory (plaintext → encrypted → code paths) ───────────────
+// RepairOrder.roNumber
+//   → roNumberEncrypted
+//   WRITE: src/lib/roMapper.ts repairOrderToDbFields (dual-write every save)
+//   READ:  src/lib/roMapper.ts dbToRepairOrder (decrypt first, plaintext fallback)
+//   SEARCH: src/lib/roListQuery.ts buildRepairOrderListWhere (contains on roNumber)
+//   CLIENT: src/hooks/repairOrders/roListUtils.ts matchesROSearch (in-memory filter)
+//
+// RepairLine.description
+//   → descriptionEncrypted
+//   WRITE: src/lib/roMapper.ts repairLineToDbFields
+//   READ:  src/lib/roMapper.ts dbToRepairLine (decrypt first, plaintext fallback)
+//
+// RepairOrder.serviceAdvisorName (denormalized, no plaintext twin)
+//   → serviceAdvisorNameEncrypted
+//   WRITE: src/lib/roMapper.ts repairOrderToDbFields (when advisor name present)
+//   READ:  src/lib/roMapper.ts dbToRepairOrder
+//
+// ServiceAdvisor.displayName
+//   → displayNameEncrypted
+//   WRITE: src/lib/advisorIntelligence/resolveAdvisor.ts (plaintext only today; encrypt write in Phase 4)
+//   READ:  src/app/api/advisors/*.ts, dbToRepairOrder serviceAdvisor join
+//
+// ── Plaintext-only fields (no encrypted twin yet — future schema work) ────────
+// ServiceAdvisorAlias.aliasText          — advisor alias strings (fingerprint used for match)
+// AdvisorWritingProfile.profileData      — JSON writing-style samples (may contain complaint text)
+// Technician.name / email              — auth identity (separate from RO PII scope)
+// AuditLog.metadata.roNumber             — operational identifier in hash-chain audit (not customer PII)
+// Template.title / description           — non-customer template catalog metadata
+//
+// Already encrypted-only at rest (no S2 dual-storage gap):
+//   customerNameEncrypted, complaintsEncrypted, vinEncrypted, customerConcernEncrypted,
+//   technicianNotesEncrypted, warrantyStoryEncrypted, xentryOcrTextsEncrypted,
+//   extractedDataEncrypted, complaintTextEncrypted, contentEncrypted, knowledge base *Encrypted
+//
+// ── Phased cutover (non-breaking) ─────────────────────────────────────────────
+// Phase 1 [CURRENT]
+//   • Dual-write roNumber + description + serviceAdvisorNameEncrypted on every RO save
+//   • Retain plaintext columns for search, list UI, and legacy read fallbacks
+//   • No behavior changes to workflows, search, or API responses
+//
+// Phase 2 [BACKFILL — run in maintenance window]
+//   • npm run db:migrate-pii-safe       — dry-run first (zero writes, preview pending counts)
+//   • npm run db:migrate-pii            — S2 dual-storage backfill (idempotent, batched)
+//   • npm run db:reencrypt            — also runs S2 backfill + legacy *Encrypted columns
+//   • Re-run until pendingAfterRun counts are 0 and updated counts are 0
+//   • Verify: spot-check RO/advisor in UI; npm run validate:pre-rollout
+//
+// Phase 3 [READ CUTOVER — requires search replacement]
+//   • dbToRepairOrder / dbToRepairLine: encrypted-only reads (remove plaintext fallback)
+//   • dbToRepairOrder: decrypt ServiceAdvisor.displayNameEncrypted on join
+//   • Add RepairOrder.roNumberSearchToken (HMAC blind index) for list/search queries
+//   • roListQuery + roListUtils: query token instead of plaintext roNumber
+//
+// Phase 4 [WRITE CUTOVER]
+//   • resolveAdvisor.ts: write displayNameEncrypted alongside displayName
+//   • roMapper: stop writing RepairOrder.roNumber and RepairLine.description plaintext
+//   • Dashboard/advisor APIs: read from encrypted columns only
+//
+// Phase 5 [SCHEMA CLEANUP — one release after Phase 4]
+//   • Drop plaintext columns: roNumber, description, displayName (Prisma migration)
+//   • Add encrypted columns for aliasText / profileData if still needed
+//   • Final npm run db:migrate-pii + db:reencrypt on restored backups only
+//
+// Rollback: restore pre-migration database backup. Do not rotate ENCRYPTION_KEY without
+// a planned key-migration procedure. See docs/Reencryption-Runbook.md.
+
 /** M11: enforce technician/manager at the database layer. */
 enum TechnicianRole {
   technician
@@ -54,8 +125,9 @@ model Technician {
 
 model RepairOrder {
   id                         String       @id @default(cuid())
+  /** S2 PLAINTEXT PII: retained for list/search until Phase 3 (see migration plan above). Prefer roNumberEncrypted. */
   roNumber                   String
-  /** M7: encrypted RO number — roNumber may hold legacy/plain lookup token during migration. */
+  /** M7: encrypted RO number — canonical value at rest after Phase 4. */
   roNumberEncrypted          String       @default("")
   technicianId               String
   technician                 Technician   @relation(fields: [technicianId], references: [id])
@@ -94,6 +166,7 @@ model ServiceAdvisor {
   id              String   @id @default(cuid())
   dealershipId    String
   dealership      Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  /** S2 PLAINTEXT PII: retained for UI/API display until Phase 4. Canonical: displayNameEncrypted. */
   displayName     String
   /** M7: encrypted advisor display name for PII at rest. */
   displayNameEncrypted String @default("")
@@ -154,6 +227,7 @@ model AdvisorWritingProfile {
   serviceAdvisorId String         @unique
   serviceAdvisor   ServiceAdvisor @relation(fields: [serviceAdvisorId], references: [id], onDelete: Cascade)
   profileVersion   Int            @default(1)
+  /** S2: advisor profile JSON may contain writing-style samples — encrypt or redact in Phase 3. */
   profileData      String         @default("{}")
   observationCount Int            @default(0)
   lastComputedAt   DateTime?
@@ -165,6 +239,7 @@ model RepairLine {
   repairOrderId             String
   repairOrder               RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
   lineNumber                Int
+  /** S2 PLAINTEXT PII: retained for legacy read fallback until Phase 4. Canonical: descriptionEncrypted. */
   description               String
   /** M7: encrypted line description when it may contain customer text. */
   descriptionEncrypted      String      @default("")

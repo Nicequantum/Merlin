@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { debounce } from '@/lib/debounce';
 import {
   awaitRepairOrderSaveQueue,
@@ -85,6 +85,10 @@ export function useROPersistence(
             return [saved, ...prev];
           });
         } catch (e) {
+          if (e instanceof ApiError && e.status === 409) {
+            toast.error(e.message);
+            return;
+          }
           toast.error(e instanceof Error ? e.message : 'Failed to save repair order');
         }
       } else {

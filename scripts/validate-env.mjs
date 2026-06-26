@@ -8,7 +8,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const REQUIRED = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'];
-const PRODUCTION_RECOMMENDED = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'];
+/** Required in production — distributed rate limiting must not fall back to per-instance memory. */
+const PRODUCTION_REQUIRED = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'];
 
 function loadDotEnvFile(filename) {
   const path = resolve(process.cwd(), filename);
@@ -41,11 +42,24 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-const missingKv = PRODUCTION_RECOMMENDED.filter((key) => !process.env[key]?.trim());
-if (isProduction && missingKv.length > 0) {
-  console.warn(
-    `[merlin:build] Recommended for production (rate limiting falls back to in-memory): ${missingKv.join(', ')}`
-  );
+if (isProduction) {
+  const missingProd = PRODUCTION_REQUIRED.filter((key) => !process.env[key]?.trim());
+  if (missingProd.length > 0) {
+    console.error(
+      `[merlin:build] Missing required production environment variables: ${missingProd.join(', ')}`
+    );
+    console.error(
+      '[merlin:build] Configure Vercel KV / Upstash (KV_REST_API_URL + KV_REST_API_TOKEN) for distributed rate limiting.'
+    );
+    process.exit(1);
+  }
+} else {
+  const missingKv = PRODUCTION_REQUIRED.filter((key) => !process.env[key]?.trim());
+  if (missingKv.length > 0) {
+    console.warn(
+      `[merlin:build] Optional for local builds (rate limiting uses in-memory fallback): ${missingKv.join(', ')}`
+    );
+  }
 }
 
 function resolveCommit() {

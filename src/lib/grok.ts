@@ -30,6 +30,7 @@ import {
   DIAGNOSTIC_EXTRACT_GROK_MS,
   RO_EXTRACT_GROK_MS,
   STORY_GENERATE_GROK_MS,
+  STORY_REVIEW_GROK_MS,
   STORY_SCORE_GROK_MS,
 } from '@/lib/timeouts';
 import { parseStructuredROText } from '@/utils/roExtractor';
@@ -177,7 +178,7 @@ export async function reviewWarrantyStory(
     {
       temperature: 0.15,
       max_tokens: 1400,
-      timeoutMs: 90_000,
+      timeoutMs: STORY_REVIEW_GROK_MS,
       perfLabel: 'grok.story.review',
       reasoningEffort: 'none',
     }

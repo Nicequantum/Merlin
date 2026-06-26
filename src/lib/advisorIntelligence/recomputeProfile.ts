@@ -93,6 +93,7 @@ export async function recomputeAdvisorProfile(serviceAdvisorId: string, client: 
     extractionHints: [],
   };
 
+  // S2 PLAINTEXT WRITE: profileData JSON may contain complaint phrasing samples — encrypt in Phase 3 schema work.
   await client.advisorWritingProfile.upsert({
     where: { serviceAdvisorId },
     create: {

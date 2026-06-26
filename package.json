@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "validate:env": "node scripts/validate-env.mjs",
+    "validate:pre-deploy": "node scripts/validate-pre-deploy.mjs",
     "validate:pre-rollout": "tsx scripts/pre-rollout-validation.ts",
+    "ready-to-deploy": "npm run validate:pre-deploy && npm run validate:pre-rollout && node scripts/validate-pre-rollout.mjs && echo Merlin is ready for Mercedes-Benz dealership deployment && echo Run: npm run db:migrate-pii-safe (dry-run first)",
+    "deploy:check": "node -e \"process.stdout.write(require('fs').readFileSync('docs/DEPLOYMENT-CHECKLIST.md','utf8'))\"",
     "build": "node scripts/validate-env.mjs && prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
@@ -13,8 +16,11 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:reencrypt": "npx tsx scripts/reencrypt-legacy-data.ts",
+    "db:migrate-pii": "npx tsx scripts/migrate-pii-to-encrypted.ts",
+    "db:migrate-pii-safe": "npx tsx scripts/migrate-pii-to-encrypted.ts --dry-run && echo \"Dry-run passed. Run npm run db:migrate-pii to execute.\"",
     "db:studio": "prisma studio",
-    "test": "tsx --test tests/unit/**/*.test.ts",
+    "test": "tsx --import ./tests/setup/integration.ts --test tests/unit/**/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.ci.json",
     "test:integration": "tsx --import ./tests/setup/integration.ts --env-file=.env.local --test tests/integration/**/*.test.ts",
     "setup:tesseract": "node scripts/copy-tesseract-assets.mjs",
     "postinstall": "prisma generate && npm run setup:tesseract"
@@ -49,6 +55,8 @@
     "prisma": "^6.9.0",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.4",
+    "eslint": "^9.28.0",
+    "eslint-config-next": "^15.3.3",
     "typescript": "^5.8.3"
   }
 }

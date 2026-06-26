@@ -54,11 +54,13 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.ok(!encSrc.includes("return scryptSync(secret, 'benz-tech-pii-salt', 32)"));
   });
 
-  it('H8: production KV recommendation with in-memory fallback', () => {
-    const envSrc = readSrc('src/lib/env.ts');
-    assert.ok(envSrc.includes('PRODUCTION_RECOMMENDED_ENV_VARS'));
+  it('H8: production requires KV; dev keeps in-memory fallback', () => {
+    const validateEnv = readSrc('scripts/validate-env.mjs');
+    assert.ok(validateEnv.includes('PRODUCTION_REQUIRED'));
+    assert.ok(validateEnv.includes('process.exit(1)'));
     const rateSrc = readSrc('src/lib/rate-limit.ts');
-    assert.ok(rateSrc.includes('effectiveRateLimitConfig'));
+    assert.ok(rateSrc.includes('devMemoryRateLimitConfig'));
+    assert.ok(rateSrc.includes('isProductionEnv'));
   });
 
   it('H9: image access uses targeted query', () => {

@@ -25,6 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
               vehicleModel: true,
               observedAt: true,
               complaintTextEncrypted: true,
+              // S2 PLAINTEXT READ: RepairOrder.roNumber for observation context until Phase 3.
               repairOrder: { select: { roNumber: true } },
             },
           },
@@ -47,6 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return {
         advisor: {
           id: advisor.id,
+          // S2 PLAINTEXT READ: ServiceAdvisor.displayName until Phase 3 encrypted read cutover.
           displayName: advisor.displayName,
           roCount: advisor.roCount,
           firstSeenAt: advisor.firstSeenAt.toISOString(),
@@ -62,6 +64,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           recentObservations: advisor.observations.map((obs) => ({
             id: obs.id,
             lineLabel: obs.lineLabel,
+            // S2 PLAINTEXT READ: denormalized RO number for advisor observation list.
             roNumber: obs.repairOrder.roNumber,
             vehicleFamily: obs.vehicleFamily,
             vehicle: [obs.vehicleMake, obs.vehicleModel].filter(Boolean).join(' '),

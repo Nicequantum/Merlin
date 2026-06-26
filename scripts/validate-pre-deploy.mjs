@@ -1,0 +1,259 @@
+#!/usr/bin/env node
+/**
+ * Final pre-production deploy gate — read-only checks except a light DB ping.
+ * Safe to run before every production deploy; does not mutate application data.
+ *
+ * Usage:
+ *   npm run validate:pre-deploy
+ *
+ * Loads .env, .env.local, and .env.production from the repo root (same as validate-env).
+ */
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const PREFIX = '[merlin:pre-deploy]';
+const ROOT = process.cwd();
+
+const AI_ROUTE_FILES = [
+  'src/app/api/diagnostics/extract/route.ts',
+  'src/app/api/repair-orders/extract/route.ts',
+  'src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts',
+  'src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route.ts',
+  'src/app/api/repair-orders/[id]/lines/[lineId]/review-story/route.ts',
+];
+
+/** Known intentional plaintext PII write sites — must stay documented with S2 markers + dual-write where applicable. */
+const PII_WRITE_GUARDS = [
+  {
+    file: 'src/lib/roMapper.ts',
+    region: 'repairOrderToDbFields',
+    requiredSnippets: ['S2 PLAINTEXT WRITE', 'roNumberEncrypted: encryptPII'],
+  },
+  {
+    file: 'src/lib/roMapper.ts',
+    region: 'repairLineToDbFields',
+    requiredSnippets: ['S2 PLAINTEXT WRITE', 'descriptionEncrypted: encryptSensitiveText'],
+  },
+  {
+    file: 'src/lib/advisorIntelligence/resolveAdvisor.ts',
+    region: 'serviceAdvisor.create',
+    requiredSnippets: ['S2 PLAINTEXT WRITE', 'displayName:'],
+  },
+  {
+    file: 'src/lib/advisorIntelligence/resolveAdvisor.ts',
+    region: 'serviceAdvisorAlias.create',
+    requiredSnippets: ['S2 PLAINTEXT WRITE', 'aliasText'],
+  },
+  {
+    file: 'src/lib/advisorIntelligence/recomputeProfile.ts',
+    region: 'advisorWritingProfile.upsert',
+    requiredSnippets: ['S2 PLAINTEXT WRITE', 'profileData:'],
+  },
+];
+
+const failures = [];
+
+function loadDotEnvFile(filename) {
+  const path = resolve(ROOT, filename);
+  if (!existsSync(path)) return;
+  const content = readFileSync(path, 'utf8');
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
+
+function fail(message) {
+  failures.push(message);
+  console.error(`${PREFIX} FAIL: ${message}`);
+}
+
+function pass(message) {
+  console.log(`${PREFIX} OK: ${message}`);
+}
+
+function readSrc(relativePath) {
+  const path = resolve(ROOT, relativePath);
+  if (!existsSync(path)) {
+    fail(`Missing source file: ${relativePath}`);
+    return '';
+  }
+  return readFileSync(path, 'utf8');
+}
+
+function extractRegion(source, regionName) {
+  const start = source.indexOf(regionName);
+  if (start < 0) return '';
+  const lookback = Math.max(0, start - 500);
+  return source.slice(lookback, start + 2500);
+}
+
+function checkProductionEnv() {
+  console.log(`${PREFIX} Running build-time environment validation (production mode)...`);
+  try {
+    execSync('node scripts/validate-env.mjs', {
+      stdio: 'inherit',
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        VERCEL_ENV: 'production',
+      },
+    });
+    pass('Core production environment variables (validate-env)');
+  } catch {
+    fail('Core production environment validation failed — see messages above');
+  }
+}
+
+function checkSentryDsn() {
+  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN?.trim();
+  if (!dsn) {
+    fail('NEXT_PUBLIC_SENTRY_DSN is not set — production error monitoring will be disabled');
+    return;
+  }
+  pass('NEXT_PUBLIC_SENTRY_DSN is configured');
+}
+
+function checkAiRouteMaxDuration() {
+  for (const relativePath of AI_ROUTE_FILES) {
+    const source = readSrc(relativePath);
+    if (!source) continue;
+    const match = source.match(/export\s+const\s+maxDuration\s*=\s*(\d+)/);
+    if (!match) {
+      fail(`${relativePath} is missing export const maxDuration = <seconds>`);
+      continue;
+    }
+    const seconds = Number(match[1]);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      fail(`${relativePath} has invalid maxDuration: ${match[1]}`);
+      continue;
+    }
+    pass(`${relativePath} maxDuration=${seconds}s`);
+  }
+}
+
+function checkPlaintextPiiWriteGuards() {
+  const warnings = [];
+
+  for (const guard of PII_WRITE_GUARDS) {
+    const source = readSrc(guard.file);
+    if (!source) continue;
+    const region = extractRegion(source, guard.region);
+    if (!region) {
+      warnings.push(`${guard.file}: region "${guard.region}" not found`);
+      continue;
+    }
+    for (const snippet of guard.requiredSnippets) {
+      if (!region.includes(snippet)) {
+        warnings.push(`${guard.file} (${guard.region}): missing "${snippet}"`);
+      }
+    }
+  }
+
+  const roMapper = readSrc('src/lib/roMapper.ts');
+  const undocumentedPatterns = [
+    { label: 'roNumber plaintext without encrypted twin in repairOrderToDbFields', ok: roMapper.includes('roNumberEncrypted: encryptPII(input.roNumber)') },
+    { label: 'description plaintext without encrypted twin in repairLineToDbFields', ok: roMapper.includes('descriptionEncrypted: encryptSensitiveText(line.description)') },
+  ];
+  for (const pattern of undocumentedPatterns) {
+    if (!pattern.ok) warnings.push(pattern.label);
+  }
+
+  const auditedFiles = [...new Set(PII_WRITE_GUARDS.map((guard) => guard.file))];
+  let s2MarkerTotal = 0;
+  for (const file of auditedFiles) {
+    const source = readSrc(file);
+    const matches = source.match(/S2 PLAINTEXT WRITE/g);
+    s2MarkerTotal += matches ? matches.length : 0;
+  }
+  if (s2MarkerTotal < 5) {
+    warnings.push(`Expected at least 5 documented S2 PLAINTEXT WRITE markers, found ${s2MarkerTotal}`);
+  }
+
+  if (warnings.length > 0) {
+    for (const warning of warnings) {
+      fail(`Plaintext PII write guard: ${warning}`);
+    }
+    return;
+  }
+
+  pass('Plaintext PII write paths are documented and dual-write guarded (S2)');
+}
+
+function checkOptimisticConcurrencyGuard() {
+  const putRoute = readSrc('src/app/api/repair-orders/[id]/route.ts');
+  const validation = readSrc('src/lib/validation.ts');
+  const hasPutCheck =
+    putRoute.includes('data.updatedAt') && putRoute.includes('CONFLICT_ERROR') && putRoute.includes('409');
+  const hasSchema = validation.includes('updatedAt: z.string().datetime().optional()');
+  if (!hasPutCheck || !hasSchema) {
+    fail('Repair order optimistic concurrency guard missing on PUT route or validation schema');
+    return;
+  }
+  pass('Repair order optimistic concurrency guard present (optional updatedAt → 409)');
+}
+
+async function checkDatabaseConnection() {
+  if (!process.env.DATABASE_URL?.trim()) {
+    fail('DATABASE_URL is not set — cannot run database connectivity check');
+    return;
+  }
+
+  try {
+    execSync('npx prisma generate', { stdio: 'pipe', cwd: ROOT });
+  } catch (error) {
+    fail(`Prisma client generation failed: ${error instanceof Error ? error.message : 'unknown'}`);
+    return;
+  }
+
+  let prisma;
+  try {
+    const { PrismaClient } = await import('@prisma/client');
+    prisma = new PrismaClient();
+    await prisma.$queryRaw`SELECT 1`;
+    pass('Database connection (Prisma $queryRaw SELECT 1)');
+  } catch (error) {
+    fail(
+      `Database connection failed: ${error instanceof Error ? error.message : 'unknown'} — verify DATABASE_URL and network access`
+    );
+  } finally {
+    if (prisma) await prisma.$disconnect();
+  }
+}
+
+async function main() {
+  console.log(`${PREFIX} Starting pre-deploy validation...`);
+
+  loadDotEnvFile('.env');
+  loadDotEnvFile('.env.local');
+  loadDotEnvFile('.env.production');
+
+  checkProductionEnv();
+  checkSentryDsn();
+  checkAiRouteMaxDuration();
+  checkPlaintextPiiWriteGuards();
+  checkOptimisticConcurrencyGuard();
+  await checkDatabaseConnection();
+
+  if (failures.length > 0) {
+    console.error(`${PREFIX} ${failures.length} check(s) failed — aborting deploy.`);
+    process.exit(1);
+  }
+
+  console.log(`${PREFIX} All checks passed — safe to deploy to production.`);
+}
+
+main().catch((error) => {
+  console.error(`${PREFIX} Unexpected error:`, error);
+  process.exit(1);
+});

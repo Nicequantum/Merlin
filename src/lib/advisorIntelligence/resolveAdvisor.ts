@@ -46,6 +46,7 @@ async function recordAlias(
     return;
   }
 
+  // S2 PLAINTEXT WRITE: aliasText has no encrypted twin column yet (see schema migration plan).
   await client.serviceAdvisorAlias.create({
     data: { serviceAdvisorId, aliasText, aliasFingerprint },
   });
@@ -132,6 +133,7 @@ export async function resolveServiceAdvisor(
   const created = await client.serviceAdvisor.create({
     data: {
       dealershipId,
+      // S2 PLAINTEXT WRITE: displayName readable for UI/search; displayNameEncrypted backfilled via db:migrate-pii (Phase 2), dual-write added in Phase 4.
       displayName: displayName || rawName.trim(),
       nameFingerprint,
       roCount: incrementRoCount ? 1 : 0,

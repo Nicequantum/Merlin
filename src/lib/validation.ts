@@ -109,6 +109,8 @@ export const createRepairOrderSchema = z.object({
 });
 
 export const updateRepairOrderSchema = z.object({
+  /** Optimistic concurrency — when provided, must match the server row updatedAt. */
+  updatedAt: z.string().datetime().optional(),
   roNumber: safeIdOptional(32),
   vehicle: vehicleSchema.optional(),
   customer: z.object({ name: safeTextOptional(200) }).optional(),

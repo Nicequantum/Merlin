@@ -38,6 +38,7 @@ export async function GET(request: Request) {
 
           return {
             id: advisor.id,
+            // S2 PLAINTEXT READ: ServiceAdvisor.displayName until Phase 3 encrypted read cutover.
             displayName: advisor.displayName,
             roCount: advisor.roCount,
             firstSeenAt: advisor.firstSeenAt.toISOString(),

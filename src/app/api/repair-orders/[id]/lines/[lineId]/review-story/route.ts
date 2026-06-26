@@ -10,6 +10,9 @@ import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { parseRequestBody, reviewStorySchema } from '@/lib/validation';
 
+/** Must match STORY_REVIEW_ROUTE_MAX_DURATION_S in @/lib/timeouts */
+export const maxDuration = 120;
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }

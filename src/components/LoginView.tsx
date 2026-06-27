@@ -29,11 +29,9 @@ export function LoginView({ onLogin }: LoginViewProps) {
 
   return (
     <div className="login-shell">
-      <div className="w-full max-w-sm">
-
-
-        <div className="merlin-brand-hero mb-8">
-          <MerlinLogoMark size="lg" animated className="mb-1" />
+      <div className="login-panel">
+        <div className="merlin-brand-hero login-brand">
+          <MerlinLogoMark size="lg" animated />
           <p className="merlin-wordmark">
             Merlin
             <span className="merlin-wordmark-accent">Warranty Intelligence</span>
@@ -42,8 +40,8 @@ export function LoginView({ onLogin }: LoginViewProps) {
           <DealershipBranding size="lg" />
         </div>
 
-        <form onSubmit={handleSubmit} className="benz-card-elevated benz-card-elevated-accent p-6 space-y-5">
-          <div>
+        <form onSubmit={handleSubmit} className="login-form benz-card-elevated benz-card-elevated-accent">
+          <div className="login-field">
             <label className="benz-label">Mercedes-Benz D7 Number</label>
             <input
               type="text"
@@ -57,7 +55,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
               className="benz-input benz-input-mono uppercase"
             />
           </div>
-          <div>
+          <div className="login-field">
             <label className="benz-label">Password</label>
             <input
               type="password"
@@ -73,9 +71,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
           </button>
         </form>
 
-        <p className="text-center text-xs text-benz-muted mt-6 leading-relaxed px-4">
-          Authorized dealership personnel only.
-        </p>
+        <p className="login-footer">Authorized dealership personnel only.</p>
       </div>
     </div>
   );

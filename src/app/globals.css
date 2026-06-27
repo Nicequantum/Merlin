@@ -1134,12 +1134,54 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 24px;
+    padding: clamp(1.5rem, 5vw, 2.5rem) clamp(1.25rem, 4vw, 1.75rem);
     background:
       radial-gradient(ellipse 110% 70% at 50% -5%, rgba(0, 173, 239, 0.12), transparent 52%),
       radial-gradient(ellipse 50% 35% at 15% 85%, rgba(0, 136, 198, 0.06), transparent 55%),
       radial-gradient(ellipse 40% 30% at 88% 75%, rgba(0, 173, 239, 0.05), transparent 50%),
       linear-gradient(180deg, #0a0a0e 0%, var(--benz-bg) 55%);
+  }
+
+  .login-panel {
+    width: 100%;
+    max-width: 22rem;
+  }
+
+  .login-brand {
+    margin-bottom: 2.25rem;
+  }
+
+  .login-brand .merlin-wordmark {
+    margin-top: 1.125rem;
+  }
+
+  .login-brand .merlin-brand-divider {
+    margin: 1.5rem auto 1.125rem;
+  }
+
+  .login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.375rem;
+    padding: 1.625rem 1.5rem 1.75rem;
+  }
+
+  .login-form .benz-label {
+    margin-bottom: 0.5rem;
+  }
+
+  .login-form .primary-btn {
+    margin-top: 0.25rem;
+  }
+
+  .login-footer {
+    margin-top: 1.75rem;
+    padding-inline: 1rem;
+    text-align: center;
+    font-size: 0.75rem;
+    line-height: 1.65;
+    color: var(--benz-text-muted);
+    letter-spacing: 0.015em;
   }
 
   .loading-spinner {

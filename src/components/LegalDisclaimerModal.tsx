@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MerlinLogo } from '@/components/MerlinLogo';
+import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 import { LEGAL_DISCLAIMER_VERSION } from '@/types';
 
 interface LegalDisclaimerModalProps {
@@ -35,9 +35,7 @@ export function LegalDisclaimerModal({ onAccept }: LegalDisclaimerModalProps) {
       <div className="benz-modal-panel sm:max-w-lg w-full max-h-[92dvh] flex flex-col">
         <div className="p-6 pb-4 shrink-0">
           <div className="flex items-center gap-3.5 mb-4">
-            <div className="benz-logo-ring benz-logo-bubble w-11 h-11 shrink-0" aria-hidden="true">
-              <MerlinLogo />
-            </div>
+            <MerlinLogoMark size="md" />
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Technician Legal Acknowledgment</h2>
               <p className="text-xs text-benz-secondary mt-0.5">

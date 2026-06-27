@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { DealershipBranding } from '@/components/DealershipBranding';
-import { MerlinLogo } from '@/components/MerlinLogo';
+import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 import { toast } from 'sonner';
 
 interface LoginViewProps {
@@ -32,14 +32,17 @@ export function LoginView({ onLogin }: LoginViewProps) {
       <div className="w-full max-w-sm">
 
 
-        <div className="text-center mb-8">
-          <div className="benz-logo-ring benz-logo-bubble w-20 h-20 mx-auto mb-5">
-            <MerlinLogo />
-          </div>
+        <div className="merlin-brand-hero mb-8">
+          <MerlinLogoMark size="lg" animated className="mb-1" />
+          <p className="merlin-wordmark">
+            Merlin
+            <span className="merlin-wordmark-accent">Warranty Intelligence</span>
+          </p>
+          <div className="merlin-brand-divider" aria-hidden="true" />
           <DealershipBranding size="lg" />
         </div>
 
-        <form onSubmit={handleSubmit} className="benz-card-elevated p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="benz-card-elevated benz-card-elevated-accent p-6 space-y-5">
           <div>
             <label className="benz-label">Mercedes-Benz D7 Number</label>
             <input

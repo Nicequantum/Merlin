@@ -1,6 +1,6 @@
 'use client';
 
-import { MerlinLogo } from '@/components/MerlinLogo';
+import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 
 interface LoadingOverlayProps {
   visible: boolean;
@@ -17,10 +17,8 @@ export function LoadingOverlay({ visible, message }: LoadingOverlayProps) {
       aria-busy="true"
       aria-label={message}
     >
-      <div className="benz-card-elevated p-7 w-full max-w-sm text-center">
-        <div className="benz-logo-ring benz-logo-bubble w-16 h-16 mx-auto mb-4 animate-pulse" aria-hidden="true">
-          <MerlinLogo animated />
-        </div>
+      <div className="benz-card-elevated benz-card-elevated-accent p-7 w-full max-w-sm text-center">
+        <MerlinLogoMark size="md" animated className="mx-auto mb-4" />
         <div className="text-sm font-medium text-benz-primary">{message}</div>
         <span className="sr-only">{message}</span>
       </div>

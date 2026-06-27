@@ -63,8 +63,9 @@
     margin: 0 auto;
     min-height: 100dvh;
     background:
-      radial-gradient(ellipse 120% 80% at 50% -20%, rgba(0, 173, 239, 0.06), transparent 55%),
-      linear-gradient(180deg, var(--benz-bg-elevated) 0%, var(--benz-bg) 40%);
+      radial-gradient(ellipse 90% 50% at 50% -8%, rgba(0, 173, 239, 0.09), transparent 58%),
+      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(0, 136, 198, 0.04), transparent 50%),
+      linear-gradient(180deg, var(--benz-bg-elevated) 0%, var(--benz-bg) 42%);
   }
 
   .app-container.benz-app-wide {
@@ -92,10 +93,13 @@
   }
 
   .benz-header {
-    background: rgba(14, 14, 18, 0.92);
-    backdrop-filter: blur(20px) saturate(1.2);
+    background: rgba(14, 14, 18, 0.88);
+    backdrop-filter: blur(20px) saturate(1.25);
     border-bottom: 1px solid var(--benz-border);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.04),
+      0 8px 24px rgba(0, 0, 0, 0.25),
+      0 -1px 0 rgba(0, 173, 239, 0.06) inset;
   }
 
   .benz-card {
@@ -110,6 +114,29 @@
     border: 1px solid var(--benz-border-strong);
     border-radius: var(--benz-radius-xl);
     box-shadow: var(--benz-shadow-lg);
+  }
+
+  .benz-card-elevated-accent {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .benz-card-elevated-accent::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 12%;
+    right: 12%;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 173, 239, 0.55) 35%,
+      rgba(158, 233, 255, 0.75) 50%,
+      rgba(0, 173, 239, 0.55) 65%,
+      transparent
+    );
+    pointer-events: none;
   }
 
   .story-card {
@@ -935,6 +962,128 @@
     border-radius: 20%;
   }
 
+  .merlin-logo-mark {
+    position: relative;
+    flex-shrink: 0;
+    border-radius: 22%;
+    padding: 3px;
+    background: linear-gradient(145deg, #9ee9ff 0%, var(--benz-blue) 38%, var(--benz-blue-dim) 100%);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 12px 40px rgba(0, 173, 239, 0.38),
+      0 4px 12px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+
+  .merlin-logo-mark::before {
+    content: '';
+    position: absolute;
+    inset: -40%;
+    background: radial-gradient(circle at 50% 50%, rgba(0, 173, 239, 0.22), transparent 62%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .merlin-logo-mark > svg {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 20%;
+  }
+
+  .merlin-logo-mark--xs {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .merlin-logo-mark--sm {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .merlin-logo-mark--md {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .merlin-logo-mark--lg {
+    width: 5rem;
+    height: 5rem;
+    padding: 4px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      0 16px 48px rgba(0, 173, 239, 0.42),
+      0 6px 16px rgba(0, 0, 0, 0.55);
+  }
+
+  .merlin-logo-mark--xl {
+    width: 6rem;
+    height: 6rem;
+    padding: 4px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.12),
+      0 20px 56px rgba(0, 173, 239, 0.45),
+      0 8px 20px rgba(0, 0, 0, 0.55);
+  }
+
+  .merlin-brand-hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .merlin-brand-hero::before {
+    content: '';
+    position: absolute;
+    top: -12%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(280px, 90vw);
+    height: 140px;
+    background: radial-gradient(ellipse at center, rgba(0, 173, 239, 0.14), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .merlin-brand-hero > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .merlin-wordmark {
+    margin-top: 1rem;
+    font-size: 1.375rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+    background: linear-gradient(180deg, #f8fafc 0%, #c4c8d0 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .merlin-wordmark-accent {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--benz-blue);
+    opacity: 0.85;
+  }
+
+  .merlin-brand-divider {
+    width: 2.5rem;
+    height: 1px;
+    margin: 1.25rem auto 1rem;
+    background: linear-gradient(90deg, transparent, var(--benz-border-accent), transparent);
+  }
+
   @keyframes merlin-logo-glow {
     0%,
     100% {
@@ -987,8 +1136,10 @@
     justify-content: center;
     padding: 24px;
     background:
-      radial-gradient(ellipse 100% 60% at 50% 0%, rgba(0, 173, 239, 0.08), transparent 50%),
-      var(--benz-bg);
+      radial-gradient(ellipse 110% 70% at 50% -5%, rgba(0, 173, 239, 0.12), transparent 52%),
+      radial-gradient(ellipse 50% 35% at 15% 85%, rgba(0, 136, 198, 0.06), transparent 55%),
+      radial-gradient(ellipse 40% 30% at 88% 75%, rgba(0, 173, 239, 0.05), transparent 50%),
+      linear-gradient(180deg, #0a0a0e 0%, var(--benz-bg) 55%);
   }
 
   .loading-spinner {

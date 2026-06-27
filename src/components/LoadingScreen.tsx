@@ -1,6 +1,6 @@
 'use client';
 
-import { MerlinLogo } from '@/components/MerlinLogo';
+import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 
 interface LoadingScreenProps {
   label?: string;
@@ -15,8 +15,8 @@ export function LoadingScreen({ label = 'Loading Merlin', sublabel }: LoadingScr
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="benz-logo-ring benz-logo-bubble w-24 h-24 mb-6" aria-hidden="true">
-        <MerlinLogo title="Merlin" animated />
+      <div className="merlin-brand-hero mb-6">
+        <MerlinLogoMark size="xl" title="Merlin" animated />
       </div>
       <p className="text-sm text-benz-silver font-semibold tracking-tight animate-pulse">{label}</p>
       {sublabel && <p className="text-xs text-benz-secondary mt-2 max-w-xs leading-relaxed">{sublabel}</p>}

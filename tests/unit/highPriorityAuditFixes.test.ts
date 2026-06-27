@@ -100,12 +100,15 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.ok(src.includes('if (!template.isCustomerPay)'));
   });
 
-  it('H15: build script does not auto-migrate', () => {
+  it('H15: build runs gated migrate deploy via migrate-deploy.mjs', () => {
     const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
       scripts?: { build?: string; 'db:migrate:deploy'?: string };
     };
     const buildScript = pkg.scripts?.build ?? '';
-    assert.equal(buildScript.includes('prisma migrate deploy'), false);
+    assert.ok(buildScript.includes('migrate-deploy.mjs'));
     assert.ok(pkg.scripts?.['db:migrate:deploy']?.includes('prisma migrate deploy'));
+    const migrateScript = readSrc('scripts/migrate-deploy.mjs');
+    assert.ok(migrateScript.includes('VERCEL'));
+    assert.equal(migrateScript.includes('prisma migrate deploy'), true);
   });
 });

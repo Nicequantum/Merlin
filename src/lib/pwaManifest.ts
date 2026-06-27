@@ -22,3 +22,9 @@ export function getPwaManifest(): MetadataRoute.Manifest {
     })),
   };
 }
+
+/** Inline manifest for layout metadata — avoids network fetch through Vercel SSO / deployment protection. */
+export function getInlineManifestDataUri(): string {
+  const json = JSON.stringify(getPwaManifest());
+  return `data:application/manifest+json;base64,${Buffer.from(json, 'utf8').toString('base64')}`;
+}

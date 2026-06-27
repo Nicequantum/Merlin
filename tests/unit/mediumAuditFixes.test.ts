@@ -67,11 +67,10 @@ describe('Medium audit fixes (M1–M30)', () => {
     assert.ok(mw.includes("'unsafe-inline'"));
     assert.equal(mw.includes('unsafe-eval'), false);
     assert.equal(nextCfg.includes('unsafe-eval'), false);
-    assert.ok(mw.includes("manifest-src 'self' https://vercel.com https://*.vercel.app"));
+    assert.ok(mw.includes("manifest-src 'self' data:"));
     assert.ok(mw.includes('https://*.sentry.io'));
     assert.ok(mw.includes('connect-src'));
-    assert.ok(mw.includes('https://vercel.com'));
-    assert.ok(mw.includes('https://*.vercel.app'));
+    assert.equal(mw.includes('https://vercel.com'), false);
   });
 
   it('M13: audit metadata sanitization', () => {

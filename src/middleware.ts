@@ -22,8 +22,8 @@ const CONTENT_SECURITY_POLICY = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",
-  "manifest-src 'self' https://vercel.com https://*.vercel.app",
-  "connect-src 'self' blob: https://api.x.ai https://*.google.com https://*.gstatic.com wss://*.google.com https://*.sentry.io https://vercel.com https://*.vercel.app",
+  "manifest-src 'self' data:",
+  "connect-src 'self' blob: https://api.x.ai https://*.google.com https://*.gstatic.com wss://*.google.com https://*.sentry.io",
   "worker-src 'self' blob: https://cdn.jsdelivr.net",
   "child-src 'self' blob:",
   "frame-ancestors 'none'",
@@ -47,6 +47,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest\\.json|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };

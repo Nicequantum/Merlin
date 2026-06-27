@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { AppProviders } from '@/components/AppProviders';
+import { getInlineManifestDataUri } from '@/lib/pwaManifest';
 import { APPLE_TOUCH_ICON_LINKS } from '@/lib/pwaIcons';
 import './globals.css';
 
@@ -14,7 +15,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Merlin',
   description: 'Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.',
-  manifest: '/manifest.webmanifest',
+  manifest: getInlineManifestDataUri(),
   icons: {
     icon: [
       { url: '/favicon.ico' },

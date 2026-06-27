@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { getPwaManifest } from '../src/lib/pwaManifest';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const outPath = join(root, 'public', 'manifest.json');
+const manifestBody = `${JSON.stringify(getPwaManifest(), null, 2)}\n`;
 
-writeFileSync(outPath, `${JSON.stringify(getPwaManifest(), null, 2)}\n`, 'utf8');
-console.log('Synced public/manifest.json from getPwaManifest()');
+for (const filename of ['manifest.json', 'manifest.webmanifest'] as const) {
+  const outPath = join(root, 'public', filename);
+  writeFileSync(outPath, manifestBody, 'utf8');
+  console.log(`Synced public/${filename} from getPwaManifest()`);
+}

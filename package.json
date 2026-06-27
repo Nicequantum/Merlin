@@ -9,7 +9,7 @@
     "validate:pre-rollout": "tsx scripts/pre-rollout-validation.ts",
     "ready-to-deploy": "npm run validate:pre-deploy && npm run validate:pre-rollout && node scripts/validate-pre-rollout.mjs && echo Merlin is ready for Mercedes-Benz dealership deployment && echo Run: npm run db:migrate-pii-safe (dry-run first)",
     "deploy:check": "node -e \"process.stdout.write(require('fs').readFileSync('docs/DEPLOYMENT-CHECKLIST.md','utf8'))\"",
-    "build": "node scripts/validate-env.mjs && prisma generate && next build",
+    "build": "node scripts/validate-env.mjs && prisma generate && node scripts/migrate-deploy.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "prisma migrate dev",

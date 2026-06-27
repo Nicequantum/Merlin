@@ -27,7 +27,9 @@ import {
   StoryQualityPanel,
   StoryQualityStaleBanner,
 } from '@/components/StoryQualityPanel';
+import { SoldMetricsSummary } from '@/components/SoldMetricsSummary';
 import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
+import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { TechnicianCertificationSection } from '@/components/TechnicianCertificationSection';
 import type { StoryCertificationRecord } from '@/hooks/repairOrders/useROStoryWorkflow';
@@ -343,6 +345,10 @@ export function LineView({
             </p>
           </div>
         )}
+
+        {hasSoldMetrics(line.soldMetrics) && line.soldMetrics ? (
+          <SoldMetricsSummary metrics={line.soldMetrics} />
+        ) : null}
 
         <div className="benz-generate-panel space-y-3 relative z-[5]">
           {isCustomerPayLine ? (

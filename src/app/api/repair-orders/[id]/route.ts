@@ -14,22 +14,15 @@ import { logger } from '@/lib/logger';
 import { getRequestIp } from '@/lib/rate-limit';
 import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
 import { parseRequestBody, updateRepairOrderSchema } from '@/lib/validation';
+import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
-
-async function canAccess(session: { technicianId: string; role: string; dealershipId: string }, roId: string) {
-  const ro = await prisma.repairOrder.findUnique({ where: { id: roId }, include: { repairLines: true } });
-  if (!ro) return null;
-  if (session.role === 'manager' && ro.dealershipId === session.dealershipId) return ro;
-  if (ro.technicianId === session.technicianId) return ro;
-  return null;
-}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return withAuth(
     request,
     async (session) => {
-      const ro = await canAccess(session, id);
+      const ro = await canAccessRepairOrder(session, id);
       if (!ro) return apiError(NOT_FOUND_ERROR, 404);
 
       const full = await prisma.repairOrder.findUnique({
@@ -51,7 +44,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   return withAuth(
     request,
     async (session) => {
-      const existing = await canAccess(session, id);
+      const existing = await canAccessRepairOrder(session, id);
       if (!existing) return apiError(NOT_FOUND_ERROR, 404);
 
       const parsed = await parseRequestBody(request, updateRepairOrderSchema, LARGE_JSON_BODY_LIMIT_BYTES);
@@ -282,7 +275,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   return withAuth(
     request,
     async (session) => {
-      const existing = await canAccess(session, id);
+      const existing = await canAccessRepairOrder(session, id);
       if (!existing) return apiError(NOT_FOUND_ERROR, 404);
 
       await prisma.repairOrder.delete({ where: { id } });

@@ -1,13 +1,13 @@
 import { writeAuditLog } from '@/lib/audit';
-import {
-  canAdvisorAccessRepairOrder,
-  isServiceAdvisorUser,
-} from '@/lib/advisorDashboardAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
-import { mapSoldMetricsFromDb } from '@/lib/repairLineSoldMetrics';
+import {
+  canAccessRepairOrder,
+  isServiceAdvisorUser,
+} from '@/lib/repairOrderAccess';
+import { mapSoldMetricsFromDb, soldMetricsToDbUpdateFields } from '@/lib/repairLineSoldMetrics';
 import { parseRequestBody, soldMetricsSchema } from '@/lib/validation';
 
 export async function PATCH(
@@ -26,7 +26,7 @@ export async function PATCH(
       const parsed = await parseRequestBody(request, soldMetricsSchema);
       if ('error' in parsed) return parsed.error;
 
-      const ro = await canAdvisorAccessRepairOrder(session, id);
+      const ro = await canAccessRepairOrder(session, id, { repairLines: true });
       if (!ro) {
         return apiError(NOT_FOUND_ERROR, 404);
       }
@@ -36,25 +36,9 @@ export async function PATCH(
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      const now = new Date();
       const updated = await prisma.repairLine.update({
         where: { id: lineId },
-        data: {
-          ...(parsed.data.soldLaborHours !== undefined
-            ? { soldLaborHours: parsed.data.soldLaborHours }
-            : {}),
-          ...(parsed.data.soldLaborAmount !== undefined
-            ? { soldLaborAmount: parsed.data.soldLaborAmount }
-            : {}),
-          ...(parsed.data.soldPartsAmount !== undefined
-            ? { soldPartsAmount: parsed.data.soldPartsAmount }
-            : {}),
-          ...(parsed.data.customerApproved !== undefined
-            ? { customerApproved: parsed.data.customerApproved }
-            : {}),
-          ...(parsed.data.isAddOn !== undefined ? { isAddOn: parsed.data.isAddOn } : {}),
-          soldMetricsUpdatedAt: now,
-        },
+        data: soldMetricsToDbUpdateFields(parsed.data),
         select: {
           id: true,
           lineNumber: true,
@@ -86,6 +70,6 @@ export async function PATCH(
         soldMetrics: mapSoldMetricsFromDb(updated),
       };
     },
-    { rateLimitKey: 'advisor-dashboard.sold-metrics' }
+    { rateLimitKey: 'ros.sold-metrics' }
   );
 }

@@ -46,6 +46,8 @@ export interface RepairLine {
   clearCustomerPay?: boolean;
   /** Client-only flag to clear a persisted MI audit on the next RO save. */
   clearStoryQualityAudit?: boolean;
+  /** Advisor-captured sold metrics — persisted on RepairLine, read-only in technician/manager UI. */
+  soldMetrics?: RepairLineSoldMetrics;
 }
 
 export interface RepairLineSoldMetrics {
@@ -55,31 +57,6 @@ export interface RepairLineSoldMetrics {
   customerApproved: boolean | null;
   isAddOn: boolean | null;
   soldMetricsUpdatedAt?: string | null;
-}
-
-export interface AdvisorRepairOrderSummary {
-  id: string;
-  roNumber: string;
-  vehicle: {
-    year: string;
-    make: string;
-    model: string;
-  };
-  lineCount: number;
-  metricsCaptured: number;
-  updatedAt: string;
-}
-
-export interface AdvisorRepairOrderDetail {
-  id: string;
-  roNumber: string;
-  vehicle: VehicleInfo;
-  lines: Array<{
-    id: string;
-    lineNumber: number;
-    description: string;
-    soldMetrics: RepairLineSoldMetrics;
-  }>;
 }
 
 export interface VehicleWarrantyInfo {

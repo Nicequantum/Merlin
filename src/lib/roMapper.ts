@@ -15,6 +15,7 @@ import {
   encryptStringArray,
 } from './encryption';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
+import { mapSoldMetricsFromDb } from './repairLineSoldMetrics';
 import { sanitizeForCDK } from './sanitizeForCDK';
 import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
 
@@ -166,6 +167,16 @@ export function dbToRepairLine(line: DbLine): RepairLine {
       (line as DbLine & { storyQualityAuditEncrypted?: string }).storyQualityAuditEncrypted
     ),
     isCustomerPay: line.isCustomerPay ?? false,
+    soldMetrics: mapSoldMetricsFromDb(
+      line as DbLine & {
+        soldLaborHours?: number | null;
+        soldLaborAmount?: number | null;
+        soldPartsAmount?: number | null;
+        customerApproved?: boolean | null;
+        isAddOn?: boolean | null;
+        soldMetricsUpdatedAt?: Date | null;
+      }
+    ),
   };
 }
 

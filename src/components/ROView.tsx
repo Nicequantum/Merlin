@@ -2,6 +2,8 @@ import { Camera, ChevronRight, ClipboardList, FileText, Plus, Sparkles, Trash2 }
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
+import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
+import { SoldMetricsSummary } from '@/components/SoldMetricsSummary';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
 import { XentryImageGallery } from '@/components/XentryImageGallery';
@@ -312,6 +314,9 @@ export function ROView({
                   </span>
                 )
               )}
+              {hasSoldMetrics(line.soldMetrics) && line.soldMetrics ? (
+                <SoldMetricsSummary metrics={line.soldMetrics} compact />
+              ) : null}
             </div>
             <ChevronRight size={20} className="text-benz-muted shrink-0" />
           </div>

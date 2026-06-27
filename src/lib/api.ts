@@ -1,8 +1,6 @@
 import type {
   AdvisorDetail,
   AdvisorListItem,
-  AdvisorRepairOrderDetail,
-  AdvisorRepairOrderSummary,
   RepairLineSoldMetrics,
   AuditDashboardSummary,
   AuditLogEntry,
@@ -226,19 +224,13 @@ export const api = {
   deleteAdvisor: (id: string) =>
     apiFetch<{ ok: boolean }>(`/api/advisors/${id}`, { method: 'DELETE' }),
 
-  listAdvisorDashboardRepairOrders: () =>
-    apiFetch<{ repairOrders: AdvisorRepairOrderSummary[] }>('/api/advisor-dashboard/repair-orders'),
-
-  getAdvisorDashboardRepairOrder: (id: string) =>
-    apiFetch<{ repairOrder: AdvisorRepairOrderDetail }>(`/api/advisor-dashboard/repair-orders/${id}`),
-
-  saveAdvisorSoldMetrics: (
+  saveRepairLineSoldMetrics: (
     roId: string,
     lineId: string,
     data: Partial<RepairLineSoldMetrics>
   ) =>
     apiFetch<{ lineId: string; soldMetrics: RepairLineSoldMetrics }>(
-      `/api/advisor-dashboard/repair-orders/${roId}/lines/${lineId}/sold-metrics`,
+      `/api/repair-orders/${roId}/lines/${lineId}/sold-metrics`,
       {
         method: 'PATCH',
         body: JSON.stringify(data),

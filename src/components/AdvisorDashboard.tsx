@@ -12,12 +12,8 @@ import {
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import type {
-  AdvisorRepairOrderDetail,
-  AdvisorRepairOrderSummary,
-  RepairLineSoldMetrics,
-  TechnicianSession,
-} from '@/types';
+import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
+import type { RepairLineSoldMetrics, RepairOrder, TechnicianSession } from '@/types';
 
 interface AdvisorDashboardProps {
   session: TechnicianSession;
@@ -25,8 +21,8 @@ interface AdvisorDashboardProps {
   onLogout: () => Promise<void>;
 }
 
-function formatVehicle(summary: AdvisorRepairOrderSummary['vehicle']) {
-  return [summary.year, summary.make, summary.model].filter(Boolean).join(' ') || 'Vehicle';
+function formatVehicle(ro: RepairOrder) {
+  return [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
 }
 
 function emptySoldMetrics(): RepairLineSoldMetrics {
@@ -68,7 +64,7 @@ function SoldMetricsForm({
     setSaving(true);
     setSaved(false);
     try {
-      const { soldMetrics } = await api.saveAdvisorSoldMetrics(roId, lineId, {
+      const { soldMetrics } = await api.saveRepairLineSoldMetrics(roId, lineId, {
         soldLaborHours: metrics.soldLaborHours,
         soldLaborAmount: metrics.soldLaborAmount,
         soldPartsAmount: metrics.soldPartsAmount,
@@ -199,16 +195,16 @@ function SoldMetricsForm({
 }
 
 export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorDashboardProps) {
-  const [repairOrders, setRepairOrders] = useState<AdvisorRepairOrderSummary[]>([]);
+  const [repairOrders, setRepairOrders] = useState<RepairOrder[]>([]);
   const [selectedRoId, setSelectedRoId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<AdvisorRepairOrderDetail | null>(null);
+  const [detail, setDetail] = useState<RepairOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const loadRepairOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const { repairOrders: list } = await api.listAdvisorDashboardRepairOrders();
+      const { repairOrders: list } = await api.listRepairOrders({ scope: 'today' });
       setRepairOrders(list);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load your repair orders');
@@ -220,7 +216,7 @@ export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorD
   const loadDetail = useCallback(async (roId: string) => {
     setDetailLoading(true);
     try {
-      const { repairOrder } = await api.getAdvisorDashboardRepairOrder(roId);
+      const { repairOrder } = await api.getRepairOrder(roId);
       setDetail(repairOrder);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load repair order');
@@ -276,7 +272,7 @@ export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorD
           </h1>
           <p className="text-xs text-benz-secondary mt-0.5 leading-snug">
             {selectedSummary
-              ? formatVehicle(selectedSummary.vehicle)
+              ? formatVehicle(selectedSummary)
               : `Welcome, ${session.name} — capture sold metrics in seconds`}
           </p>
         </div>
@@ -311,11 +307,10 @@ export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorD
                 Sold metrics
               </div>
               <p className="text-xs text-benz-secondary leading-relaxed">
-                Enter what was sold on each line. This feeds approval rate, average RO value, and
-                revenue reporting for your advisor profile.
+                Saved directly to each repair line — visible to technicians and managers on this RO.
               </p>
             </div>
-            {detail.lines.map((line) => (
+            {detail.repairLines.map((line) => (
               <SoldMetricsForm
                 key={line.id}
                 roId={detail.id}
@@ -328,7 +323,7 @@ export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorD
                     prev
                       ? {
                           ...prev,
-                          lines: prev.lines.map((item) =>
+                          repairLines: prev.repairLines.map((item) =>
                             item.id === line.id ? { ...item, soldMetrics } : item
                           ),
                         }
@@ -347,22 +342,29 @@ export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorD
         />
       ) : (
         <div className="space-y-2.5">
-          {repairOrders.map((ro) => (
-            <button
-              key={ro.id}
-              onClick={() => setSelectedRoId(ro.id)}
-              className="benz-settings-nav"
-            >
-              <div className="min-w-0 text-left flex-1">
-                <div className="font-semibold text-sm truncate">RO {ro.roNumber}</div>
-                <div className="text-xs text-benz-secondary mt-1">{formatVehicle(ro.vehicle)}</div>
-                <div className="text-xs text-benz-muted">
-                  {ro.lineCount} line{ro.lineCount === 1 ? '' : 's'} · {ro.metricsCaptured} captured
+          {repairOrders.map((ro) => {
+            const metricsCaptured = ro.repairLines.filter((line) =>
+              hasSoldMetrics(line.soldMetrics)
+            ).length;
+
+            return (
+              <button
+                key={ro.id}
+                onClick={() => setSelectedRoId(ro.id)}
+                className="benz-settings-nav"
+              >
+                <div className="min-w-0 text-left flex-1">
+                  <div className="font-semibold text-sm truncate">RO {ro.roNumber}</div>
+                  <div className="text-xs text-benz-secondary mt-1">{formatVehicle(ro)}</div>
+                  <div className="text-xs text-benz-muted">
+                    {ro.repairLines.length} line{ro.repairLines.length === 1 ? '' : 's'} ·{' '}
+                    {metricsCaptured} captured
+                  </div>
                 </div>
-              </div>
-              <ChevronRight size={18} className="text-benz-secondary shrink-0" />
-            </button>
-          ))}
+                <ChevronRight size={18} className="text-benz-secondary shrink-0" />
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

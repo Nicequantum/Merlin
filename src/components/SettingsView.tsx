@@ -27,9 +27,17 @@ interface SettingsViewProps {
   onLogout: () => Promise<void>;
   onOpenAuditLogs?: () => void;
   onOpenServiceAdvisors?: () => void;
+  onOpenTechnicians?: () => void;
 }
 
-export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpenServiceAdvisors }: SettingsViewProps) {
+export function SettingsView({
+  session,
+  onBack,
+  onLogout,
+  onOpenAuditLogs,
+  onOpenServiceAdvisors,
+  onOpenTechnicians,
+}: SettingsViewProps) {
   const [users, setUsers] = useState<TechnicianUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -231,6 +239,19 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
             <div>
               <div className="font-semibold text-sm">Service Advisors</div>
               <div className="benz-hint mt-0.5">Advisor Intelligence profiles & complaint patterns</div>
+            </div>
+          </div>
+          <span className="text-benz-blue text-xs font-semibold">Open</span>
+        </button>
+      )}
+
+      {isManager && onOpenTechnicians && (
+        <button onClick={onOpenTechnicians} className="benz-settings-nav mb-4">
+          <div className="flex items-center gap-3">
+            <Users size={18} className="text-benz-blue shrink-0" />
+            <div>
+              <div className="font-semibold text-sm">Technicians</div>
+              <div className="benz-hint mt-0.5">App-start sessions & story workflow logs</div>
             </div>
           </div>
           <span className="text-benz-blue text-xs font-semibold">Open</span>

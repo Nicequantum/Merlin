@@ -12,6 +12,7 @@ import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { logPerformance } from '@/lib/perf';
 import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
+import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 60;
@@ -95,6 +96,22 @@ export async function POST(
         data: {
           warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
           storyQualityAuditEncrypted: '',
+        },
+      });
+
+      void logStoryTechnicianActivity({
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        event: 'story.generate',
+        message: `Generated warranty story for RO ${mapped.roNumber}, line ${line.lineNumber}`,
+        repairOrderId: id,
+        repairLineId: lineId,
+        roNumber: mapped.roNumber,
+        lineNumber: line.lineNumber,
+        metadata: {
+          cdkSanitized,
+          model: pipelineAudit.model,
+          promptChars: pipelineAudit.totalPromptChars,
         },
       });
 

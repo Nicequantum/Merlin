@@ -96,7 +96,7 @@ export interface RepairOrder {
   technicianName?: string;
 }
 
-export type AppView = 'home' | 'ro' | 'line' | 'settings' | 'audit' | 'advisors';
+export type AppView = 'home' | 'ro' | 'line' | 'settings' | 'audit' | 'advisors' | 'technicians';
 
 export type TemplateCategory = 'customer' | 'warranty';
 
@@ -225,6 +225,53 @@ export interface AdvisorDetail {
     complaint: string;
     observedAt: string;
   }>;
+}
+
+export interface TechnicianListItem {
+  id: string;
+  d7Number: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  appStartLogCount: number;
+  storyLogCount: number;
+  lastActivityAt: string | null;
+}
+
+export interface TechnicianAppStartLog {
+  id: string;
+  event: string;
+  message: string;
+  clientSessionId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface TechnicianActivityLogEntry {
+  id: string;
+  category: 'app_start' | 'story';
+  event: string;
+  message: string;
+  repairOrderId: string | null;
+  repairLineId: string | null;
+  clientSessionId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface TechnicianDetail {
+  id: string;
+  d7Number: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  consentAt: string | null;
+  appStartLogCount: number;
+  storyLogCount: number;
+  lastActivityAt: string | null;
+  recentAppStarts: TechnicianAppStartLog[];
 }
 
 export interface StructuredROExtraction {

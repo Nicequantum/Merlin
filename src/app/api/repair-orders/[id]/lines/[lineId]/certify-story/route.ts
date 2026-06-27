@@ -8,6 +8,7 @@ import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { PROMPT_VERSION } from '@/prompts/version';
+import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { parseRequestBody, certifyStorySchema } from '@/lib/validation';
 
 export async function POST(
@@ -89,6 +90,21 @@ export async function POST(
           promptVersion: PROMPT_VERSION,
         },
         ipAddress: getRequestIp(request),
+      });
+
+      void logStoryTechnicianActivity({
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        event: 'story.certify',
+        message: `Certified warranty story for RO ${mapped.roNumber}, line ${line.lineNumber}`,
+        repairOrderId: id,
+        repairLineId: lineId,
+        roNumber: mapped.roNumber,
+        lineNumber: line.lineNumber,
+        metadata: {
+          certifiedAt: certifiedAt.toISOString(),
+          promptVersion: PROMPT_VERSION,
+        },
       });
 
       return { warrantyStory, certifiedAt: certifiedAt.toISOString(), certifiedByName };

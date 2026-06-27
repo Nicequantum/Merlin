@@ -114,9 +114,10 @@ model Technician {
   deletedAt      DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-  repairOrders   RepairOrder[]
-  auditLogs      AuditLog[]
-  usageLogs      UsageLog[]
+  repairOrders         RepairOrder[]
+  auditLogs            AuditLog[]
+  usageLogs            UsageLog[]
+  technicianActivityLogs TechnicianActivityLog[]
 
   @@index([dealershipId])
   @@index([isActive])
@@ -323,6 +324,27 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@index([dealershipId, createdAt])
+}
+
+/** Operational technician activity — isolated from compliance AuditLog and advisor intelligence. */
+model TechnicianActivityLog {
+  id              String   @id @default(cuid())
+  dealershipId    String
+  technicianId    String
+  technician      Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  category        String
+  event           String
+  message         String
+  repairOrderId   String?
+  repairLineId    String?
+  clientSessionId String?
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now())
+
+  @@index([technicianId, createdAt])
+  @@index([dealershipId, category, createdAt])
+  @@index([repairLineId, createdAt])
+  @@index([clientSessionId, createdAt])
 }
 
 model UsageLog {

@@ -11,6 +11,9 @@ import type {
   StoryReviewResult,
   StoryTemplate,
   StructuredROExtraction,
+  TechnicianActivityLogEntry,
+  TechnicianDetail,
+  TechnicianListItem,
   TechnicianSession,
   TemplateCategory,
   ExtractedData,
@@ -195,6 +198,34 @@ export const api = {
   listAdvisors: () => apiFetch<{ advisors: AdvisorListItem[] }>('/api/advisors'),
 
   getAdvisor: (id: string) => apiFetch<{ advisor: AdvisorDetail }>(`/api/advisors/${id}`),
+
+  listTechnicians: () => apiFetch<{ technicians: TechnicianListItem[] }>('/api/technicians'),
+
+  getTechnician: (id: string) => apiFetch<{ technician: TechnicianDetail }>(`/api/technicians/${id}`),
+
+  listTechnicianLogs: (id: string, params?: { category?: 'app_start' | 'story'; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.category) search.set('category', params.category);
+    if (params?.limit) search.set('limit', String(params.limit));
+    const qs = search.toString();
+    return apiFetch<{ logs: TechnicianActivityLogEntry[] }>(
+      `/api/technicians/${id}/logs${qs ? `?${qs}` : ''}`
+    );
+  },
+
+  recordTechnicianAppStart: (payload: {
+    clientSessionId: string;
+    metadata?: {
+      role?: string;
+      todayRoCount?: number;
+      previousRoCount?: number;
+      appVersion?: string;
+    };
+  }) =>
+    apiFetch<{ ok: boolean }>('/api/technician-logs', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   getAdvisorIntelligenceSummary: () =>
     apiFetch<{

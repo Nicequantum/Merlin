@@ -19,6 +19,7 @@ import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useSession } from '@/hooks/useSession';
 import { acceptLegalDisclaimer, hasAcceptedLegalDisclaimer } from '@/lib/legalDisclaimer';
+import { recordTechnicianAppStart } from '@/lib/recordTechnicianAppStart';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -39,6 +40,11 @@ const AuditLogView = dynamic(
 const ServiceAdvisorsView = dynamic(
   () => import('@/components/ServiceAdvisorsView').then((m) => m.ServiceAdvisorsView),
   { loading: () => <LoadingScreen label="Loading service advisors" /> }
+);
+
+const TechniciansView = dynamic(
+  () => import('@/components/TechniciansView').then((m) => m.TechniciansView),
+  { loading: () => <LoadingScreen label="Loading technicians" /> }
 );
 
 const LineView = dynamic(
@@ -73,6 +79,15 @@ export function BenzTechApp() {
     }
     setLegalDisclaimerAccepted(hasAcceptedLegalDisclaimer(session.technicianId));
   }, [session?.technicianId]);
+
+  useEffect(() => {
+    if (!session || ro.loading || ro.listError) return;
+    void recordTechnicianAppStart({
+      role: session.role,
+      todayRoCount: ro.todayROs.length,
+      previousRoCount: ro.previousROs.length,
+    });
+  }, [session, ro.loading, ro.listError, ro.todayROs.length, ro.previousROs.length]);
 
   if (sessionLoading) {
     return <LoadingScreen label="Starting Merlin" sublabel="Verifying your session..." />;
@@ -163,7 +178,11 @@ export function BenzTechApp() {
         message={openingRoNumber ? `Loading ${openingRoNumber}…` : 'Loading repair order…'}
       />
 
-      {ro.view !== 'home' && ro.view !== 'settings' && ro.view !== 'audit' && ro.view !== 'advisors' && (
+      {ro.view !== 'home' &&
+        ro.view !== 'settings' &&
+        ro.view !== 'audit' &&
+        ro.view !== 'advisors' &&
+        ro.view !== 'technicians' && (
         <AppHeader technicianName={session.name} onOpenSettings={goToSettings} />
       )}
 
@@ -178,6 +197,7 @@ export function BenzTechApp() {
           onOpenSettings={goToSettings}
           onOpenAuditLogs={() => ro.setView('audit')}
           onOpenServiceAdvisors={() => ro.setView('advisors')}
+          onOpenTechnicians={() => ro.setView('technicians')}
           pendingROImages={ro.pendingROImages}
           onScanRO={ro.scanRO}
           onAddFromGallery={ro.addScanPagesFromGallery}
@@ -320,6 +340,7 @@ export function BenzTechApp() {
           onLogout={logout}
           onOpenAuditLogs={isManager ? () => ro.setView('audit') : undefined}
           onOpenServiceAdvisors={isManager ? () => ro.setView('advisors') : undefined}
+          onOpenTechnicians={isManager ? () => ro.setView('technicians') : undefined}
         />
       )}
 
@@ -332,6 +353,12 @@ export function BenzTechApp() {
       {ro.view === 'advisors' && isManager && (
         <ViewErrorBoundary viewName="service advisors">
           <ServiceAdvisorsView onBack={() => ro.setView('home')} />
+        </ViewErrorBoundary>
+      )}
+
+      {ro.view === 'technicians' && isManager && (
+        <ViewErrorBoundary viewName="technicians">
+          <TechniciansView onBack={() => ro.setView('home')} />
         </ViewErrorBoundary>
       )}
 

@@ -188,6 +188,23 @@ export const pdfExportAuditSchema = z.object({
   durationMs: z.number().int().min(0).max(600_000).optional(),
 });
 
+export const technicianAppStartLogSchema = z.object({
+  clientSessionId: z.string().min(8).max(64),
+  metadata: z
+    .object({
+      role: z.enum(['technician', 'manager']).optional(),
+      todayRoCount: z.number().int().min(0).max(10_000).optional(),
+      previousRoCount: z.number().int().min(0).max(10_000).optional(),
+      appVersion: z.string().max(32).optional(),
+    })
+    .optional(),
+});
+
+export const technicianLogQuerySchema = z.object({
+  category: z.enum(['app_start', 'story']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
+
 export const auditLogQuerySchema = z.object({
   technicianId: safeIdOptional(64),
   action: safeIdOptional(64),

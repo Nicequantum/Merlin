@@ -29,6 +29,7 @@ interface ManagerDashboardProps {
   onOpenSettings: () => void;
   onOpenAuditLogs: () => void;
   onOpenServiceAdvisors: () => void;
+  onOpenTechnicians: () => void;
   pendingROImages: PendingImage[];
   onScanRO: () => void;
   onAddFromGallery: () => void;
@@ -73,6 +74,7 @@ export function ManagerDashboard({
   onOpenSettings,
   onOpenAuditLogs,
   onOpenServiceAdvisors,
+  onOpenTechnicians,
   pendingROImages,
   onScanRO,
   onAddFromGallery,
@@ -179,6 +181,12 @@ export function ManagerDashboard({
                   className="secondary-btn w-full h-11 text-xs font-semibold flex items-center justify-center gap-2"
                 >
                   <UserRound size={14} /> Advisors
+                </button>
+                <button
+                  onClick={onOpenTechnicians}
+                  className="secondary-btn w-full h-11 text-xs font-semibold flex items-center justify-center gap-2"
+                >
+                  <Users size={14} /> Technicians
                 </button>
                 <button
                   onClick={onOpenAuditLogs}

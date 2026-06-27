@@ -9,6 +9,7 @@ import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
+import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { parseRequestBody, reviewStorySchema } from '@/lib/validation';
 
 /** Must match STORY_REVIEW_ROUTE_MAX_DURATION_S in @/lib/timeouts */
@@ -85,6 +86,22 @@ export async function POST(
       await prisma.repairLine.update({
         where: { id: lineId },
         data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
+      });
+
+      void logStoryTechnicianActivity({
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        event: 'story.review',
+        message: `Reviewed warranty story for RO ${mapped.roNumber}, line ${line.lineNumber}`,
+        repairOrderId: id,
+        repairLineId: lineId,
+        roNumber: mapped.roNumber,
+        lineNumber: line.lineNumber,
+        metadata: {
+          qualityScore: quality.score,
+          qualityGrade: quality.grade,
+          promptVersion: PROMPT_VERSION,
+        },
       });
 
       return { review: quality };

@@ -6,5 +6,5 @@ export {
   MERLIN_LOGO_PALETTE,
   MERLIN_LOGO_VIEWBOX,
 } from './palette';
-export { MERCEDES_STAR_ARM, MERCEDES_STAR_SHINE } from './paths';
+export { MERCEDES_STAR_ARM, MERCEDES_STAR_ROTATIONS } from './paths';
 export { renderMerlinLogoStaticSvg } from './renderStaticSvg';

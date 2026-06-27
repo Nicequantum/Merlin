@@ -1,32 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <defs>
-    <linearGradient id="mb-ring" x1="18%" y1="12%" x2="82%" y2="88%">
-      <stop offset="0%" stop-color="#f2f4f7"/>
-      <stop offset="35%" stop-color="#b4bcc6"/>
-      <stop offset="100%" stop-color="#5c656f"/>
-    </linearGradient>
-    <linearGradient id="mb-star" x1="30%" y1="8%" x2="70%" y2="92%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="40%" stop-color="#c5ced8"/>
-      <stop offset="100%" stop-color="#6d7783"/>
-    </linearGradient>
-    <linearGradient id="mb-shine" x1="42%" y1="0%" x2="58%" y2="45%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <filter id="mb-depth" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000000" flood-opacity="0.45"/>
-    </filter>
-  </defs>
-
   <rect width="1024" height="1024" fill="#000000"/>
-  <circle cx="512" cy="512" r="400" fill="none" stroke="url(#mb-ring)" stroke-width="26"/>
-  <circle cx="512" cy="512" r="388.3" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
-
-  <g filter="url(#mb-depth)">
-    <path fill="url(#mb-star)" d="M 512 255 L 598 448 L 512 412 L 426 448 Z" transform="rotate(0 512 512)"/>
-    <path fill="url(#mb-star)" d="M 512 255 L 598 448 L 512 412 L 426 448 Z" transform="rotate(120 512 512)"/>
-    <path fill="url(#mb-star)" d="M 512 255 L 598 448 L 512 412 L 426 448 Z" transform="rotate(240 512 512)"/>
-    <path fill="url(#mb-shine)" d="M 512 255 L 552 390 L 512 370 L 472 390 Z" opacity="0.55" transform="rotate(0 512 512)"/>
-  </g>
+  <circle cx="512" cy="512" r="392" fill="none" stroke="#c4c9d0" stroke-width="20"/>
+  <path fill="#d8dde3" d="M 512 198 L 538 496 L 512 512 L 486 496 Z" transform="rotate(0 512 512)"/>
+  <path fill="#d8dde3" d="M 512 198 L 538 496 L 512 512 L 486 496 Z" transform="rotate(120 512 512)"/>
+  <path fill="#d8dde3" d="M 512 198 L 538 496 L 512 512 L 486 496 Z" transform="rotate(240 512 512)"/>
 </svg>

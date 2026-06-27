@@ -1,4 +1,7 @@
-/** Classic Mercedes-Benz three-pointed star arm (points up; rotate 120° for full star). */
-export const MERCEDES_STAR_ARM = 'M 512 255 L 598 448 L 512 412 L 426 448 Z';
+/**
+ * Classic Mercedes-Benz three-pointed star (1024×1024 viewBox).
+ * Each arm: sharp tip, straight edges converging to center — rotate 120° for full star.
+ */
+export const MERCEDES_STAR_ARM = 'M 512 198 L 538 496 L 512 512 L 486 496 Z';
 
-export const MERCEDES_STAR_SHINE = 'M 512 255 L 552 390 L 512 370 L 472 390 Z';
+export const MERCEDES_STAR_ROTATIONS = [0, 120, 240] as const;

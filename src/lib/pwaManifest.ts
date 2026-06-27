@@ -10,8 +10,8 @@ export function getPwaManifest(): MetadataRoute.Manifest {
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
-    theme_color: '#08080a',
-    background_color: '#08080a',
+    theme_color: '#000000',
+    background_color: '#000000',
     lang: 'en',
     icons: [
       {

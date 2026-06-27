@@ -17,7 +17,7 @@ interface MerlinLogoMarkProps {
   animated?: boolean;
 }
 
-/** Framed Mercedes star — consistent chrome ring + bubble depth across the app. */
+/** Framed Mercedes-Benz emblem — silver star in circle across the app. */
 export function MerlinLogoMark({ size = 'md', className, title, animated }: MerlinLogoMarkProps) {
   return (
     <div

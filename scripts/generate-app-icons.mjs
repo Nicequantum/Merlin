@@ -29,7 +29,7 @@ function svgDensityForSize(size) {
 async function writePng(size, filename) {
   const out = join(publicDir, filename);
   await sharp(svg(), { density: svgDensityForSize(size) })
-    .resize(size, size, { fit: 'contain', background: { r: 8, g: 8, b: 10, alpha: 1 } })
+    .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 1 } })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toFile(out);
   console.log(`  ${filename} (${size}×${size})`);
@@ -50,7 +50,7 @@ async function writeMaskablePng(size, filename) {
       width: size,
       height: size,
       channels: 4,
-      background: { r: 8, g: 8, b: 10, alpha: 1 },
+      background: { r: 0, g: 0, b: 0, alpha: 1 },
     },
   })
     .composite([{ input: logo, left: offset, top: offset }])
@@ -64,7 +64,7 @@ async function writeFavicon() {
   const buffers = await Promise.all(
     sizes.map((size) =>
       sharp(svg(), { density: 128 })
-        .resize(size, size, { fit: 'contain', background: { r: 8, g: 8, b: 10, alpha: 1 } })
+        .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 1 } })
         .png()
         .toBuffer()
     )

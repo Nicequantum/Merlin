@@ -49,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <head>
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+        <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" sizes="180x180" />
         <link rel="apple-touch-icon" href="/apple-touch-icon-167.png" sizes="167x167" />
         <link rel="apple-touch-icon" href="/apple-touch-icon-152.png" sizes="152x152" />
         <link rel="apple-touch-icon" href="/apple-touch-icon-120.png" sizes="120x120" />

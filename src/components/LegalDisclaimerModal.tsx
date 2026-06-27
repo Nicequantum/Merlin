@@ -5,10 +5,11 @@ import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 import { LEGAL_DISCLAIMER_VERSION } from '@/types';
 
 interface LegalDisclaimerModalProps {
-  onAccept: () => void;
+  onAccept: () => void | Promise<void>;
+  loading?: boolean;
 }
 
-export function LegalDisclaimerModal({ onAccept }: LegalDisclaimerModalProps) {
+export function LegalDisclaimerModal({ onAccept, loading }: LegalDisclaimerModalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -100,8 +101,8 @@ export function LegalDisclaimerModal({ onAccept }: LegalDisclaimerModalProps) {
           </p>
 
           <p className="text-xs text-benz-secondary pb-4">
-            This acknowledgment is recorded locally on your device (version {LEGAL_DISCLAIMER_VERSION}) and is required
-            once per technician account. If you do not agree, close this application and do not use Merlin.
+            This acknowledgment is saved to your technician profile (version {LEGAL_DISCLAIMER_VERSION}) and is
+            required once per account. If you do not agree, close this application and do not use Merlin.
           </p>
         </div>
 
@@ -126,11 +127,11 @@ export function LegalDisclaimerModal({ onAccept }: LegalDisclaimerModalProps) {
 
           <button
             type="button"
-            onClick={onAccept}
-            disabled={!canAccept}
+            onClick={() => void onAccept()}
+            disabled={!canAccept || loading}
             className="primary-btn w-full h-12 text-sm font-semibold touch-target disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            I Accept
+            {loading ? 'Saving…' : 'I Accept'}
           </button>
         </div>
       </div>

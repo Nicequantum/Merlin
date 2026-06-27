@@ -301,6 +301,7 @@ export interface TechnicianSession {
   dealershipId: string;
   dealershipName: string;
   consentAt: string | null;
+  legalDisclaimerAt: string | null;
 }
 
 export interface TechnicianUsageSummary {

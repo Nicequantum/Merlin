@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
 import type { TechnicianSession } from '@/types';
 
 export function useSession() {
@@ -42,5 +43,14 @@ export function useSession() {
     setSession((prev) => (prev ? { ...prev, consentAt } : prev));
   }, []);
 
-  return { session, loading, login, logout, acceptConsent, refresh };
+  const acceptLegalDisclaimer = useCallback(async () => {
+    const { legalDisclaimerAt } = await api.acceptLegalDisclaimer();
+    setSession((prev) => {
+      if (!prev) return prev;
+      cacheLegalDisclaimerLocally(prev.technicianId);
+      return { ...prev, legalDisclaimerAt };
+    });
+  }, []);
+
+  return { session, loading, login, logout, acceptConsent, acceptLegalDisclaimer, refresh };
 }

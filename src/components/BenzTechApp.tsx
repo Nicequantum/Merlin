@@ -18,11 +18,7 @@ import { ViewErrorBoundary } from '@/components/ViewErrorBoundary';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useSession } from '@/hooks/useSession';
-import {
-  acceptLegalDisclaimer,
-  hasAcceptedLegalDisclaimer,
-  persistLegalDisclaimerAcceptance,
-} from '@/lib/legalDisclaimer';
+
 import { recordTechnicianAppStart } from '@/lib/recordTechnicianAppStart';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -64,7 +60,8 @@ function runAction(label: string, action: () => void | Promise<void>): void {
 }
 
 export function BenzTechApp() {
-  const { session, loading: sessionLoading, login, logout, acceptConsent } = useSession();
+  const { session, loading: sessionLoading, login, logout, acceptConsent, acceptLegalDisclaimer } =
+    useSession();
   const ocr = useOcrProgress();
   const ro = useRepairOrders({
     session,
@@ -74,15 +71,7 @@ export function BenzTechApp() {
     setScanStatusMessage: ocr.setScanStatusMessage,
   });
   const [consentLoading, setConsentLoading] = useState(false);
-  const [legalDisclaimerAccepted, setLegalDisclaimerAccepted] = useState(false);
-
-  useEffect(() => {
-    if (!session?.technicianId) {
-      setLegalDisclaimerAccepted(false);
-      return;
-    }
-    setLegalDisclaimerAccepted(hasAcceptedLegalDisclaimer(session.technicianId));
-  }, [session?.technicianId]);
+  const [legalDisclaimerLoading, setLegalDisclaimerLoading] = useState(false);
 
   useEffect(() => {
     if (!session || ro.loading || ro.listError) return;
@@ -120,15 +109,22 @@ export function BenzTechApp() {
     );
   }
 
-  if (!legalDisclaimerAccepted) {
+  if (!session.legalDisclaimerAt) {
     return (
       <LegalDisclaimerModal
-        onAccept={() => {
-          acceptLegalDisclaimer(session.technicianId);
-          setLegalDisclaimerAccepted(true);
-          void persistLegalDisclaimerAcceptance().catch((error: unknown) => {
-            console.error('[Merlin] Legal disclaimer persistence failed', error);
-          });
+        loading={legalDisclaimerLoading}
+        onAccept={async () => {
+          setLegalDisclaimerLoading(true);
+          try {
+            await acceptLegalDisclaimer();
+          } catch (error: unknown) {
+            console.error('[Merlin] Legal disclaimer acceptance failed', error);
+            toast.error(
+              error instanceof Error ? error.message : 'Could not save legal acknowledgment — try again'
+            );
+          } finally {
+            setLegalDisclaimerLoading(false);
+          }
         }}
       />
     );

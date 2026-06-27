@@ -22,6 +22,7 @@ export interface SessionPayload {
   dealershipId: string;
   dealershipName: string;
   consentAt: string | null;
+  legalDisclaimerAt: string | null;
   sessionVersion: number;
 }
 
@@ -120,6 +121,7 @@ async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<Sess
     dealershipId: tech.dealershipId,
     dealershipName: tech.dealership.name,
     consentAt: tech.consentAt?.toISOString() ?? null,
+    legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
     sessionVersion: tech.sessionVersion,
   };
 }
@@ -191,6 +193,7 @@ export async function loginTechnician(d7Number: string, password: string): Promi
     dealershipId: tech.dealershipId,
     dealershipName: tech.dealership.name,
     consentAt: tech.consentAt?.toISOString() ?? null,
+    legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
     sessionVersion: tech.sessionVersion,
   };
 }

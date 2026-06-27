@@ -177,16 +177,30 @@ export interface SaveTemplateFromStoryPayload {
   lineId?: string;
 }
 
+export interface AdvisorPerformanceMetrics {
+  rosWritten: number;
+  approvalRate: number | null;
+  closingRatio: number | null;
+  avgRepairOrderValue: number | null;
+  totalRevenue: number | null;
+  upsellRate: number | null;
+  csiScore: number | null;
+}
+
 export interface AdvisorListItem {
   id: string;
   displayName: string;
+  advisorCode: string | null;
+  status: 'active' | 'inactive';
   roCount: number;
   firstSeenAt: string;
   lastSeenAt: string;
+  createdAt: string;
   observationCount: number;
   profileUpdatedAt: string | null;
   typicallyAllCaps: boolean;
   commonPhraseCount: number;
+  metrics: AdvisorPerformanceMetrics;
 }
 
 export interface AdvisorProfileData {
@@ -207,9 +221,13 @@ export interface AdvisorProfileData {
 export interface AdvisorDetail {
   id: string;
   displayName: string;
+  advisorCode: string | null;
+  status: 'active' | 'inactive';
   roCount: number;
   firstSeenAt: string;
   lastSeenAt: string;
+  createdAt: string;
+  metrics: AdvisorPerformanceMetrics;
   profile: {
     observationCount: number;
     profileVersion: number;
@@ -408,6 +426,10 @@ export const AUDIT_ACTIONS = [
   'image.upload',
   'advisor.resolve',
   'advisor.capture',
+  'advisor.create',
+  'advisor.deactivate',
+  'advisor.reactivate',
+  'advisor.delete',
   'template.save',
   'customerPayTemplateApplied',
   'customerPayStory.edit',

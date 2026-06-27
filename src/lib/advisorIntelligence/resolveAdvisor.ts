@@ -79,7 +79,7 @@ export async function resolveServiceAdvisor(
     },
   });
 
-  if (byFingerprint && byFingerprint.status === 'active') {
+  if (byFingerprint && byFingerprint.status === 'active' && !byFingerprint.deletedAt) {
     if (displayName && displayName !== byFingerprint.displayName) {
       await recordAlias(client, byFingerprint.id, displayName, nameFingerprint);
     }
@@ -105,7 +105,7 @@ export async function resolveServiceAdvisor(
   const aliasHit = await client.serviceAdvisorAlias.findFirst({
     where: {
       aliasFingerprint: nameFingerprint,
-      serviceAdvisor: { dealershipId, status: 'active' },
+      serviceAdvisor: { dealershipId, status: 'active', deletedAt: null },
     },
     include: { serviceAdvisor: true },
   });

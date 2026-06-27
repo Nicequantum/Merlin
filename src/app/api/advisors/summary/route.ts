@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
       const [advisorCount, observationCount, profileCount, linkedRos, recentAdvisors, recentCaptures] =
         await Promise.all([
-          prisma.serviceAdvisor.count({ where: { dealershipId, status: 'active' } }),
+          prisma.serviceAdvisor.count({ where: { dealershipId, status: 'active', deletedAt: null } }),
           prisma.advisorComplaintObservation.count({ where: { dealershipId } }),
           prisma.advisorWritingProfile.count({
             where: { serviceAdvisor: { dealershipId } },
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
             where: { dealershipId, serviceAdvisorId: { not: null } },
           }),
           prisma.serviceAdvisor.findMany({
-            where: { dealershipId, status: 'active' },
+            where: { dealershipId, status: 'active', deletedAt: null },
             orderBy: { lastSeenAt: 'desc' },
             take: 8,
             select: {

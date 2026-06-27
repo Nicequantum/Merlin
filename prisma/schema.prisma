@@ -180,8 +180,13 @@ model ServiceAdvisor {
   advisorCode     String?
   status          String   @default("active")
   mergedIntoId    String?
+  /** Soft delete — historical ROs, observations, and audit data are preserved. */
+  deletedAt       DateTime?
+  /** Optional dealership CSI score when survey data is available. */
+  csiScore        Float?
   firstSeenAt     DateTime @default(now())
   lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
   roCount         Int      @default(0)
   aliases         ServiceAdvisorAlias[]
   observations    AdvisorComplaintObservation[]
@@ -190,6 +195,8 @@ model ServiceAdvisor {
 
   @@unique([dealershipId, nameFingerprint])
   @@index([dealershipId, lastSeenAt])
+  @@index([dealershipId, status])
+  @@index([dealershipId, deletedAt])
 }
 
 model ServiceAdvisorAlias {

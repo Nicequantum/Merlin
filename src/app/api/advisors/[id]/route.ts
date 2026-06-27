@@ -1,8 +1,13 @@
+import { writeAuditLog } from '@/lib/audit';
+import { mapAdvisorListItem, parseAdvisorProfileData } from '@/lib/advisorApiMappers';
+import { computeAdvisorMetricsBatch } from '@/lib/advisorMetrics';
 import { withAuth } from '@/lib/apiRoute';
-import type { AdvisorProfileData } from '@/lib/advisorIntelligence';
 import { prisma } from '@/lib/db';
 import { decryptPII } from '@/lib/encryption';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
+import { getRequestIp } from '@/lib/rate-limit';
+import { isServiceAdvisorActive } from '@/lib/serviceAdvisorAccounts';
+import { parseRequestBody, updateAdvisorSchema } from '@/lib/validation';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     request,
     async (session) => {
       const advisor = await prisma.serviceAdvisor.findFirst({
-        where: { id, dealershipId: session.dealershipId, status: 'active' },
+        where: { id, dealershipId: session.dealershipId, deletedAt: null },
         include: {
           profile: true,
           observations: {
@@ -25,7 +30,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
               vehicleModel: true,
               observedAt: true,
               complaintTextEncrypted: true,
-              // S2 PLAINTEXT READ: RepairOrder.roNumber for observation context until Phase 3.
               repairOrder: { select: { roNumber: true } },
             },
           },
@@ -36,23 +40,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      let profileData: AdvisorProfileData | null = null;
-      if (advisor.profile?.profileData) {
-        try {
-          profileData = JSON.parse(advisor.profile.profileData) as AdvisorProfileData;
-        } catch {
-          profileData = null;
-        }
-      }
+      const metricsById = await computeAdvisorMetricsBatch(
+        session.dealershipId,
+        [advisor.id],
+        new Map([[advisor.id, advisor.csiScore ?? null]])
+      );
+      const profileData = parseAdvisorProfileData(advisor.profile?.profileData);
 
       return {
         advisor: {
           id: advisor.id,
-          // S2 PLAINTEXT READ: ServiceAdvisor.displayName until Phase 3 encrypted read cutover.
           displayName: advisor.displayName,
+          advisorCode: advisor.advisorCode,
+          status: advisor.status as 'active' | 'inactive',
           roCount: advisor.roCount,
           firstSeenAt: advisor.firstSeenAt.toISOString(),
           lastSeenAt: advisor.lastSeenAt.toISOString(),
+          createdAt: advisor.createdAt.toISOString(),
+          metrics: metricsById.get(advisor.id)!,
           profile: advisor.profile
             ? {
                 observationCount: advisor.profile.observationCount,
@@ -64,7 +69,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           recentObservations: advisor.observations.map((obs) => ({
             id: obs.id,
             lineLabel: obs.lineLabel,
-            // S2 PLAINTEXT READ: denormalized RO number for advisor observation list.
             roNumber: obs.repairOrder.roNumber,
             vehicleFamily: obs.vehicleFamily,
             vehicle: [obs.vehicleMake, obs.vehicleModel].filter(Boolean).join(' '),
@@ -75,5 +79,115 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       };
     },
     { rateLimitKey: 'advisors.get', requireManager: true }
+  );
+}
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  return withAuth(
+    request,
+    async (session) => {
+      const parsed = await parseRequestBody(request, updateAdvisorSchema);
+      if ('error' in parsed) return parsed.error;
+
+      const advisor = await prisma.serviceAdvisor.findFirst({
+        where: { id, dealershipId: session.dealershipId, deletedAt: null },
+      });
+
+      if (!advisor) {
+        return apiError(NOT_FOUND_ERROR, 404);
+      }
+
+      const updated = await prisma.serviceAdvisor.update({
+        where: { id },
+        data: {
+          status: parsed.data.status,
+          ...(parsed.data.csiScore !== undefined ? { csiScore: parsed.data.csiScore } : {}),
+        },
+        include: {
+          profile: {
+            select: {
+              observationCount: true,
+              lastComputedAt: true,
+              profileData: true,
+            },
+          },
+        },
+      });
+
+      await writeAuditLog({
+        action: parsed.data.status === 'active' ? 'advisor.reactivate' : 'advisor.deactivate',
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        entityType: 'service_advisor',
+        entityId: updated.id,
+        metadata: {
+          displayName: updated.displayName,
+          status: updated.status,
+          csiScore: updated.csiScore,
+        },
+        ipAddress: getRequestIp(request),
+      });
+
+      const metricsById = await computeAdvisorMetricsBatch(
+        session.dealershipId,
+        [updated.id],
+        new Map([[updated.id, updated.csiScore ?? null]])
+      );
+
+      return {
+        advisor: mapAdvisorListItem(updated, metricsById.get(updated.id)!),
+      };
+    },
+    { rateLimitKey: 'advisors.update', requireManager: true }
+  );
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  return withAuth(
+    request,
+    async (session) => {
+      const advisor = await prisma.serviceAdvisor.findFirst({
+        where: { id, dealershipId: session.dealershipId },
+      });
+
+      if (!advisor) {
+        return apiError(NOT_FOUND_ERROR, 404);
+      }
+
+      if (advisor.deletedAt) {
+        return { ok: true };
+      }
+
+      const removedAt = new Date();
+      await prisma.serviceAdvisor.update({
+        where: { id },
+        data: {
+          deletedAt: removedAt,
+          status: 'inactive',
+        },
+      });
+
+      await writeAuditLog({
+        action: 'advisor.delete',
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        entityType: 'service_advisor',
+        entityId: id,
+        metadata: {
+          displayName: advisor.displayName,
+          softDelete: true,
+          deletedAt: removedAt.toISOString(),
+          wasActive: isServiceAdvisorActive(advisor),
+        },
+        ipAddress: getRequestIp(request),
+      });
+
+      return { ok: true };
+    },
+    { rateLimitKey: 'advisors.delete', requireManager: true }
   );
 }

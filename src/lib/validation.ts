@@ -141,6 +141,16 @@ export const updateUserSchema = z.object({
   isActive: z.boolean(),
 });
 
+export const createAdvisorSchema = z.object({
+  displayName: safeText(48),
+  advisorCode: safeTextOptional(16),
+});
+
+export const updateAdvisorSchema = z.object({
+  status: z.enum(['active', 'inactive']),
+  csiScore: z.number().min(0).max(100).nullable().optional(),
+});
+
 export const storyEditSchema = z.object({
   warrantyStory: safeText(5000),
 });

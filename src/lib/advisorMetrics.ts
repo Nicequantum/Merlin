@@ -1,0 +1,200 @@
+import type { AdvisorPerformanceMetrics, StoryQualityResult } from '@/types';
+import { decryptJsonObject } from '@/lib/encryption';
+import { prisma } from '@/lib/db';
+
+/** MI audit scores at or above this threshold count as warranty "approved" quality. */
+export const ADVISOR_APPROVAL_SCORE_THRESHOLD = 75;
+
+const EMPTY_METRICS: AdvisorPerformanceMetrics = {
+  rosWritten: 0,
+  approvalRate: null,
+  closingRatio: null,
+  avgRepairOrderValue: null,
+  totalRevenue: null,
+  upsellRate: null,
+  csiScore: null,
+};
+
+function parseAuditScore(raw: string): number | null {
+  if (!raw.trim()) return null;
+  const parsed = decryptJsonObject<StoryQualityResult | null>(raw, null);
+  return parsed && typeof parsed.score === 'number' ? parsed.score : null;
+}
+
+function roundPercent(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+type AdvisorAccumulator = {
+  rosWritten: number;
+  totalLines: number;
+  customerPayLines: number;
+  auditedLines: number;
+  approvedAudits: number;
+  warrantyLinesWithStory: number;
+  certifiedStories: number;
+  csiScore: number | null;
+};
+
+function createAccumulator(csiScore: number | null = null): AdvisorAccumulator {
+  return {
+    rosWritten: 0,
+    totalLines: 0,
+    customerPayLines: 0,
+    auditedLines: 0,
+    approvedAudits: 0,
+    warrantyLinesWithStory: 0,
+    certifiedStories: 0,
+    csiScore,
+  };
+}
+
+function finalizeMetrics(acc: AdvisorAccumulator): AdvisorPerformanceMetrics {
+  const approvalRate =
+    acc.auditedLines > 0
+      ? roundPercent((acc.approvedAudits / acc.auditedLines) * 100)
+      : null;
+  const closingRatio =
+    acc.warrantyLinesWithStory > 0
+      ? roundPercent((acc.certifiedStories / acc.warrantyLinesWithStory) * 100)
+      : null;
+  const upsellRate =
+    acc.totalLines > 0 ? roundPercent((acc.customerPayLines / acc.totalLines) * 100) : null;
+
+  return {
+    rosWritten: acc.rosWritten,
+    approvalRate,
+    closingRatio,
+    avgRepairOrderValue: null,
+    totalRevenue: null,
+    upsellRate,
+    csiScore: acc.csiScore,
+  };
+}
+
+/** Batch-compute dealership performance metrics for one or more service advisors. */
+export async function computeAdvisorMetricsBatch(
+  dealershipId: string,
+  advisorIds: string[],
+  csiByAdvisorId: Map<string, number | null> = new Map()
+): Promise<Map<string, AdvisorPerformanceMetrics>> {
+  const result = new Map<string, AdvisorPerformanceMetrics>();
+  if (advisorIds.length === 0) return result;
+
+  for (const id of advisorIds) {
+    result.set(id, { ...EMPTY_METRICS, csiScore: csiByAdvisorId.get(id) ?? null });
+  }
+
+  const repairOrders = await prisma.repairOrder.findMany({
+    where: {
+      dealershipId,
+      serviceAdvisorId: { in: advisorIds },
+    },
+    select: {
+      id: true,
+      serviceAdvisorId: true,
+      repairLines: {
+        select: {
+          id: true,
+          isCustomerPay: true,
+          storyQualityAuditEncrypted: true,
+          warrantyStoryEncrypted: true,
+        },
+      },
+    },
+  });
+
+  const accumulators = new Map<string, AdvisorAccumulator>();
+  for (const id of advisorIds) {
+    accumulators.set(id, createAccumulator(csiByAdvisorId.get(id) ?? null));
+  }
+
+  for (const ro of repairOrders) {
+    const advisorId = ro.serviceAdvisorId;
+    if (!advisorId) continue;
+    const acc = accumulators.get(advisorId);
+    if (!acc) continue;
+
+    acc.rosWritten += 1;
+
+    for (const line of ro.repairLines) {
+      acc.totalLines += 1;
+      if (line.isCustomerPay) {
+        acc.customerPayLines += 1;
+        continue;
+      }
+
+      const hasStory = Boolean(line.warrantyStoryEncrypted?.trim());
+      if (hasStory) {
+        acc.warrantyLinesWithStory += 1;
+      }
+
+      const score = parseAuditScore(line.storyQualityAuditEncrypted ?? '');
+      if (score != null) {
+        acc.auditedLines += 1;
+        if (score >= ADVISOR_APPROVAL_SCORE_THRESHOLD) {
+          acc.approvedAudits += 1;
+        }
+      }
+    }
+  }
+
+  const certifiedStories = await prisma.technicianCertifiedStory.findMany({
+    where: { dealershipId },
+    select: { repairOrderId: true },
+  });
+
+  if (certifiedStories.length > 0) {
+    const certifiedRoIds = [...new Set(certifiedStories.map((story) => story.repairOrderId))];
+    const certifiedRos = await prisma.repairOrder.findMany({
+      where: {
+        id: { in: certifiedRoIds },
+        serviceAdvisorId: { in: advisorIds },
+      },
+      select: { id: true, serviceAdvisorId: true },
+    });
+    const advisorByRoId = new Map(
+      certifiedRos.map((ro) => [ro.id, ro.serviceAdvisorId] as const)
+    );
+
+    for (const story of certifiedStories) {
+      const advisorId = advisorByRoId.get(story.repairOrderId);
+      if (!advisorId) continue;
+      const acc = accumulators.get(advisorId);
+      if (acc) acc.certifiedStories += 1;
+    }
+  }
+
+  for (const [id, acc] of accumulators) {
+    result.set(id, finalizeMetrics(acc));
+  }
+
+  return result;
+}
+
+export function formatMetricPercent(value: number | null): string {
+  return value == null ? '—' : `${value}%`;
+}
+
+export function formatMetricCurrency(value: number | null): string {
+  return value == null
+    ? '—'
+    : value.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+}
+
+export function formatMetricNumber(value: number | null): string {
+  return value == null ? '—' : value.toLocaleString();
+}
+
+/** Exported for tests — finalize a single accumulator into API metrics. */
+export function buildAdvisorMetricsFromAccumulator(acc: AdvisorAccumulator): AdvisorPerformanceMetrics {
+  return finalizeMetrics(acc);
+}
+
+export function roundAdvisorCurrency(value: number): number {
+  return roundCurrency(value);
+}

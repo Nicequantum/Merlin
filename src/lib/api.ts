@@ -205,6 +205,24 @@ export const api = {
 
   getAdvisor: (id: string) => apiFetch<{ advisor: AdvisorDetail }>(`/api/advisors/${id}`),
 
+  createAdvisor: (data: { displayName: string; advisorCode?: string }) =>
+    apiFetch<{ advisor: AdvisorListItem }>('/api/advisors', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateAdvisor: (
+    id: string,
+    data: { status: 'active' | 'inactive'; csiScore?: number | null }
+  ) =>
+    apiFetch<{ advisor: AdvisorListItem }>(`/api/advisors/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteAdvisor: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/api/advisors/${id}`, { method: 'DELETE' }),
+
   listTechnicians: () => apiFetch<{ technicians: TechnicianListItem[] }>('/api/technicians'),
 
   getTechnician: (id: string) => apiFetch<{ technician: TechnicianDetail }>(`/api/technicians/${id}`),

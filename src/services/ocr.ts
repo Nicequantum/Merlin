@@ -1,6 +1,13 @@
 import Tesseract from 'tesseract.js';
 
+/** Default per-recognize() ceiling (diagnostics / legacy paths). */
 const OCR_TIMEOUT_MS = 120_000;
+/** Per-pass budget for RO scan — quality-first; technicians can wait during test drives. */
+export const RO_SCAN_PASS_TIMEOUT_MS = 300_000;
+/** High-resolution RO scan frames for accurate VIN / complaint column reads. */
+export const RO_SCAN_MAX_DIM = 2000;
+/** Downscale retry target when a pass hits the timeout on very large photos. */
+const RO_SCAN_RETRY_MAX_DIM = 1600;
 const MAX_DIM_FAST = 1600;
 const MAX_DIM_FULL = 2200;
 const MAX_DIM_SCREENSHOT = 2400;
@@ -67,7 +74,7 @@ export async function shutdownOcrWorker(): Promise<void> {
   workerInitPromise = null;
 }
 
-function loadImage(file: File): Promise<HTMLImageElement> {
+function loadImage(file: File | Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -76,24 +83,28 @@ function loadImage(file: File): Promise<HTMLImageElement> {
   });
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mime: 'image/png' | 'image/jpeg' = 'image/png',
+  quality = 0.92
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('Failed to encode preprocessed image'))),
-      'image/png',
-      0.92
+      mime,
+      quality
     );
   });
 }
 
 /** Faded / yellow paper / shadow-heavy scans — stronger contrast, lower binarization threshold. */
-async function preprocessFaded(file: File): Promise<Blob> {
+async function preprocessFaded(file: File | Blob, maxDim = MAX_DIM_FAST): Promise<Blob> {
   const img = await loadImage(file);
   try {
     let w = img.width;
     let h = img.height;
-    if (Math.max(w, h) > MAX_DIM_FAST) {
-      const scale = MAX_DIM_FAST / Math.max(w, h);
+    if (Math.max(w, h) > maxDim) {
+      const scale = maxDim / Math.max(w, h);
       w = Math.round(w * scale);
       h = Math.round(h * scale);
     }
@@ -131,20 +142,20 @@ async function preprocessFaded(file: File): Promise<Blob> {
     }
 
     ctx.putImageData(imageData, 0, 0);
-    return await canvasToBlob(canvas);
+    return await canvasToBlob(canvas, 'image/png', 0.92);
   } finally {
     URL.revokeObjectURL(img.src);
   }
 }
 
 /** Fast preprocess for shop-floor mobile devices — no multi-angle deskew. */
-async function preprocessFast(file: File): Promise<Blob> {
+async function preprocessFast(file: File | Blob, maxDim = MAX_DIM_FAST): Promise<Blob> {
   const img = await loadImage(file);
   try {
     let w = img.width;
     let h = img.height;
-    if (Math.max(w, h) > MAX_DIM_FAST) {
-      const scale = MAX_DIM_FAST / Math.max(w, h);
+    if (Math.max(w, h) > maxDim) {
+      const scale = maxDim / Math.max(w, h);
       w = Math.round(w * scale);
       h = Math.round(h * scale);
     }
@@ -179,7 +190,7 @@ async function preprocessFast(file: File): Promise<Blob> {
     }
 
     ctx.putImageData(imageData, 0, 0);
-    return await canvasToBlob(canvas);
+    return await canvasToBlob(canvas, 'image/png', 0.92);
   } finally {
     URL.revokeObjectURL(img.src);
   }
@@ -296,11 +307,16 @@ export async function preprocessImageForOCR(
 
 type OcrPageSegMode = '4' | '6' | '11';
 
+export async function warmupOcrWorker(): Promise<void> {
+  await getSharedWorker();
+}
+
 export async function runOCR(
   imageSource: Blob | File,
   onProgress?: (p: number) => void,
   pageSegMode: OcrPageSegMode = '6',
-  relaxedChars = false
+  relaxedChars = false,
+  timeoutMs = OCR_TIMEOUT_MS
 ): Promise<string> {
   return withOcrLock(async () => {
     const localProgress = onProgress ?? null;
@@ -324,7 +340,7 @@ export async function runOCR(
     if (localProgress) localProgress(5);
 
     try {
-      const text = await withTimeout(recognize(), OCR_TIMEOUT_MS, 'On-device OCR');
+      const text = await withTimeout(recognize(), timeoutMs, 'On-device OCR');
       if (localProgress) localProgress(100);
       return text;
     } finally {
@@ -336,11 +352,13 @@ export async function runOCR(
 }
 
 const COMPLAINT_LINE_RE = /^#\s*[A-Z]\b/i;
+const PLAIN_LETTER_COMPLAINT_RE = /^[A-Z][\.\)\:\s\-–—]+\s*\S/i;
 
 function isComplaintRelevantOcrLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
   if (COMPLAINT_LINE_RE.test(trimmed)) return true;
+  if (PLAIN_LETTER_COMPLAINT_RE.test(trimmed)) return true;
   if (/^LINE\s+OP/i.test(trimmed)) return true;
   if (/^(?:customer\s+states|cust(?:omer)?\s+states?)/i.test(trimmed)) return true;
   return false;
@@ -392,38 +410,91 @@ export interface MultiPassOcrResult {
   mergedText: string;
 }
 
+function isOcrTimeoutError(error: unknown): boolean {
+  return error instanceof Error && /timed out/i.test(error.message);
+}
+
+async function downscaleImageSource(source: File | Blob, maxDim: number, fileName: string): Promise<File> {
+  const img = await loadImage(source);
+  try {
+    const maxSide = Math.max(img.width, img.height);
+    if (maxSide <= maxDim && source instanceof File) return source;
+
+    const scale = maxDim / Math.max(maxSide, 1);
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return source instanceof File ? source : new File([source], fileName, { type: source.type || 'image/png' });
+
+    ctx.drawImage(img, 0, 0, w, h);
+    const blob = await canvasToBlob(canvas, 'image/png', 0.92);
+    return new File([blob], fileName, { type: 'image/png' });
+  } finally {
+    URL.revokeObjectURL(img.src);
+  }
+}
+
+/** Downscale only extremely large camera photos — preserve detail up to RO_SCAN_MAX_DIM. */
+async function prepareRoScanSource(file: File): Promise<File> {
+  try {
+    return await downscaleImageSource(file, RO_SCAN_MAX_DIM, file.name || 'ro-scan.png');
+  } catch (error) {
+    console.warn('RO scan downscale failed, using original image', error);
+    return file;
+  }
+}
+
+async function runRoScanOcrPass(
+  imageSource: Blob | File,
+  onProgress: ((p: number) => void) | undefined,
+  progressStart: number,
+  progressSpan: number
+): Promise<string> {
+  const report = onProgress
+    ? (p: number) => onProgress(progressStart + Math.round((p / 100) * progressSpan))
+    : undefined;
+
+  try {
+    return await runOCR(imageSource, report, '6', false, RO_SCAN_PASS_TIMEOUT_MS);
+  } catch (error) {
+    if (!isOcrTimeoutError(error)) throw error;
+    const retrySource = await downscaleImageSource(
+      imageSource,
+      RO_SCAN_RETRY_MAX_DIM,
+      imageSource instanceof File ? imageSource.name : 'ro-scan-retry.png'
+    );
+    return await runOCR(retrySource, report, '6', false, RO_SCAN_PASS_TIMEOUT_MS);
+  }
+}
+
 /**
  * Three-pass RO OCR: color → high-contrast B&W → enhanced contrast.
- * Each pass uses different preprocessing to resist glare, faded paper, and OCR hallucinations.
+ * All preprocessing runs in parallel; each pass retries once at lower resolution on timeout.
  */
 export async function runMultiPassOCR(
   file: File,
   onProgress?: (p: number) => void
 ): Promise<MultiPassOcrResult> {
-  const highContrast = await preprocessFast(file);
-  const enhanced = await preprocessFaded(file);
+  const scanSource = await prepareRoScanSource(file);
+  const [highContrast, enhanced] = await Promise.all([
+    preprocessFast(scanSource, RO_SCAN_MAX_DIM),
+    preprocessFaded(scanSource, RO_SCAN_MAX_DIM),
+  ]);
 
-  const pass1 = await runOCR(
-    file,
-    onProgress ? (p) => onProgress(Math.round(p * 0.34)) : undefined,
-    '6'
-  );
-  const pass2 = await runOCR(
-    highContrast,
-    onProgress ? (p) => onProgress(34 + Math.round(p * 0.33)) : undefined,
-    '6'
-  );
-  const pass3 = await runOCR(
-    enhanced,
-    onProgress ? (p) => onProgress(67 + Math.round(p * 0.33)) : undefined,
-    '6'
-  );
+  const pass1 = await runRoScanOcrPass(scanSource, onProgress, 0, 34);
+  const pass2 = await runRoScanOcrPass(highContrast, onProgress, 34, 33);
+  const pass3 = await runRoScanOcrPass(enhanced, onProgress, 67, 33);
 
   const passes: OcrPassResult[] = [
     { mode: 'color', text: pass1 },
     { mode: 'grayscale', text: pass2 },
     { mode: 'enhanced', text: pass3 },
   ];
+
+  if (onProgress) onProgress(100);
 
   return {
     passes,

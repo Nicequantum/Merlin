@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
@@ -87,6 +88,8 @@ export function useRepairOrders({
   const storyReviewInFlightRef = useRef(false);
 
   useEffect(() => {
+    // While a scan is finishing, openScanResultView sets roRef before currentRO commits.
+    if (scanInFlightRef.current) return;
     roRef.current = currentRO;
   }, [currentRO]);
 
@@ -120,11 +123,15 @@ export function useRepairOrders({
   const openScanResultView = useCallback(
     (repairOrder: RepairOrder) => {
       const normalized = ensureComplaintIds(repairOrder);
-      roRef.current = normalized;
-      setCurrentRO(normalized);
-      setView('ro');
+      flushSync(() => {
+        roRef.current = normalized;
+        setAllROs((prev) => [normalized, ...prev.filter((r) => r.id !== normalized.id)]);
+        setCurrentLineId(null);
+        setCurrentRO(normalized);
+        setView('ro');
+      });
     },
-    [roRef]
+    [setAllROs]
   );
 
   const navigateView = useCallback(
@@ -151,9 +158,6 @@ export function useRepairOrders({
     clearPendingScan,
     cancelScan,
   } = useROScan({
-    roRef,
-    setAllROs,
-    setCurrentRO,
     prepareForScan,
     openScanResultView,
     scanInFlightRef,

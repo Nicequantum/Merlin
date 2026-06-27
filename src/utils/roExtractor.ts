@@ -1358,6 +1358,56 @@ export function mergeMultiPassOcrExtractions(
   };
 }
 
+/**
+ * Final merge for RO scan: Grok vision + multi-pass OCR + raw OCR text.
+ * Cross-validates header fields and preserves the strongest complaint recovery.
+ */
+export function mergeScanSources(
+  grok: StructuredROExtraction | null,
+  ocrStructured: StructuredROExtraction | null,
+  ocrRawText: string
+): StructuredROExtraction {
+  const parsedFromRaw = ocrRawText.trim() ? parseStructuredROText(ocrRawText) : null;
+  const ocrCandidates = [ocrStructured, parsedFromRaw].filter(Boolean) as StructuredROExtraction[];
+  const ocrMerged =
+    ocrCandidates.length > 1
+      ? mergeMultiPassOcrExtractions(ocrCandidates, [ocrRawText])
+      : ocrCandidates[0] || null;
+
+  if (!grok && !ocrMerged) {
+    return (
+      parsedFromRaw || {
+        vehicle: { vin: '', year: '', make: '', model: '', engine: '', mileageIn: '', mileageOut: '' },
+        complaints: [],
+        customerName: '',
+        roNumber: '',
+      }
+    );
+  }
+  if (!grok) return ocrMerged!;
+  if (!ocrMerged) return grok;
+
+  const complaintMerged = mergeROExtractions(grok, ocrMerged, ocrRawText);
+  const validated = mergeMultiPassOcrExtractions([grok, ocrMerged], [ocrRawText]);
+
+  return {
+    ...complaintMerged,
+    roNumber: validated.roNumber || complaintMerged.roNumber,
+    customerName: validated.customerName || complaintMerged.customerName,
+    serviceAdvisorName: complaintMerged.serviceAdvisorName || validated.serviceAdvisorName,
+    vehicle: {
+      ...complaintMerged.vehicle,
+      vin: validated.vehicle.vin || complaintMerged.vehicle.vin,
+      mileageIn: validated.vehicle.mileageIn || complaintMerged.vehicle.mileageIn,
+      mileageOut: complaintMerged.vehicle.mileageOut || complaintMerged.vehicle.mileageOut,
+      year: validated.vehicle.year || complaintMerged.vehicle.year,
+      make: validated.vehicle.make || complaintMerged.vehicle.make,
+      model: validated.vehicle.model || complaintMerged.vehicle.model,
+      engine: complaintMerged.vehicle.engine || validated.vehicle.engine,
+    },
+  };
+}
+
 /** Merge Grok vision output with on-device OCR (labels from OCR column, text from best source). */
 export function mergeROExtractions(
   primary: StructuredROExtraction,

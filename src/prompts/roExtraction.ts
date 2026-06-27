@@ -37,6 +37,13 @@ Or the text may appear right after the header words without a visible # A. ALWAY
 
 Each label is: hashtag + space + single capital letter (A, B, C … Z as printed). NO commas between labels.
 
+ALTERNATE FORMAT (also common):
+Some ROs print complaints as plain letters without hashtags:
+    A. Check engine light on
+    B. Wind noise from sunroof
+    A RHODE ISLAND STATE INSPECTION
+Extract these the same way — every letter A through Z that labels a complaint line.
+
 The complaint TEXT is beside these labels (to the right) OR on the same line:
     # A RHODE ISLAND STATE INSPECTION
     # B CHECK ENGINE LIGHT ON

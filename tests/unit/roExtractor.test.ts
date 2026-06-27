@@ -8,6 +8,7 @@ import {
   isPlausibleComplaintText,
   mergeMultiPassOcrExtractions,
   mergeROExtractions,
+  mergeScanSources,
   normalizeComplaintForDisplay,
   parseStructuredROText,
   recoverComplaintsWithLabelsFromText,
@@ -604,5 +605,33 @@ B. CHECK ENGINE LIGHT ON`);
     const merged = mergeMultiPassOcrExtractions([passA, passB]);
     assert.equal(merged.roNumber, '452891');
     assert.equal(merged.vehicle.vin, '');
+  });
+
+  test('mergeScanSources cross-validates Grok and OCR while preserving complaint labels', () => {
+    const grok = parseStructuredROText(
+      `RO Number: 452891
+Customer Name: JOHN SMITH
+Year: 2020
+Make: Mercedes-Benz
+Model: GLE350
+VIN: W1KZF8DB5LA123456
+Mileage IN: 42150
+Customer Complaints:
+A. CHECK ENGINE LIGHT ON`
+    );
+    const ocrText = `RO# 452891
+Customer: JOHN SMITH
+VIN W1KZF8DB5LA123456
+Mileage In: 42150
+LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS # A RHODE ISLAND STATE INSPECTION
+# B CHECK ENGINE LIGHT ON`;
+    const ocr = parseStructuredROText(ocrText);
+
+    const merged = mergeScanSources(grok, ocr, ocrText);
+    assert.equal(merged.roNumber, '452891');
+    assert.equal(merged.vehicle.vin, 'W1KZF8DB5LA123456');
+    assert.equal(merged.complaints.length >= 2, true);
+    assert.equal(merged.complaintLabels?.includes('A'), true);
+    assert.equal(merged.complaintLabels?.includes('B'), true);
   });
 });

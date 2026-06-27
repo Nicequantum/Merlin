@@ -9,7 +9,7 @@ import { RATE_LIMITS } from '@/lib/rate-limit';
 import { imagePathnamesSchema, parseRequestBody } from '@/lib/validation';
 
 /** Must match RO_EXTRACT_ROUTE_MAX_DURATION_S in @/lib/timeouts */
-export const maxDuration = 130;
+export const maxDuration = 190;
 
 export async function POST(request: Request) {
   return withAuth(

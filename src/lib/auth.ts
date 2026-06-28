@@ -7,6 +7,20 @@ import { isTechnicianAccountActive } from './technicianAccounts';
 import { prisma } from './db';
 import { logger } from './logger';
 
+/**
+ * H-1 — Enterprise identity (Phase 1 accepted risk)
+ *
+ * Merlin Phase 1 uses D7 number + password authentication only.
+ * SSO (SAML/OIDC) and MFA are NOT implemented in this module.
+ *
+ * Accepted for initial dealership pilot deployment with compensating controls:
+ * - bcrypt password hashing (cost 12), sessionVersion revocation, 8-hour httpOnly cookies
+ * - Manager-provisioned accounts and password reset via Settings
+ * - Rate-limited login endpoint
+ *
+ * Planned Phase 2: corporate SSO (e.g. Entra ID) and MFA — track in enterprise roadmap.
+ */
+
 export const SESSION_COOKIE = 'benz_tech_session';
 /** M9: shorter session lifetime reduces exposure from stolen cookies. */
 const SESSION_MAX_AGE = 60 * 60 * 8; // 8 hours

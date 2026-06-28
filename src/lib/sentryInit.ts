@@ -8,9 +8,12 @@ export function initSentryServer(): void {
   const dsn = getSentryDsn();
   if (!dsn) return;
 
+  // H-5: Lower production trace volume — 100% sampling was excessive for dealership scale.
+  const isProduction =
+    process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
   Sentry.init({
     dsn,
-    tracesSampleRate: 1.0,
+    tracesSampleRate: isProduction ? 0.2 : 1.0,
     debug: false,
   });
 }

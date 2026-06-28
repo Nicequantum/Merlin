@@ -1,5 +1,65 @@
-import { verifyAuditChain, type AuditChainPayload } from './auditChain';
+import { computeAuditEntryHash, verifyAuditChain, type AuditChainPayload } from './auditChain';
 import { prisma } from './db';
+
+/** H-3: Default chain verification window — avoids loading full dealership history. */
+const DEFAULT_CHAIN_VERIFY_LIMIT = 500;
+
+const chainLogSelect = {
+  id: true,
+  action: true,
+  entityType: true,
+  entityId: true,
+  technicianId: true,
+  dealershipId: true,
+  metadata: true,
+  ipAddress: true,
+  previousHash: true,
+  entryHash: true,
+  promptVersion: true,
+  createdAt: true,
+} as const;
+
+export interface GetAuditDashboardSummaryOptions {
+  /** When true, verify the entire hash chain. Default: most recent 500 hashed entries only. */
+  verifyFullChain?: boolean;
+}
+
+/** H-3: Verify hash integrity and linkage within a window (no GENESIS check on first entry). */
+function verifyAuditChainWindow(
+  entries: Array<AuditChainPayload & { previousHash: string; entryHash: string }>
+): { valid: boolean; brokenAt: number | null } {
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (i > 0 && entry.previousHash !== entries[i - 1].entryHash) {
+      return { valid: false, brokenAt: i };
+    }
+    if (computeAuditEntryHash(entry) !== entry.entryHash) {
+      return { valid: false, brokenAt: i };
+    }
+  }
+  return { valid: true, brokenAt: null };
+}
+
+async function loadChainLogsForVerification(
+  dealershipId: string,
+  verifyFullChain: boolean
+) {
+  if (verifyFullChain) {
+    return prisma.auditLog.findMany({
+      where: { dealershipId, entryHash: { not: '' } },
+      orderBy: { createdAt: 'asc' },
+      select: chainLogSelect,
+    });
+  }
+
+  const recent = await prisma.auditLog.findMany({
+    where: { dealershipId, entryHash: { not: '' } },
+    orderBy: { createdAt: 'desc' },
+    take: DEFAULT_CHAIN_VERIFY_LIMIT,
+    select: chainLogSelect,
+  });
+  return recent.reverse();
+}
 
 export interface AuditDashboardSummary {
   totalEntries: number;
@@ -24,12 +84,17 @@ export interface AuditDashboardSummary {
   };
 }
 
-export async function getAuditDashboardSummary(dealershipId: string): Promise<AuditDashboardSummary> {
+export async function getAuditDashboardSummary(
+  dealershipId: string,
+  options: GetAuditDashboardSummaryOptions = {}
+): Promise<AuditDashboardSummary> {
+  const verifyFullChain = options.verifyFullChain === true;
   const now = new Date();
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const [totalEntries, last24Hours, last7Days, grouped, recent, chainLogs] = await Promise.all([
+  const [totalEntries, last24Hours, last7Days, grouped, recent, hashedEntryCount, legacyEntries, chainLogs] =
+    await Promise.all([
     prisma.auditLog.count({ where: { dealershipId } }),
     prisma.auditLog.count({ where: { dealershipId, createdAt: { gte: dayAgo } } }),
     prisma.auditLog.count({ where: { dealershipId, createdAt: { gte: weekAgo } } }),
@@ -45,28 +110,17 @@ export async function getAuditDashboardSummary(dealershipId: string): Promise<Au
       orderBy: { createdAt: 'desc' },
       take: 8,
     }),
-    prisma.auditLog.findMany({
-      where: { dealershipId },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        action: true,
-        entityType: true,
-        entityId: true,
-        technicianId: true,
-        dealershipId: true,
-        metadata: true,
-        ipAddress: true,
-        previousHash: true,
-        entryHash: true,
-        promptVersion: true,
-        createdAt: true,
+    prisma.auditLog.count({ where: { dealershipId, entryHash: { not: '' } } }),
+    prisma.auditLog.count({
+      where: {
+        dealershipId,
+        entryHash: '',
       },
     }),
+    loadChainLogsForVerification(dealershipId, verifyFullChain),
   ]);
 
   const hashed = chainLogs.filter((l) => l.entryHash);
-  const legacyEntries = chainLogs.length - hashed.length;
 
   const chainPayload: Array<AuditChainPayload & { previousHash: string; entryHash: string }> = hashed.map((log) => ({
     id: log.id,
@@ -83,7 +137,20 @@ export async function getAuditDashboardSummary(dealershipId: string): Promise<Au
     promptVersion: log.promptVersion,
   }));
 
-  const verification = verifyAuditChain(chainPayload);
+  const verification = verifyFullChain
+    ? verifyAuditChain(chainPayload)
+    : verifyAuditChainWindow(chainPayload);
+
+  const chainLimitations = [
+    'Chain verifies append-only integrity — it does not prevent a privileged database admin from rewriting the full table.',
+    'Entries created before hash-chain rollout may appear as legacy (no entryHash).',
+    'For legal defensibility, pair with database backups, access controls, and exported CSV archives.',
+  ];
+  if (!verifyFullChain && hashedEntryCount > DEFAULT_CHAIN_VERIFY_LIMIT) {
+    chainLimitations.unshift(
+      `Chain verification sampled the most recent ${DEFAULT_CHAIN_VERIFY_LIMIT} hashed entries (not full history). Pass verifyFullChain: true for a complete scan.`
+    );
+  }
 
   return {
     totalEntries,
@@ -100,16 +167,12 @@ export async function getAuditDashboardSummary(dealershipId: string): Promise<Au
       enabled: true,
       description:
         'Each audit entry is SHA-256 linked to the previous entry per dealership. Tampering with a row breaks the chain from that point forward.',
-      hashedEntries: hashed.length,
+      hashedEntries: hashedEntryCount,
       legacyEntries,
       valid: verification.valid,
       brokenAt: verification.brokenAt,
       headHash: hashed.length > 0 ? hashed[hashed.length - 1].entryHash : null,
-      limitations: [
-        'Chain verifies append-only integrity — it does not prevent a privileged database admin from rewriting the full table.',
-        'Entries created before hash-chain rollout may appear as legacy (no entryHash).',
-        'For legal defensibility, pair with database backups, access controls, and exported CSV archives.',
-      ],
+      limitations: chainLimitations,
     },
   };
 }

@@ -5,6 +5,14 @@ import { runDatabaseSeed } from '@/lib/seedDatabase';
 
 export const dynamic = 'force-dynamic';
 
+/** H-4: Block bootstrap re-seed in production unless explicitly enabled for initial store setup. */
+function isBootstrapAllowed(): boolean {
+  const isProduction =
+    process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  if (!isProduction) return true;
+  return process.env.ALLOW_BOOTSTRAP?.trim().toLowerCase() === 'true';
+}
+
 function authorizeSetup(request: Request): boolean {
   const expected = process.env.SETUP_SECRET?.trim();
   if (!expected) return false;
@@ -20,6 +28,10 @@ function authorizeSetup(request: Request): boolean {
 export async function POST(request: Request) {
   const rateLimited = await checkRateLimit(request, 'setup.seed', RATE_LIMITS.auth);
   if (rateLimited) return rateLimited;
+
+  if (!isBootstrapAllowed()) {
+    return apiError('Bootstrap seed is disabled in production.', 403);
+  }
 
   if (!authorizeSetup(request)) {
     return apiError('Unauthorized.', 401);

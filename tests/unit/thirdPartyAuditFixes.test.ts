@@ -99,7 +99,11 @@ describe('Third-party audit hardening', () => {
     const shell = readSrc('src/components/BenzTechApp.tsx');
     assert.equal(shell.includes('useRepairOrders'), false);
     assert.equal(shell.includes('useOcrProgress'), false);
+    assert.equal(shell.includes('useSession'), false);
+    assert.equal(shell.includes("from '@/lib/api'"), false);
+    assert.equal(shell.includes("from '@/hooks/useSession'"), false);
     assert.ok(shell.includes('BenzTechAuthenticatedApp'));
+    assert.ok(shell.includes('loginSession'));
     assert.ok(readSrc('src/components/BenzTechAuthenticatedApp.tsx').includes('useRepairOrders'));
   });
 });

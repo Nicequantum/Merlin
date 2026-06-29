@@ -1,53 +1,91 @@
 'use client';
 
+console.log('[Merlin] BenzTechApp module evaluated');
+
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { ConsentModal } from '@/components/ConsentModal';
-import { LegalDisclaimerModal } from '@/components/LegalDisclaimerModal';
+import { useCallback, useEffect, useState } from 'react';
 import { LoginView } from '@/components/LoginView';
-import { LoadingScreen } from '@/components/LoadingScreen';
-import { useSession } from '@/hooks/useSession';
+import {
+  acceptConsentSession,
+  acceptLegalDisclaimerSession,
+  fetchCurrentSession,
+  loginWithCredentials,
+  logoutSession,
+} from '@/lib/loginSession';
+import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
+import type { TechnicianSession } from '@/types';
+
+const ConsentModal = dynamic(
+  () => import('@/components/ConsentModal').then((m) => m.ConsentModal),
+  { ssr: false }
+);
+
+const LegalDisclaimerModal = dynamic(
+  () => import('@/components/LegalDisclaimerModal').then((m) => m.LegalDisclaimerModal),
+  { ssr: false }
+);
 
 const BenzTechAuthenticatedApp = dynamic(
   () =>
     import('@/components/BenzTechAuthenticatedApp').then((m) => m.BenzTechAuthenticatedApp),
-  {
-    loading: () => (
-      <LoadingScreen
-        label="Starting Merlin"
-        sublabel="Loading warranty documentation tools…"
-      />
-    ),
-    ssr: false,
-  }
+  { ssr: false }
 );
 
 export function BenzTechApp() {
-  const { session, loading: sessionLoading, login, logout, acceptConsent, acceptLegalDisclaimer } =
-    useSession();
+  console.log('[Merlin] BenzTechApp render start');
+
+  const [session, setSession] = useState<TechnicianSession | null>(null);
   const [consentLoading, setConsentLoading] = useState(false);
   const [legalDisclaimerLoading, setLegalDisclaimerLoading] = useState(false);
 
-  if (sessionLoading) {
-    return <LoadingScreen label="Starting Merlin" sublabel="Verifying your session..." />;
-  }
+  useEffect(() => {
+    let cancelled = false;
+    console.log('[Merlin] BenzTechApp session check starting');
+
+    fetchCurrentSession()
+      .then((existing) => {
+        if (cancelled) return;
+        console.log('[Merlin] BenzTechApp session check result', existing ? 'authenticated' : 'none');
+        if (existing) setSession(existing);
+      })
+      .catch((error: unknown) => {
+        console.error('[Merlin] BenzTechApp session check failed', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const login = useCallback(async (d7Number: string, password: string) => {
+    console.log('[Merlin] BenzTechApp login attempt');
+    const nextSession = await loginWithCredentials(d7Number, password);
+    setSession(nextSession);
+    return nextSession;
+  }, []);
+
+  const logout = useCallback(async () => {
+    await logoutSession();
+    setSession(null);
+  }, []);
 
   if (!session) {
+    console.log('[Merlin] BenzTechApp → rendering LoginView (no session)');
     return <LoginView onLogin={login} />;
   }
 
   if (!session.consentAt) {
+    console.log('[Merlin] BenzTechApp → rendering ConsentModal');
     return (
       <ConsentModal
         loading={consentLoading}
         onAccept={async () => {
           setConsentLoading(true);
           try {
-            await acceptConsent();
+            const consentAt = await acceptConsentSession();
+            setSession((prev) => (prev ? { ...prev, consentAt } : prev));
           } catch (error: unknown) {
             console.error('[Merlin] Consent acceptance failed', error);
-            toast.error(error instanceof Error ? error.message : 'Could not save consent — try again');
           } finally {
             setConsentLoading(false);
           }
@@ -57,18 +95,21 @@ export function BenzTechApp() {
   }
 
   if (!session.legalDisclaimerAt) {
+    console.log('[Merlin] BenzTechApp → rendering LegalDisclaimerModal');
     return (
       <LegalDisclaimerModal
         loading={legalDisclaimerLoading}
         onAccept={async () => {
           setLegalDisclaimerLoading(true);
           try {
-            await acceptLegalDisclaimer();
+            const legalDisclaimerAt = await acceptLegalDisclaimerSession();
+            setSession((prev) => {
+              if (!prev) return prev;
+              cacheLegalDisclaimerLocally(prev.technicianId);
+              return { ...prev, legalDisclaimerAt };
+            });
           } catch (error: unknown) {
             console.error('[Merlin] Legal disclaimer acceptance failed', error);
-            toast.error(
-              error instanceof Error ? error.message : 'Could not save legal acknowledgment — try again'
-            );
           } finally {
             setLegalDisclaimerLoading(false);
           }
@@ -77,5 +118,6 @@ export function BenzTechApp() {
     );
   }
 
+  console.log('[Merlin] BenzTechApp → rendering BenzTechAuthenticatedApp');
   return <BenzTechAuthenticatedApp session={session} onLogout={logout} />;
 }

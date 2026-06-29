@@ -1,13 +1,5 @@
-import dynamic from 'next/dynamic';
-import { AppInitLoading } from '@/components/AppInitLoading';
-
-const BenzTechApp = dynamic(
-  () => import('@/components/BenzTechApp').then((m) => m.BenzTechApp),
-  {
-    loading: () => <AppInitLoading />,
-  }
-);
+import HomePageClient from '@/components/HomePageClient';
 
 export default function HomePage() {
-  return <BenzTechApp />;
+  return <HomePageClient />;
 }

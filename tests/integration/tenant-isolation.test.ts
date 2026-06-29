@@ -15,9 +15,17 @@ import { GET as listRepairOrders } from '../../src/app/api/repair-orders/route';
 import { createSessionToken } from '../../src/lib/auth';
 import { CONSENT_REQUIRED_ERROR } from '../../src/lib/errors';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
+import { LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 
 const prisma = new PrismaClient();
+
+const integrationOnboarding = {
+  consentAt: new Date(),
+  consentVersion: '2026-06-07-v1' as const,
+  legalDisclaimerAt: new Date(),
+  legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
+};
 
 describe('tenant isolation (route handlers)', () => {
   let dealershipAId = '';
@@ -54,7 +62,7 @@ describe('tenant isolation (route handlers)', () => {
 
     const techA = await prisma.technician.upsert({
       where: { d7Number: 'D7TENANTA' },
-      update: { dealershipId: dealershipAId },
+      update: { dealershipId: dealershipAId, ...integrationOnboarding },
       create: {
         d7Number: 'D7TENANTA',
         email: 'd7tenanta@benz-tech.local',
@@ -63,15 +71,14 @@ describe('tenant isolation (route handlers)', () => {
         role: 'technician',
         isActive: true,
         dealershipId: dealershipAId,
-        consentAt: new Date(),
-        consentVersion: '2026-06-07-v1',
+        ...integrationOnboarding,
       },
     });
     techAId = techA.id;
 
     const techB = await prisma.technician.upsert({
       where: { d7Number: 'D7TENANTB' },
-      update: { dealershipId: dealershipBId },
+      update: { dealershipId: dealershipBId, ...integrationOnboarding },
       create: {
         d7Number: 'D7TENANTB',
         email: 'd7tenantb@benz-tech.local',
@@ -80,15 +87,14 @@ describe('tenant isolation (route handlers)', () => {
         role: 'technician',
         isActive: true,
         dealershipId: dealershipBId,
-        consentAt: new Date(),
-        consentVersion: '2026-06-07-v1',
+        ...integrationOnboarding,
       },
     });
     techBId = techB.id;
 
     const managerB = await prisma.technician.upsert({
       where: { d7Number: 'D7TENMGRB' },
-      update: { dealershipId: dealershipBId },
+      update: { dealershipId: dealershipBId, ...integrationOnboarding },
       create: {
         d7Number: 'D7TENMGRB',
         email: 'd7tenmgrb@benz-tech.local',
@@ -97,8 +103,7 @@ describe('tenant isolation (route handlers)', () => {
         role: 'manager',
         isActive: true,
         dealershipId: dealershipBId,
-        consentAt: new Date(),
-        consentVersion: '2026-06-07-v1',
+        ...integrationOnboarding,
       },
     });
 

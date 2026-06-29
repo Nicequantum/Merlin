@@ -1,7 +1,15 @@
 import bcrypt from 'bcryptjs';
+import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
 import { internalEmailForD7 } from './d7Number';
 import { prisma } from './db';
 import { seedTemplateLibraryIfEmpty } from './templateLibrary';
+
+const seedOnboarding = {
+  consentAt: new Date(),
+  consentVersion: CONSENT_VERSION,
+  legalDisclaimerAt: new Date(),
+  legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
+};
 
 function requireEnv(name: string, minLength = 1): string {
   const value = process.env[name]?.trim();
@@ -54,6 +62,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         isActive: true,
         deletedAt: null,
         dealershipId: dealership.id,
+        ...seedOnboarding,
       },
     });
   } else {
@@ -67,6 +76,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         deletedAt: null,
         dealershipId: dealership.id,
         email: internalEmailForD7(managerD7),
+        ...seedOnboarding,
       },
       create: {
         d7Number: managerD7,
@@ -77,8 +87,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         isAdmin: true,
         isActive: true,
         dealershipId: dealership.id,
-        consentAt: new Date(),
-        consentVersion: '2026-06-07-v1',
+        ...seedOnboarding,
       },
     });
   }
@@ -95,6 +104,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         isActive: true,
         deletedAt: null,
         dealershipId: dealership.id,
+        ...seedOnboarding,
       },
     });
   } else {
@@ -107,8 +117,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         deletedAt: null,
         dealershipId: dealership.id,
         email: internalEmailForD7(techD7),
-        consentAt: new Date(),
-        consentVersion: '2026-06-07-v1',
+        ...seedOnboarding,
       },
       create: {
         d7Number: techD7,
@@ -118,8 +127,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         role: 'technician',
         isActive: true,
         dealershipId: dealership.id,
-        consentAt: new Date(),
-        consentVersion: '2026-06-07-v1',
+        ...seedOnboarding,
       },
     });
   }

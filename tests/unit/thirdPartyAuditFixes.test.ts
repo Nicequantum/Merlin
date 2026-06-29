@@ -94,4 +94,12 @@ describe('Third-party audit hardening', () => {
     assert.equal(useRepairOrders.includes("from '@/lib/storyCertification'"), false);
     assert.ok(readSrc('src/lib/storyCertification.ts').includes("import 'server-only'"));
   });
+
+  it('login shell does not import useRepairOrders or OCR modules', () => {
+    const shell = readSrc('src/components/BenzTechApp.tsx');
+    assert.equal(shell.includes('useRepairOrders'), false);
+    assert.equal(shell.includes('useOcrProgress'), false);
+    assert.ok(shell.includes('BenzTechAuthenticatedApp'));
+    assert.ok(readSrc('src/components/BenzTechAuthenticatedApp.tsx').includes('useRepairOrders'));
+  });
 });

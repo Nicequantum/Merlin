@@ -5,7 +5,7 @@ import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey.shared'
 import { encryptPII, decryptPII } from './encryption';
 import 'server-only';
 
-import { prisma } from './db';
+import { prisma, probeDatabaseConnection } from './db';
 import { isKvConfigured, isProductionEnv } from './rate-limit';
 import { logger } from './logger';
 
@@ -87,7 +87,7 @@ export function checkEnvironmentConfig(): DependencyCheck {
 export async function checkDatabase(): Promise<DependencyCheck> {
   try {
     const { latencyMs } = await timed(async () => {
-      await prisma.$queryRaw`SELECT 1`;
+      await probeDatabaseConnection();
       return true;
     });
     return { status: 'ok', latencyMs };

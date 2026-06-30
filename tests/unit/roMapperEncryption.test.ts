@@ -56,6 +56,9 @@ describe('roMapper sensitive field encryption', () => {
 
     assert.notEqual(fields.xentryOcrTextsEncrypted, JSON.stringify(sampleRo.xentryOcrTexts));
     assert.ok(fields.xentryOcrTextsEncrypted.length > 0);
+    assert.equal(fields.roNumber, '');
+    assert.ok(Array.isArray(fields.roNumberSearchTokens));
+    assert.ok(fields.roNumberSearchTokens.length > 0);
   });
 
   test('repairLineToDbFields encrypts technician notes, OCR texts, and warranty stories', () => {
@@ -70,6 +73,7 @@ describe('roMapper sensitive field encryption', () => {
     assert.ok(fields.warrantyStoryEncrypted && fields.warrantyStoryEncrypted.length > 0);
     assert.ok(fields.extractedDataEncrypted.length > 0);
     assert.equal('storyQualityAuditEncrypted' in fields, false);
+    assert.equal(fields.description, '');
   });
 
   test('repairLineToDbFields encrypts persisted story quality audits when provided', () => {
@@ -101,7 +105,9 @@ describe('roMapper sensitive field encryption', () => {
 
     const mappedRo = dbToRepairOrder({
       id: 'ro-1',
-      roNumber: sampleRo.roNumber,
+      roNumber: '',
+      roNumberEncrypted: roFields.roNumberEncrypted,
+      roNumberSearchTokens: roFields.roNumberSearchTokens,
       technicianId: 'tech-1',
       dealershipId: 'dealer-1',
       serviceAdvisorId: null,
@@ -126,7 +132,8 @@ describe('roMapper sensitive field encryption', () => {
           id: sampleLine.id,
           repairOrderId: 'ro-1',
           lineNumber: sampleLine.lineNumber,
-          description: sampleLine.description,
+          description: '',
+          descriptionEncrypted: lineFields.descriptionEncrypted,
           customerConcernEncrypted: lineFields.customerConcernEncrypted,
           technicianNotesEncrypted: lineFields.technicianNotesEncrypted,
           xentryImageUrls: lineFields.xentryImageUrls,
@@ -149,6 +156,46 @@ describe('roMapper sensitive field encryption', () => {
     assert.equal(mappedLine.warrantyStory, sampleLine.warrantyStory);
     assert.deepEqual(mappedLine.extractedData?.codes, sampleLine.extractedData?.codes);
     assert.equal(mappedLine.storyQualityAudit, null);
+  });
+
+  test('dbToRepairOrder reads roNumber from encrypted column when plaintext is empty', () => {
+    const roFields = repairOrderToDbFields({
+      roNumber: sampleRo.roNumber,
+      vehicle: sampleRo.vehicle,
+      customer: sampleRo.customer,
+      complaints: sampleRo.complaints,
+      repairLines: [],
+    });
+
+    const mapped = dbToRepairOrder({
+      id: 'ro-encrypted-only',
+      roNumber: '',
+      roNumberEncrypted: roFields.roNumberEncrypted,
+      roNumberSearchTokens: roFields.roNumberSearchTokens,
+      technicianId: 'tech-1',
+      dealershipId: 'dealer-1',
+      serviceAdvisorId: null,
+      serviceAdvisorNameEncrypted: '',
+      advisorMatchConfidence: null,
+      advisorIdentifiedAt: null,
+      vinEncrypted: roFields.vinEncrypted,
+      year: roFields.year,
+      make: roFields.make,
+      model: roFields.model,
+      engine: roFields.engine,
+      mileageIn: roFields.mileageIn,
+      mileageOut: roFields.mileageOut,
+      customerNameEncrypted: roFields.customerNameEncrypted,
+      complaintsEncrypted: roFields.complaintsEncrypted,
+      xentryImageUrls: roFields.xentryImageUrls,
+      xentryOcrTextsEncrypted: roFields.xentryOcrTextsEncrypted,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      repairLines: [],
+      serviceAdvisor: null,
+    });
+
+    assert.equal(mapped.roNumber, sampleRo.roNumber);
   });
 
   test('dbToRepairLine decrypts persisted story quality audits', () => {

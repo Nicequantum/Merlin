@@ -9,6 +9,7 @@ import {
 import { prisma } from '@/lib/db';
 import { collectRepairOrderImagePathnames, findForbiddenImagePathname } from '@/lib/imageAccess';
 import { dbToRepairOrder, normalizeImageAttachments, repairLineToDbFields, repairOrderToDbFields } from '@/lib/roMapper';
+import { readRoNumberFromDb } from '@/lib/piiFieldRead';
 import { apiError, CONFLICT_ERROR, FORBIDDEN_ERROR, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -31,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         where: { id },
         include: {
           repairLines: true,
-          serviceAdvisor: { select: { id: true, displayName: true } },
+          serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } },
         },
       });
 
@@ -61,7 +62,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       const data = parsed.data;
       const existingMapped = dbToRepairOrder(existing);
       const input = {
-        roNumber: data.roNumber ?? existing.roNumber,
+        roNumber: data.roNumber ?? existingMapped.roNumber,
         vehicle: {
           vin: data.vehicle?.vin ?? existingMapped.vehicle.vin,
           year: data.vehicle?.year ?? existing.year,
@@ -243,7 +244,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         where: { id },
         include: {
           repairLines: true,
-          serviceAdvisor: { select: { id: true, displayName: true } },
+          serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } },
         },
       });
 
@@ -254,7 +255,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         entityType: 'repairOrder',
         entityId: id,
         // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
-        metadata: { roNumber: updated!.roNumber },
+        metadata: { roNumber: readRoNumberFromDb(updated!) },
         ipAddress: getRequestIp(request),
       });
 
@@ -311,7 +312,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         entityType: 'repairOrder',
         entityId: id,
         // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
-        metadata: { roNumber: existing.roNumber },
+        metadata: { roNumber: readRoNumberFromDb(existing) },
         ipAddress: getRequestIp(request),
       });
 

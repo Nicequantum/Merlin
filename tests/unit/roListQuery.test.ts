@@ -3,6 +3,9 @@ import { describe, test } from 'node:test';
 import { getStartOfDealershipDay, isRepairOrderActiveToday } from '../../src/lib/dealershipDayBoundary';
 import { buildRepairOrderListWhere, parseRepairOrderListParams } from '../../src/lib/roListQuery';
 
+process.env.ENCRYPTION_KEY =
+  process.env.ENCRYPTION_KEY || 'test-encryption-key-with-32-chars-minimum';
+
 describe('repair order list query', () => {
   test('defaults to today scope with pagination limit', () => {
     const params = parseRepairOrderListParams(new URL('http://localhost/api/repair-orders'));
@@ -62,6 +65,8 @@ describe('repair order list query', () => {
     );
     assert.ok(Array.isArray(where.OR));
     assert.equal(where.OR?.length, 4);
+    const firstClause = where.OR?.[0] as { roNumberSearchTokens?: { hasSome: string[] } };
+    assert.ok(firstClause.roNumberSearchTokens?.hasSome?.length);
   });
 
   test('isRepairOrderActiveToday respects updatedAt boundary', () => {

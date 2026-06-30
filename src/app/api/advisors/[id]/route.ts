@@ -4,6 +4,7 @@ import { computeAdvisorMetricsBatch } from '@/lib/advisorMetrics';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { decryptPII } from '@/lib/encryption';
+import { readAdvisorDisplayNameFromDb, readRoNumberFromDb } from '@/lib/piiFieldRead';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { isServiceAdvisorActive } from '@/lib/serviceAdvisorAccounts';
@@ -30,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
               vehicleModel: true,
               observedAt: true,
               complaintTextEncrypted: true,
-              repairOrder: { select: { roNumber: true } },
+              repairOrder: { select: { roNumber: true, roNumberEncrypted: true } },
             },
           },
         },
@@ -50,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return {
         advisor: {
           id: advisor.id,
-          displayName: advisor.displayName,
+          displayName: readAdvisorDisplayNameFromDb(advisor),
           advisorCode: advisor.advisorCode,
           status: advisor.status as 'active' | 'inactive',
           roCount: advisor.roCount,
@@ -69,7 +70,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           recentObservations: advisor.observations.map((obs) => ({
             id: obs.id,
             lineLabel: obs.lineLabel,
-            roNumber: obs.repairOrder.roNumber,
+            roNumber: readRoNumberFromDb(obs.repairOrder),
             vehicleFamily: obs.vehicleFamily,
             vehicle: [obs.vehicleMake, obs.vehicleModel].filter(Boolean).join(' '),
             complaint: decryptPII(obs.complaintTextEncrypted),
@@ -123,7 +124,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         entityType: 'service_advisor',
         entityId: updated.id,
         metadata: {
-          displayName: updated.displayName,
+          displayName: readAdvisorDisplayNameFromDb(updated),
           status: updated.status,
           csiScore: updated.csiScore,
         },
@@ -178,7 +179,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         entityType: 'service_advisor',
         entityId: id,
         metadata: {
-          displayName: advisor.displayName,
+          displayName: readAdvisorDisplayNameFromDb(advisor),
           softDelete: true,
           deletedAt: removedAt.toISOString(),
           wasActive: isServiceAdvisorActive(advisor),

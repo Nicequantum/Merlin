@@ -107,6 +107,17 @@ describe('Third-party audit hardening', () => {
     assert.ok(readSrc('src/components/BenzTechAuthenticatedApp.tsx').includes('useRepairOrders'));
   });
 
+  it('PII dual-storage fields write encrypted-only in Merlinus v2', () => {
+    const roMapper = readSrc('src/lib/roMapper.ts');
+    const resolveAdvisor = readSrc('src/lib/advisorIntelligence/resolveAdvisor.ts');
+    assert.ok(roMapper.includes("roNumber: ''"));
+    assert.ok(roMapper.includes('roNumberSearchTokens: buildRoNumberSearchTokens'));
+    assert.ok(roMapper.includes("description: ''"));
+    assert.ok(resolveAdvisor.includes('displayNameEncrypted: encryptPII'));
+    assert.ok(readSrc('src/lib/roListQuery.ts').includes('roNumberSearchTokens'));
+    assert.ok(readSrc('src/lib/piiFieldRead.ts').includes('readRoNumberFromDb'));
+  });
+
   it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {
     const shell = readSrc('src/components/BenzTechApp.tsx');
     assert.ok(shell.includes('LoginView'));

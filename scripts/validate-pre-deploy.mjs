@@ -23,22 +23,22 @@ const AI_ROUTE_FILES = [
   'src/app/api/repair-orders/[id]/lines/[lineId]/review-story/route.ts',
 ];
 
-/** Known intentional plaintext PII write sites — must stay documented with S2 markers + dual-write where applicable. */
+/** Merlinus v2 — encrypted-only PII writes for dual-storage fields (Phase 4 cutover). */
 const PII_WRITE_GUARDS = [
   {
     file: 'src/lib/roMapper.ts',
     region: 'repairOrderToDbFields',
-    requiredSnippets: ['S2 PLAINTEXT WRITE', 'roNumberEncrypted: encryptPII'],
+    requiredSnippets: ["roNumber: ''", 'roNumberEncrypted: encryptPII', 'roNumberSearchTokens: buildRoNumberSearchTokens'],
   },
   {
     file: 'src/lib/roMapper.ts',
     region: 'repairLineToDbFields',
-    requiredSnippets: ['S2 PLAINTEXT WRITE', 'descriptionEncrypted: encryptSensitiveText'],
+    requiredSnippets: ["description: ''", 'descriptionEncrypted: encryptSensitiveText'],
   },
   {
     file: 'src/lib/advisorIntelligence/resolveAdvisor.ts',
     region: 'serviceAdvisor.create',
-    requiredSnippets: ['S2 PLAINTEXT WRITE', 'displayName:'],
+    requiredSnippets: ["displayName: ''", 'displayNameEncrypted: encryptPII'],
   },
   {
     file: 'src/lib/advisorIntelligence/resolveAdvisor.ts',
@@ -162,8 +162,9 @@ function checkPlaintextPiiWriteGuards() {
 
   const roMapper = readSrc('src/lib/roMapper.ts');
   const undocumentedPatterns = [
-    { label: 'roNumber plaintext without encrypted twin in repairOrderToDbFields', ok: roMapper.includes('roNumberEncrypted: encryptPII(input.roNumber)') },
-    { label: 'description plaintext without encrypted twin in repairLineToDbFields', ok: roMapper.includes('descriptionEncrypted: encryptSensitiveText(line.description)') },
+    { label: 'roNumber encrypted write in repairOrderToDbFields', ok: roMapper.includes('roNumberEncrypted: encryptPII(roNumber)') },
+    { label: 'roNumber search tokens in repairOrderToDbFields', ok: roMapper.includes('roNumberSearchTokens: buildRoNumberSearchTokens') },
+    { label: 'description encrypted write in repairLineToDbFields', ok: roMapper.includes('descriptionEncrypted: encryptSensitiveText(line.description)') },
   ];
   for (const pattern of undocumentedPatterns) {
     if (!pattern.ok) warnings.push(pattern.label);
@@ -176,8 +177,8 @@ function checkPlaintextPiiWriteGuards() {
     const matches = source.match(/S2 PLAINTEXT WRITE/g);
     s2MarkerTotal += matches ? matches.length : 0;
   }
-  if (s2MarkerTotal < 5) {
-    warnings.push(`Expected at least 5 documented S2 PLAINTEXT WRITE markers, found ${s2MarkerTotal}`);
+  if (s2MarkerTotal < 2) {
+    warnings.push(`Expected at least 2 documented S2 PLAINTEXT WRITE markers (alias/profile), found ${s2MarkerTotal}`);
   }
 
   if (warnings.length > 0) {

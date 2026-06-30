@@ -54,16 +54,16 @@ datasource db {
 //   • npm run db:migrate-pii-safe / db:migrate-pii / db:reencrypt completed
 //   • *Encrypted columns are canonical for reads; roNumber/description still dual-written
 //
-// Phase 3 [CURRENT — requires search replacement]
-//   • dbToRepairOrder / dbToRepairLine: encrypted-only reads (remove plaintext fallback)
+// Phase 3 [IN PROGRESS — Merlinus v2.0]
+//   • dbToRepairOrder / dbToRepairLine: encrypted-first reads (plaintext fallback during migration)
 //   • dbToRepairOrder: decrypt ServiceAdvisor.displayNameEncrypted on join
-//   • Add RepairOrder.roNumberSearchToken (HMAC blind index) for list/search queries
-//   • roListQuery + roListUtils: query token instead of plaintext roNumber
+//   • RepairOrder.roNumberSearchTokens (HMAC blind index) for list/search queries
+//   • roListQuery: query tokens instead of plaintext roNumber contains
 //
-// Phase 4 [WRITE CUTOVER]
-//   • resolveAdvisor.ts: write displayNameEncrypted alongside displayName
+// Phase 4 [WRITE CUTOVER — Merlinus v2.0]
+//   • resolveAdvisor.ts + serviceAdvisorManagement: write displayNameEncrypted; retire plaintext displayName
 //   • roMapper: stop writing RepairOrder.roNumber and RepairLine.description plaintext
-//   • Dashboard/advisor APIs: read from encrypted columns only
+//   • Dashboard/advisor APIs: read from encrypted columns first
 //
 // Phase 5 [SCHEMA CLEANUP — one release after Phase 4]
 //   • Drop plaintext columns: roNumber, description, displayName (Prisma migration)
@@ -134,6 +134,8 @@ model RepairOrder {
   roNumber                   String
   /** M7: encrypted RO number — canonical value at rest (Phase 2 backfill complete). */
   roNumberEncrypted          String       @default("")
+  /** Phase 3: HMAC blind-index tokens for RO search without querying plaintext roNumber. */
+  roNumberSearchTokens       String[]     @default([])
   technicianId               String
   technician                 Technician   @relation(fields: [technicianId], references: [id])
   dealershipId               String
@@ -162,6 +164,7 @@ model RepairOrder {
   @@index([technicianId])
   @@index([dealershipId])
   @@index([roNumber])
+  @@index([roNumberSearchTokens], type: Gin)
   @@index([serviceAdvisorId])
 }
 

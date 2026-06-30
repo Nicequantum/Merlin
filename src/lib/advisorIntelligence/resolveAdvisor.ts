@@ -1,5 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { encryptPII } from '@/lib/encryption';
+import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import {
   fingerprintAdvisorName,
   isPlausibleAdvisorName,
@@ -80,7 +82,8 @@ export async function resolveServiceAdvisor(
   });
 
   if (byFingerprint && byFingerprint.status === 'active' && !byFingerprint.deletedAt) {
-    if (displayName && displayName !== byFingerprint.displayName) {
+    const storedDisplayName = readAdvisorDisplayNameFromDb(byFingerprint);
+    if (displayName && displayName !== storedDisplayName) {
       await recordAlias(client, byFingerprint.id, displayName, nameFingerprint);
     }
 
@@ -94,7 +97,7 @@ export async function resolveServiceAdvisor(
 
     return {
       id: updated.id,
-      displayName: updated.displayName,
+      displayName: readAdvisorDisplayNameFromDb(updated),
       nameFingerprint: updated.nameFingerprint,
       matchConfidence: confidenceForMatch({ exact: true, alias: false }),
       isNew: false,
@@ -122,7 +125,7 @@ export async function resolveServiceAdvisor(
 
     return {
       id: updated.id,
-      displayName: updated.displayName,
+      displayName: readAdvisorDisplayNameFromDb(updated),
       nameFingerprint: updated.nameFingerprint,
       matchConfidence: confidenceForMatch({ exact: false, alias: true }),
       isNew: false,
@@ -130,11 +133,14 @@ export async function resolveServiceAdvisor(
     };
   }
 
+  const advisorLabel = displayName || rawName.trim();
+
   const created = await client.serviceAdvisor.create({
     data: {
       dealershipId,
-      // S2 PLAINTEXT WRITE: displayName readable for UI/search; displayNameEncrypted backfilled via db:migrate-pii (Phase 2), dual-write added in Phase 4.
-      displayName: displayName || rawName.trim(),
+      // Phase 4: plaintext retired — column retained until Phase 5 schema drop.
+      displayName: '',
+      displayNameEncrypted: encryptPII(advisorLabel),
       nameFingerprint,
       roCount: incrementRoCount ? 1 : 0,
       aliases: {
@@ -160,7 +166,7 @@ export async function resolveServiceAdvisor(
 
   return {
     id: created.id,
-    displayName: created.displayName,
+    displayName: readAdvisorDisplayNameFromDb(created),
     nameFingerprint: created.nameFingerprint,
     matchConfidence: confidenceForMatch({ exact: false, alias: false }),
     isNew: true,

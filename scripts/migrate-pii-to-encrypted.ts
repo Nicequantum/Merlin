@@ -35,6 +35,8 @@ import {
   isLikelyEncryptedPayload,
   migratePlaintextToEncrypted,
 } from '../src/lib/encryption';
+import { readRoNumberFromDb } from '../src/lib/piiFieldRead';
+import { buildRoNumberSearchTokens } from '../src/lib/piiSearchToken';
 
 const prisma = new PrismaClient();
 
@@ -100,6 +102,7 @@ export async function migrateRepairOrdersS2(): Promise<MigrationStats> {
         id: true,
         roNumber: true,
         roNumberEncrypted: true,
+        roNumberSearchTokens: true,
         serviceAdvisorNameEncrypted: true,
       },
     });
@@ -112,10 +115,26 @@ export async function migrateRepairOrdersS2(): Promise<MigrationStats> {
 
     for (const row of rows) {
       scanned += 1;
-      const data: Record<string, string> = {};
+      const data: Record<string, string | string[]> = {};
 
       const roNumberEnc = resolveEncryptedFromDualStorage(row.roNumberEncrypted, row.roNumber);
       if (roNumberEnc) data.roNumberEncrypted = roNumberEnc;
+
+      const roNumberValue = readRoNumberFromDb({
+        roNumber: row.roNumber,
+        roNumberEncrypted: (data.roNumberEncrypted as string | undefined) ?? row.roNumberEncrypted,
+      });
+      if (roNumberValue) {
+        const tokens = buildRoNumberSearchTokens(roNumberValue);
+        const existingTokens = row.roNumberSearchTokens ?? [];
+        if (tokens.length > 0) {
+          const sortedNew = [...tokens].sort().join('|');
+          const sortedOld = [...existingTokens].sort().join('|');
+          if (sortedNew !== sortedOld) {
+            data.roNumberSearchTokens = tokens;
+          }
+        }
+      }
 
       // serviceAdvisorNameEncrypted has no plaintext twin column — only re-encrypt if stored as legacy plaintext.
       if (row.serviceAdvisorNameEncrypted?.trim()) {

@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { getStartOfDealershipDay } from '@/lib/dealershipDayBoundary';
+import { buildRoNumberSearchQueryTokens } from '@/lib/piiSearchToken';
 
 export type RepairOrderListScope = 'today' | 'previous';
 
@@ -45,15 +46,20 @@ export function buildRepairOrderListWhere(
 
   if (params.q) {
     const term = params.q;
+    const roSearchTokens = buildRoNumberSearchQueryTokens(term);
+    const orClauses: Prisma.RepairOrderWhereInput[] = [
+      { year: { contains: term, mode: 'insensitive' } },
+      { make: { contains: term, mode: 'insensitive' } },
+      { model: { contains: term, mode: 'insensitive' } },
+    ];
+
+    if (roSearchTokens.length > 0) {
+      orClauses.unshift({ roNumberSearchTokens: { hasSome: roSearchTokens } });
+    }
+
     return {
       ...roleWhere,
-      OR: [
-        // S2 PLAINTEXT SEARCH: queries RepairOrder.roNumber directly — migrate to search token in Phase 3.
-        { roNumber: { contains: term, mode: 'insensitive' } },
-        { year: { contains: term, mode: 'insensitive' } },
-        { make: { contains: term, mode: 'insensitive' } },
-        { model: { contains: term, mode: 'insensitive' } },
-      ],
+      OR: orClauses,
     };
   }
 

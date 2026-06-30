@@ -12,6 +12,7 @@ import {
   repairOrderToDbFields,
   type RepairOrderInput,
 } from '@/lib/roMapper';
+import { readRoNumberFromDb } from '@/lib/piiFieldRead';
 import { collectRepairOrderImagePathnames, findForbiddenImagePathname } from '@/lib/imageAccess';
 import { apiError, FORBIDDEN_ERROR, handleRouteError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
         include: {
           repairLines: true,
           technician: { select: { name: true } },
-          serviceAdvisor: { select: { id: true, displayName: true } },
+          serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } },
         },
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
         take: params.limit + 1,
@@ -191,7 +192,7 @@ export async function POST(request: Request) {
                 create: input.repairLines.map((line) => repairLineToDbFields(line)),
               },
             },
-            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true } } },
+            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } } },
           });
 
           const capture = data.serviceAdvisorName
@@ -214,7 +215,7 @@ export async function POST(request: Request) {
 
           const createdRo = await tx.repairOrder.findUniqueOrThrow({
             where: { id: ro.id },
-            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true } } },
+            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } } },
           });
 
           return { created: createdRo, advisorCapture: capture };
@@ -241,7 +242,7 @@ export async function POST(request: Request) {
             entityId: advisorCapture.serviceAdvisor.id,
             metadata: {
               repairOrderId: created.id,
-              roNumber: created.roNumber,
+              roNumber: readRoNumberFromDb(created),
               observationCount: input.complaints.length,
               isNewAdvisor: advisorCapture.serviceAdvisor.isNew,
             },
@@ -256,7 +257,7 @@ export async function POST(request: Request) {
           entityType: 'repairOrder',
           entityId: created.id,
           // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
-          metadata: { roNumber: created.roNumber },
+          metadata: { roNumber: readRoNumberFromDb(created) },
           ipAddress: getRequestIp(request),
         });
 

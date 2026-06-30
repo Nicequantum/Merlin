@@ -1,8 +1,10 @@
 import type { AdvisorListItem, AdvisorPerformanceMetrics, AdvisorProfileData } from '@/types';
+import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 
 type AdvisorWithProfile = {
   id: string;
   displayName: string;
+  displayNameEncrypted?: string;
   advisorCode: string | null;
   status: string;
   roCount: number;
@@ -46,7 +48,7 @@ export function mapAdvisorListItem(
 
   return {
     id: advisor.id,
-    displayName: advisor.displayName,
+    displayName: readAdvisorDisplayNameFromDb(advisor),
     advisorCode: advisor.advisorCode,
     status: advisor.status as 'active' | 'inactive',
     roCount: advisor.roCount,

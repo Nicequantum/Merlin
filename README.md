@@ -1,4 +1,4 @@
-# Merlin — Mercedes-Benz Warranty Story Generator
+# Merlinus — Mercedes-Benz Warranty Story Generator
 
 **Secure AI-Powered Warranty Documentation Platform for Mercedes-Benz Dealerships**
 
@@ -7,9 +7,9 @@
 [![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![Security](https://img.shields.io/badge/Security-Enterprise_Grade-22c55e?style=for-the-badge)](https://github.com/Nicequantum/viti-ai-clone)
 
-Merlin is a secure, dealership-specific platform that allows Mercedes-Benz technicians to create accurate, professional warranty narratives using Grok AI. It combines voice input, enterprise-grade security, and a complete audit trail to meet the standards of both individual dealerships and multi-location groups.
+Merlinus is a secure, dealership-specific platform that allows Mercedes-Benz technicians to create accurate, professional warranty narratives using Grok AI. It combines voice input, enterprise-grade security, and a complete audit trail to meet the standards of both individual dealerships and multi-location groups.
 
-**Version:** 3.0.1 · **Prompt version:** 2.1.0 · **Status:** **Production Ready** — cleared for multi-dealership rollout after sign-off
+**Version:** 2.0.0 · **Prompt version:** 2.1.0 · **Status:** **v2.0 Hardening** — enterprise security upgrade from Merlin 3.x baseline
 
 ---
 

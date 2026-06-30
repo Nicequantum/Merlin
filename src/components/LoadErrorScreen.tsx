@@ -30,7 +30,7 @@ export function LoadErrorScreen({ title, message, onRetry, retrying = false }: L
         {retrying ? 'Retrying…' : 'Try again'}
       </button>
       <p className="benz-hint mt-6 max-w-xs">
-        If this keeps happening, check Wi‑Fi in the service bay or ask your manager to verify Merlin is online.
+        If this keeps happening, check Wi‑Fi in the service bay or ask your manager to verify Merlinus is online.
       </p>
     </div>
   );

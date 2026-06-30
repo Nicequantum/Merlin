@@ -73,7 +73,7 @@ jobs:
         run: npm run db:seed
 
       - name: Integration tests
-        run: npx tsx --import ./tests/setup/integration.ts --test tests/integration/**/*.test.ts
+        run: npx tsx --import ./tests/setup/preload.mjs --test tests/integration/**/*.test.ts
         env:
           NODE_ENV: test
           CI: true

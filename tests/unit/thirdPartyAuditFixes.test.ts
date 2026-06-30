@@ -51,8 +51,63 @@ describe('Third-party audit hardening', () => {
 
   it('production rate limiting fails closed without KV', () => {
     const src = readSrc('src/lib/rate-limit.ts');
-    assert.ok(src.includes('request blocked'));
-    assert.ok(src.includes('503'));
+    const health = readSrc('src/lib/healthChecks.ts');
+    assert.ok(src.includes('RATE_LIMIT_UNAVAILABLE_MESSAGE'));
+    assert.ok(src.includes('rate_limit.kv_unavailable'));
+    assert.ok(src.includes('rate_limit.kv_required'));
+    assert.equal(src.includes("logger.warn('rate_limit.kv_fallback'"), false);
+    assert.ok(health.includes('fails closed (HTTP 503)'));
+  });
+
+  it('critical paths use structured logging instead of raw console.error', () => {
+    const clientLog = readSrc('src/lib/clientLog.ts');
+    const env = readSrc('src/lib/env.ts');
+    const criticalPaths = [
+      'src/components/BenzTechApp.tsx',
+      'src/components/BenzTechAuthenticatedApp.tsx',
+      'src/hooks/useRepairOrders.ts',
+      'src/hooks/repairOrders/useROStoryWorkflow.ts',
+      'src/hooks/repairOrders/useROScan.ts',
+      'src/app/error.tsx',
+      'src/components/LineView.tsx',
+      'src/components/AppProviders.tsx',
+      'src/components/ErrorBoundary.tsx',
+    ];
+
+    assert.ok(clientLog.includes('JSON.stringify(entry)'));
+    assert.ok(clientLog.includes("service: 'merlinus-client'"));
+    assert.ok(env.includes("logger.error('env.validation_failed'"));
+    assert.ok(env.includes("logger.warn('env.validation_warning'"));
+
+    for (const relativePath of criticalPaths) {
+      const src = readSrc(relativePath);
+      assert.equal(src.includes('console.error'), false, `${relativePath} must not use console.error`);
+    }
+  });
+
+  it('technician UI paths do not use console.log for debug noise', () => {
+    const technicianPaths = [
+      'src/components/LineView.tsx',
+      'src/components/BenzTechApp.tsx',
+      'src/components/BenzTechAuthenticatedApp.tsx',
+      'src/hooks/repairOrders/useROStoryWorkflow.ts',
+      'src/hooks/repairOrders/useROScan.ts',
+      'src/hooks/useRepairOrders.ts',
+      'src/services/ocr.ts',
+    ];
+    for (const relativePath of technicianPaths) {
+      const src = readSrc(relativePath);
+      assert.equal(src.includes('console.log'), false, `${relativePath} must not contain console.log`);
+    }
+  });
+
+  it('ErrorBoundary does not expose raw error messages to users', () => {
+    const src = readSrc('src/components/ErrorBoundary.tsx');
+    assert.equal(src.includes('error.message'), false);
+    assert.equal(src.includes('this.state.message'), false);
+    assert.ok(src.includes('Sentry.captureException'));
+    assert.ok(src.includes('supportReference'));
+    assert.ok(src.includes('contact your manager or IT support'));
   });
 
   it('Grok errors do not echo response bodies', () => {
@@ -65,6 +120,31 @@ describe('Third-party audit hardening', () => {
   it('service advisors are blocked from Grok extraction routes', () => {
     assert.ok(readSrc('src/app/api/diagnostics/extract/route.ts').includes('blockServiceAdvisorAi'));
     assert.ok(readSrc('src/app/api/repair-orders/extract/route.ts').includes('blockServiceAdvisorAi'));
+  });
+
+  it('compliance routes use atomic Prisma transactions for DB + audit', () => {
+    const consent = readSrc('src/app/api/consent/route.ts');
+    const disclaimer = readSrc('src/app/api/legal-disclaimer/route.ts');
+    const certify = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts');
+    assert.ok(consent.includes('prisma.$transaction'));
+    assert.ok(consent.includes('appendAuditLogInTransaction'));
+    assert.ok(disclaimer.includes('prisma.$transaction'));
+    assert.ok(disclaimer.includes('appendAuditLogInTransaction'));
+    assert.ok(certify.includes('prisma.$transaction'));
+    assert.ok(certify.includes('appendAuditLogInTransaction'));
+  });
+
+  it('service advisors are blocked from customer-pay template routes', () => {
+    assert.ok(
+      readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/apply-customer-pay-template/route.ts').includes(
+        'blockServiceAdvisorAi'
+      )
+    );
+    assert.ok(
+      readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/clear-customer-pay/route.ts').includes(
+        'blockServiceAdvisorAi'
+      )
+    );
   });
 
   it('client timeouts align with shared constants', () => {
@@ -88,6 +168,19 @@ describe('Third-party audit hardening', () => {
     assert.ok(src.includes('auditMetadataContainsPathname'));
   });
 
+  it('encryption and PII modules are server-only', () => {
+    const encryption = readSrc('src/lib/encryption.ts');
+    const roMapper = readSrc('src/lib/roMapper.ts');
+    const piiRead = readSrc('src/lib/piiFieldRead.ts');
+    const piiSearch = readSrc('src/lib/piiSearchToken.ts');
+    const auth = readSrc('src/lib/auth.ts');
+    assert.ok(encryption.includes("import 'server-only'"));
+    assert.ok(roMapper.includes("import 'server-only'"));
+    assert.ok(piiRead.includes("import 'server-only'"));
+    assert.ok(piiSearch.includes("import 'server-only'"));
+    assert.ok(auth.includes("import 'server-only'"));
+  });
+
   it('client hooks do not import server-only certification modules', () => {
     const useRepairOrders = readSrc('src/hooks/useRepairOrders.ts');
     assert.ok(useRepairOrders.includes('storyCertificationClient'));
@@ -105,6 +198,44 @@ describe('Third-party audit hardening', () => {
     assert.ok(shell.includes('BenzTechAuthenticatedApp'));
     assert.ok(shell.includes('loginSession'));
     assert.ok(readSrc('src/components/BenzTechAuthenticatedApp.tsx').includes('useRepairOrders'));
+  });
+
+  it('PII Phase 5 uses encrypted-only storage in Merlinus v2', () => {
+    const schema = readSrc('prisma/schema.prisma');
+    const roMapper = readSrc('src/lib/roMapper.ts');
+    const resolveAdvisor = readSrc('src/lib/advisorIntelligence/resolveAdvisor.ts');
+    assert.equal(schema.includes('roNumber                   String'), false);
+    assert.equal(schema.includes('description               String'), false);
+    assert.ok(schema.includes('roNumberEncrypted'));
+    assert.ok(schema.includes('descriptionEncrypted'));
+    assert.ok(roMapper.includes('roNumberEncrypted: encryptPII'));
+    assert.ok(roMapper.includes('roNumberSearchTokens: buildRoNumberSearchTokens'));
+    assert.equal(roMapper.includes("roNumber: ''"), false);
+    assert.ok(resolveAdvisor.includes('displayNameEncrypted: encryptPII'));
+    assert.ok(readSrc('src/lib/roListQuery.ts').includes('roNumberSearchTokens'));
+    assert.ok(readSrc('src/lib/piiFieldRead.ts').includes('readRoNumberFromDb'));
+    assert.ok(readSrc('prisma/migrations/20250630140000_drop_pii_plaintext_columns/migration.sql').includes('DROP COLUMN'));
+  });
+
+  it('technician-scoped queries include dealershipId defense-in-depth', () => {
+    const roListQuery = readSrc('src/lib/roListQuery.ts');
+    const dashboardSummary = readSrc('src/app/api/dashboard/summary/route.ts');
+    const repairOrderAccess = readSrc('src/lib/repairOrderAccess.ts');
+    const roRoute = readSrc('src/app/api/repair-orders/[id]/route.ts');
+    const generateStory = readSrc(
+      'src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts'
+    );
+    const changePassword = readSrc('src/app/api/auth/change-password/route.ts');
+
+    assert.ok(roListQuery.includes('dealershipId: session.dealershipId, technicianId: session.technicianId'));
+    assert.ok(dashboardSummary.includes('dealershipId: session.dealershipId, technicianId: session.technicianId'));
+    assert.ok(repairOrderAccess.includes('scopedRepairLineWhere'));
+    assert.ok(repairOrderAccess.includes('scopedRepairOrderWhere'));
+    assert.ok(roRoute.includes('scopedRepairOrderWhere'));
+    assert.ok(roRoute.includes('scopedRepairLineWhere'));
+    assert.equal(roRoute.includes('repairLine.upsert'), false);
+    assert.ok(generateStory.includes('scopedRepairLineWhere'));
+    assert.ok(changePassword.includes('dealershipId: session.dealershipId'));
   });
 
   it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {

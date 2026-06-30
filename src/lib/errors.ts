@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 import { logger } from './logger';
 
@@ -11,11 +12,11 @@ export const DAILY_USAGE_LIMIT_ERROR =
   'Daily AI usage limit reached (50 requests per technician). Try again tomorrow.';
 export const SESSION_EXPIRED_ERROR = 'Your session has expired. Please sign in again.';
 export const CONSENT_REQUIRED_ERROR =
-  'Data and privacy consent is required before using Merlin. Please accept the consent terms to continue.';
+  'Data and privacy consent is required before using Merlinus. Please accept the consent terms to continue.';
 export const LEGAL_DISCLAIMER_REQUIRED_ERROR =
-  'Legal disclaimer acknowledgment is required before using Merlin. Please accept the disclaimer to continue.';
+  'Legal disclaimer acknowledgment is required before using Merlinus. Please accept the disclaimer to continue.';
 export const MAINTENANCE_MODE_ERROR =
-  'Merlin is in maintenance mode. Story generation and uploads are paused — try again shortly.';
+  'Merlinus is in maintenance mode. Story generation and uploads are paused — try again shortly.';
 export const GROK_UNAVAILABLE_ERROR =
   'AI story generation is temporarily unavailable. Check bay Wi‑Fi or type your notes manually.';
 export const PAYLOAD_TOO_LARGE_ERROR = 'Request is too large. Reduce attachments or split your input.';
@@ -32,9 +33,15 @@ export function handleRouteError(error: unknown, context: string): NextResponse 
     logger.warn('route.unauthorized', { context });
     return apiError(SESSION_EXPIRED_ERROR, 401);
   }
+
+  const err = error instanceof Error ? error : new Error('unknown route error');
   logger.error('route.error', {
     context,
-    error: error instanceof Error ? error.message : 'unknown',
+    error: err.message,
+  });
+  Sentry.captureException(err, {
+    tags: { routeContext: context },
+    extra: { routeContext: context },
   });
   return apiError(GENERIC_ERROR, 500);
 }

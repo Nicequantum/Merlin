@@ -33,12 +33,19 @@ import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { TechnicianCertificationSection } from '@/components/TechnicianCertificationSection';
 import type { StoryCertificationRecord } from '@/hooks/repairOrders/useROStoryWorkflow';
-import { clientLog } from '@/lib/clientLog';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult, TemplateCategory } from '@/types';
-import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
+import { WARRANTY_STORY_MAX_CHARS } from '@/types';
+import { useLineViewCertificationForm } from '@/hooks/lineView/useLineViewCertificationForm';
+import { useLineViewPdfExport } from '@/hooks/lineView/useLineViewPdfExport';
 import { useStoryGenerationPhase } from '@/hooks/useStoryGenerationPhase';
-import { copyFormattedStory, exportWarrantyStoryPdf } from '@/utils/pdfExport';
+import {
+  charCountColor,
+  complaintLabel,
+  getWarrantyStoryTextareaValue,
+  readWarrantyStoryText,
+} from '@/lib/lineViewUtils';
+import { copyFormattedStory } from '@/utils/pdfExport';
 
 interface LineViewProps {
   ro: RepairOrder;
@@ -68,16 +75,6 @@ interface LineViewProps {
   onClearCustomerPayMode?: () => void | Promise<void>;
   onAcknowledgeStoryBaseline: (text: string) => void;
   onCertifyAndSaveStory: (storyText: string, certifiedByName: string) => void | Promise<void>;
-}
-
-function complaintLabel(labels: string[] | undefined, index: number): string {
-  return labels?.[index] || String.fromCharCode(65 + index);
-}
-
-function charCountColor(len: number): string {
-  if (len > WARRANTY_STORY_MAX_CHARS) return 'text-benz-red';
-  if (len > WARRANTY_STORY_WARN_CHARS) return 'text-benz-amber';
-  return 'text-benz-muted';
 }
 
 export function LineView({
@@ -118,44 +115,30 @@ export function LineView({
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
-  const [certificationChecked, setCertificationChecked] = useState(false);
-  const [certificationName, setCertificationName] = useState('');
 
-  const showCertificationSection = !isCustomerPayLine && Boolean(storyQuality);
-  const isStoryCertified = Boolean(storyCertification);
-  const isCertificationComplete =
-    certificationChecked && certificationName.trim().length >= 2;
-  const hasCompletedAuditForCurrentStory = Boolean(storyQuality) || storyQualityStale;
-  const certificationActionsLocked =
-    !isCustomerPayLine &&
-    Boolean(lastGeneratedStoryText) &&
-    hasCompletedAuditForCurrentStory &&
-    !isStoryCertified;
+  const {
+    certificationChecked,
+    setCertificationChecked,
+    certificationName,
+    setCertificationName,
+    showCertificationSection,
+    isStoryCertified,
+    isCertificationComplete,
+    certificationActionsLocked,
+  } = useLineViewCertificationForm({
+    lineId: line.id,
+    isCustomerPayLine,
+    technicianName,
+    storyQuality,
+    storyQualityStale,
+    storyCertification,
+    lastGeneratedStoryText,
+  });
 
   useEffect(() => {
     setShowSaveTemplate(false);
     setShowTemplateLibrary(false);
-    setCertificationChecked(false);
-    setCertificationName('');
   }, [line.id]);
-
-  useEffect(() => {
-    setCertificationChecked(false);
-    setCertificationName('');
-  }, [storyQuality?.scoredAgainstStory, storyQuality?.score]);
-
-  useEffect(() => {
-    if (storyCertification) {
-      setCertificationChecked(true);
-      setCertificationName(storyCertification.certifiedByName);
-    }
-  }, [storyCertification]);
-
-  useEffect(() => {
-    if (!storyCertification && !certificationName.trim() && technicianName?.trim()) {
-      setCertificationName(technicianName.trim());
-    }
-  }, [line.id, technicianName, storyCertification, certificationName]);
 
   const canSaveAsTemplate = useMemo(() => {
     return Boolean(lastGeneratedStoryText && line.warrantyStory?.trim());
@@ -175,8 +158,7 @@ export function LineView({
   };
 
   const handleCopy = async () => {
-    const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
-    const storyText = storyEl?.value ?? line.warrantyStory ?? '';
+    const storyText = getWarrantyStoryTextareaValue(line.id, line.warrantyStory);
     if (!storyText.trim()) return;
     try {
       const { wasModified } = await copyFormattedStory(ro, line, storyText);
@@ -189,13 +171,9 @@ export function LineView({
     }
   };
 
-  const readStoryText = () => {
-    const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
-    return (storyEl?.value ?? line.warrantyStory ?? '').trim();
-  };
+  const readStoryText = () => readWarrantyStoryText(line.id, line.warrantyStory);
 
   const handleGenerateStory = () => {
-    console.log('Generate Story clicked');
     void onGenerateStory();
   };
 
@@ -212,50 +190,7 @@ export function LineView({
     void onCertifyAndSaveStory(readStoryText(), certificationName.trim());
   };
 
-  const handlePdf = async () => {
-    const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
-    const storyText = storyEl?.value ?? line.warrantyStory ?? '';
-    if (!storyText.trim()) {
-      toast.error(isCustomerPayLine ? 'No story to export yet' : 'No warranty story to export');
-      return;
-    }
-
-    try {
-      let auditHash: string | undefined;
-      let promptVersion: string | undefined;
-
-      try {
-        const res = await fetch(`/api/audit-logs/latest?repairLineId=${encodeURIComponent(line.id)}`, {
-          credentials: 'include',
-        });
-        if (res.ok) {
-          const data = (await res.json()) as { hash?: string | null; promptVersion?: string | null };
-          auditHash = data.hash ?? undefined;
-          promptVersion = data.promptVersion ?? undefined;
-        }
-      } catch (err) {
-        clientLog.warn('Could not fetch audit hash for PDF', err);
-      }
-
-      const pdfStartedAt = performance.now();
-      exportWarrantyStoryPdf(ro, line, storyText, auditHash, promptVersion, technicianName);
-      const durationMs = Math.round(performance.now() - pdfStartedAt);
-
-      void fetch('/api/audit-logs/pdf-export', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repairLineId: line.id, repairOrderId: ro.id, durationMs }),
-      }).catch((err) => {
-        clientLog.warn('Could not record PDF export audit log', err);
-      });
-
-      toast.success('PDF downloaded successfully');
-    } catch (err) {
-      clientLog.error('PDF export failed', err);
-      toast.error('PDF export failed — try again');
-    }
-  };
+  const handlePdf = useLineViewPdfExport({ ro, line, technicianName, isCustomerPayLine });
 
   return (
     <div className="benz-page pb-12">

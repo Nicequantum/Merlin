@@ -2,6 +2,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
+import { clientLog } from '@/lib/clientLog';
 
 export default function Error({
   error,
@@ -11,14 +12,14 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('[Merlin] route error:', error);
+    clientLog.error('route.error', { error: error.message, digest: error.digest, stack: error.stack });
     Sentry.captureException(error);
   }, [error]);
 
   return (
     <div className="app-container benz-page py-10 text-center min-h-dvh flex items-center justify-center px-6" role="alert">
       <div className="benz-card-elevated p-7 max-w-md w-full">
-        <div className="text-lg font-semibold mb-2 tracking-tight">Merlin hit a snag</div>
+        <div className="text-lg font-semibold mb-2 tracking-tight">Merlinus hit a snag</div>
         <p className="text-sm text-benz-secondary mb-2 leading-relaxed">
           Something unexpected happened. Your repair order data on this page was not lost — try again or return to the
           home screen.

@@ -1,10 +1,15 @@
+import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
+import { getRequestIp } from '@/lib/rate-limit';
 import { GLOBAL_DEALERSHIP_ID, recordTemplateUsage } from '@/lib/templateLibrary';
 import { prisma } from '@/lib/db';
+import { parseRouteParams, routeIdParamsSchema } from '@/lib/validation';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
 
   return withAuth(
     request,
@@ -21,6 +26,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       await recordTemplateUsage(id, session.dealershipId);
+
+      await writeAuditLog({
+        action: 'template.use',
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        entityType: 'template',
+        entityId: id,
+        metadata: { title: template.title, category: template.category },
+        ipAddress: getRequestIp(request),
+      });
+
       return { ok: true };
     },
     { rateLimitKey: 'templates.use' }

@@ -1,10 +1,10 @@
-import { writeAuditLog } from '@/lib/audit';
+import { appendAuditLogInTransaction } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
@@ -13,7 +13,7 @@ import { hashWarrantyStory } from '@/lib/storyHash';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { recordTechnicianCertifiedStory } from '@/lib/technicianCertifiedStory';
-import { parseRequestBody, certifyStorySchema } from '@/lib/validation';
+import { certifyStorySchema, parseRequestBody, parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 
 function namesMatchForCertification(sessionName: string, certifiedByName: string): boolean {
   const normalize = (value: string) =>
@@ -28,7 +28,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const { id, lineId } = await params;
+  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id, lineId } = routeParams.data;
 
   return withAuth(
     request,
@@ -86,36 +88,43 @@ export async function POST(
       const storyHash = hashWarrantyStory(warrantyStory);
       const certifiedAt = new Date();
 
-      const auditLogId = await writeAuditLog({
-        action: 'story.certify',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'repairLine',
-        entityId: lineId,
-        promptVersion: PROMPT_VERSION,
-        metadata: {
-          repairOrderId: id,
-          lineNumber: line.lineNumber,
-          certifiedByName,
-          certifiedAt: certifiedAt.toISOString(),
-          aiAssistedStoryCertified: true,
+      const auditLogId = await prisma.$transaction(async (tx) => {
+        const newAuditLogId = await appendAuditLogInTransaction(tx, {
+          action: 'story.certify',
+          dealershipId: session.dealershipId,
+          technicianId: session.technicianId,
+          entityType: 'repairLine',
+          entityId: lineId,
           promptVersion: PROMPT_VERSION,
-          storyHash,
-        },
-        ipAddress: getRequestIp(request),
-      });
-
-      await prisma.repairLine.update({
-        where: { id: lineId },
-        data: {
-          warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
-          ...buildStoryCertificationDbFields({
-            certifiedAt,
-            certifiedByTechnicianId: session.technicianId,
+          metadata: {
+            repairOrderId: id,
+            lineNumber: line.lineNumber,
             certifiedByName,
+            certifiedAt: certifiedAt.toISOString(),
+            aiAssistedStoryCertified: true,
+            promptVersion: PROMPT_VERSION,
             storyHash,
-          }),
-        },
+          },
+          ipAddress: getRequestIp(request),
+        });
+
+        const lineUpdated = await tx.repairLine.updateMany({
+          where: scopedRepairLineWhere(lineId, id, session.dealershipId),
+          data: {
+            warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
+            ...buildStoryCertificationDbFields({
+              certifiedAt,
+              certifiedByTechnicianId: session.technicianId,
+              certifiedByName,
+              storyHash,
+            }),
+          },
+        });
+        if (lineUpdated.count === 0) {
+          throw new Error('Repair line not found for certification');
+        }
+
+        return newAuditLogId;
       });
 
       void logStoryTechnicianActivity({

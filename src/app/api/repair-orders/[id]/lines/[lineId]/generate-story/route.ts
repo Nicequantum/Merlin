@@ -5,7 +5,7 @@ import { generateWarrantyStory } from '@/lib/grok';
 import { buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
-import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -15,6 +15,7 @@ import { logPerformance } from '@/lib/perf';
 import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
+import { parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 60;
@@ -23,7 +24,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const { id, lineId } = await params;
+  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id, lineId } = routeParams.data;
 
   return withAuth(
     request,
@@ -90,14 +93,15 @@ export async function POST(
         ipAddress: getRequestIp(request),
       });
 
-      await prisma.repairLine.update({
-        where: { id: lineId },
+      const lineUpdated = await prisma.repairLine.updateMany({
+        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
         data: {
           warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
           storyQualityAuditEncrypted: '',
           ...CLEAR_STORY_CERTIFICATION_DB,
         },
       });
+      if (lineUpdated.count === 0) return apiError(NOT_FOUND_ERROR, 404);
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,

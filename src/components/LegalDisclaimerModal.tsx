@@ -51,8 +51,8 @@ export function LegalDisclaimerModal({ onAccept, loading }: LegalDisclaimerModal
           className="px-6 overflow-y-auto flex-1 text-sm text-benz-silver space-y-4 leading-relaxed border-y border-benz-border/40"
         >
           <p>
-            You are accessing Merlin, an artificial intelligence-assisted documentation tool made available to
-            authorized Mercedes-Benz franchise dealership service technicians. Merlin is intended solely as a{' '}
+            You are accessing Merlinus, an artificial intelligence-assisted documentation tool made available to
+            authorized Mercedes-Benz franchise dealership service technicians. Merlinus is intended solely as a{' '}
             <strong className="text-benz-primary">decision-support and drafting assistant</strong>. It does not
             replace your professional judgment, manufacturer warranty policy, or dealership procedures.
           </p>
@@ -62,7 +62,7 @@ export function LegalDisclaimerModal({ onAccept, loading }: LegalDisclaimerModal
             narratives, audit scores, and coaching feedback are produced from the information you provide and from
             patterns learned from historical documentation. Outputs may be incomplete, imprecise, or unsuitable for
             submission without your independent verification. Mercedes-Benz AG, your franchised dealer, and the
-            developers of Merlin make no warranty that any AI output is accurate, complete, or acceptable for warranty
+            developers of Merlinus make no warranty that any AI output is accurate, complete, or acceptable for warranty
             reimbursement.
           </p>
 
@@ -85,7 +85,7 @@ export function LegalDisclaimerModal({ onAccept, loading }: LegalDisclaimerModal
           </p>
 
           <p>
-            <strong className="text-benz-primary">Legal and compliance exposure.</strong> By using Merlin and submitting
+            <strong className="text-benz-primary">Legal and compliance exposure.</strong> By using Merlinus and submitting
             repair documentation, you acknowledge that{' '}
             <strong className="text-benz-primary">you assume full legal and professional responsibility</strong> for each
             claim. False, fraudulent, or materially inaccurate warranty submissions may result in claim denial, chargeback,
@@ -96,13 +96,13 @@ export function LegalDisclaimerModal({ onAccept, loading }: LegalDisclaimerModal
           <p>
             <strong className="text-benz-primary">Truthful documentation pledge.</strong> You agree to submit only repair
             documentation that is truthful, accurate, and consistent with Mercedes-Benz warranty policy, Star Diagnosis
-            records, and the actual condition and repair of the vehicle. You will not use Merlin to generate or submit
+            records, and the actual condition and repair of the vehicle. You will not use Merlinus to generate or submit
             claims you know or reasonably should know to be unsupported.
           </p>
 
           <p className="text-xs text-benz-secondary pb-4">
             This acknowledgment is saved to your technician profile (version {LEGAL_DISCLAIMER_VERSION}) and is
-            required once per account. If you do not agree, close this application and do not use Merlin.
+            required once per account. If you do not agree, close this application and do not use Merlinus.
           </p>
         </div>
 
@@ -121,7 +121,7 @@ export function LegalDisclaimerModal({ onAccept, loading }: LegalDisclaimerModal
             />
             <span className="text-sm text-benz-silver leading-snug">
               I have read and understand this acknowledgment. I accept sole responsibility for all warranty documentation
-              I submit and agree to use Merlin only as an AI assistant while personally verifying every claim.
+              I submit and agree to use Merlinus only as an AI assistant while personally verifying every claim.
             </span>
           </label>
 

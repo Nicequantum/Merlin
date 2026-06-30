@@ -23,22 +23,25 @@ const AI_ROUTE_FILES = [
   'src/app/api/repair-orders/[id]/lines/[lineId]/review-story/route.ts',
 ];
 
-/** Known intentional plaintext PII write sites — must stay documented with S2 markers + dual-write where applicable. */
+/** Merlinus v2 Phase 5 — encrypted-only PII writes; plaintext DB columns dropped. */
 const PII_WRITE_GUARDS = [
   {
     file: 'src/lib/roMapper.ts',
     region: 'repairOrderToDbFields',
-    requiredSnippets: ['S2 PLAINTEXT WRITE', 'roNumberEncrypted: encryptPII'],
+    requiredSnippets: ['roNumberEncrypted: encryptPII', 'roNumberSearchTokens: buildRoNumberSearchTokens'],
+    forbiddenSnippets: ["roNumber: ''", 'roNumber: roNumber'],
   },
   {
     file: 'src/lib/roMapper.ts',
     region: 'repairLineToDbFields',
-    requiredSnippets: ['S2 PLAINTEXT WRITE', 'descriptionEncrypted: encryptSensitiveText'],
+    requiredSnippets: ['descriptionEncrypted: encryptSensitiveText'],
+    forbiddenSnippets: ["description: ''", 'description: line.description'],
   },
   {
     file: 'src/lib/advisorIntelligence/resolveAdvisor.ts',
     region: 'serviceAdvisor.create',
-    requiredSnippets: ['S2 PLAINTEXT WRITE', 'displayName:'],
+    requiredSnippets: ['displayNameEncrypted: encryptPII'],
+    forbiddenSnippets: ["displayName: ''"],
   },
   {
     file: 'src/lib/advisorIntelligence/resolveAdvisor.ts',
@@ -158,12 +161,18 @@ function checkPlaintextPiiWriteGuards() {
         warnings.push(`${guard.file} (${guard.region}): missing "${snippet}"`);
       }
     }
+    for (const snippet of guard.forbiddenSnippets ?? []) {
+      if (region.includes(snippet)) {
+        warnings.push(`${guard.file} (${guard.region}): forbidden plaintext write "${snippet}"`);
+      }
+    }
   }
 
   const roMapper = readSrc('src/lib/roMapper.ts');
   const undocumentedPatterns = [
-    { label: 'roNumber plaintext without encrypted twin in repairOrderToDbFields', ok: roMapper.includes('roNumberEncrypted: encryptPII(input.roNumber)') },
-    { label: 'description plaintext without encrypted twin in repairLineToDbFields', ok: roMapper.includes('descriptionEncrypted: encryptSensitiveText(line.description)') },
+    { label: 'roNumber encrypted write in repairOrderToDbFields', ok: roMapper.includes('roNumberEncrypted: encryptPII(roNumber)') },
+    { label: 'roNumber search tokens in repairOrderToDbFields', ok: roMapper.includes('roNumberSearchTokens: buildRoNumberSearchTokens') },
+    { label: 'description encrypted write in repairLineToDbFields', ok: roMapper.includes('descriptionEncrypted: encryptSensitiveText(line.description)') },
   ];
   for (const pattern of undocumentedPatterns) {
     if (!pattern.ok) warnings.push(pattern.label);
@@ -176,8 +185,13 @@ function checkPlaintextPiiWriteGuards() {
     const matches = source.match(/S2 PLAINTEXT WRITE/g);
     s2MarkerTotal += matches ? matches.length : 0;
   }
-  if (s2MarkerTotal < 5) {
-    warnings.push(`Expected at least 5 documented S2 PLAINTEXT WRITE markers, found ${s2MarkerTotal}`);
+  if (s2MarkerTotal < 2) {
+    warnings.push(`Expected at least 2 documented S2 PLAINTEXT WRITE markers (alias/profile), found ${s2MarkerTotal}`);
+  }
+
+  const schema = readSrc('prisma/schema.prisma');
+  if (schema.includes('roNumber                   String') || schema.includes('description               String')) {
+    warnings.push('schema still defines dual-storage plaintext PII columns');
   }
 
   if (warnings.length > 0) {
@@ -187,7 +201,7 @@ function checkPlaintextPiiWriteGuards() {
     return;
   }
 
-  pass('Plaintext PII write paths are documented and dual-write guarded (S2)');
+  pass('Encrypted-only PII writes verified (Phase 5 — plaintext columns dropped)');
 }
 
 function checkOptimisticConcurrencyGuard() {

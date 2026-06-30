@@ -1,4 +1,5 @@
 import { withAuth } from '@/lib/apiRoute';
+import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { prisma } from '@/lib/db';
 
 /** Manager-only snapshot for verifying Phase 1 advisor capture during live testing. */
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
             take: 8,
             select: {
               id: true,
-              displayName: true,
+              displayNameEncrypted: true,
               roCount: true,
               lastSeenAt: true,
               profile: {
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
           linkedRepairOrders: linkedRos,
           recentAdvisors: recentAdvisors.map((advisor) => ({
             id: advisor.id,
-            displayName: advisor.displayName,
+            displayName: readAdvisorDisplayNameFromDb(advisor),
             roCount: advisor.roCount,
             lastSeenAt: advisor.lastSeenAt.toISOString(),
             observationCount: advisor.profile?.observationCount ?? 0,

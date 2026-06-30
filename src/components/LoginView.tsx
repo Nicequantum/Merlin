@@ -33,7 +33,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
         <div className="merlin-brand-hero login-brand">
           <MerlinLogoMark size="lg" animated />
           <p className="merlin-wordmark">
-            Merlin
+            Merlinus
             <span className="merlin-wordmark-accent">Warranty Intelligence</span>
           </p>
           <div className="merlin-brand-divider" aria-hidden="true" />

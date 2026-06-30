@@ -3,7 +3,9 @@ import { VOICE_INPUT_SETTINGS } from './constants';
 import { isMaintenanceModeEnabled, validateEnvironment } from './env';
 import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey.shared';
 import { encryptPII, decryptPII } from './encryption';
-import { prisma } from './db';
+import 'server-only';
+
+import { prisma, probeDatabaseConnection } from './db';
 import { isCiOrTestRuntime, isKvConfigured, isProductionEnv } from './rate-limit';
 import { logger } from './logger';
 
@@ -85,7 +87,7 @@ export function checkEnvironmentConfig(): DependencyCheck {
 export async function checkDatabase(): Promise<DependencyCheck> {
   try {
     const { latencyMs } = await timed(async () => {
-      await prisma.$queryRaw`SELECT 1`;
+      await probeDatabaseConnection();
       return true;
     });
     return { status: 'ok', latencyMs };
@@ -103,13 +105,16 @@ export async function checkEncryption(): Promise<DependencyCheck> {
     return { status: 'error', detail: 'ENCRYPTION_KEY missing or too short (min 32 chars)' };
   }
   try {
-    const sample = 'health-check-pii-roundtrip';
-    const encrypted = encryptPII(sample);
-    const decrypted = decryptPII(encrypted);
-    if (decrypted !== sample) {
-      return { status: 'error', detail: 'encrypt/decrypt roundtrip mismatch' };
-    }
-    return { status: 'ok' };
+    const { latencyMs } = await timed(async () => {
+      const sample = 'health-check-pii-roundtrip';
+      const encrypted = encryptPII(sample);
+      const decrypted = decryptPII(encrypted);
+      if (decrypted !== sample) {
+        throw new Error('encrypt/decrypt roundtrip mismatch');
+      }
+      return true;
+    });
+    return { status: 'ok', latencyMs };
   } catch (error) {
     return {
       status: 'error',
@@ -195,35 +200,31 @@ export async function checkGrokApiConnectivity(): Promise<DependencyCheck> {
     return { status: 'error', detail: 'Grok API key configuration invalid' };
   }
 
-  const startedAt = Date.now();
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), GROK_CONNECTIVITY_TIMEOUT_MS);
-    try {
-      const response = await fetch(GROK_MODELS_URL, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        signal: controller.signal,
-      });
-      const latencyMs = Date.now() - startedAt;
-      if (!response.ok) {
-        return {
-          status: 'warn',
-          latencyMs,
-          detail: `Grok API returned HTTP ${response.status}`,
-        };
+    const { latencyMs } = await timed(async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), GROK_CONNECTIVITY_TIMEOUT_MS);
+      try {
+        const response = await fetch(GROK_MODELS_URL, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Grok API returned HTTP ${response.status}`);
+        }
+        return true;
+      } finally {
+        clearTimeout(timer);
       }
-      return { status: 'ok', latencyMs, detail: 'Grok API reachable' };
-    } finally {
-      clearTimeout(timer);
-    }
+    });
+    return { status: 'ok', latencyMs, detail: 'Grok API reachable' };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Grok API unreachable';
-    const latencyMs = Date.now() - startedAt;
     if (message.toLowerCase().includes('abort')) {
-      return { status: 'warn', latencyMs, detail: 'Grok API connectivity probe timed out' };
+      return { status: 'warn', detail: 'Grok API connectivity probe timed out' };
     }
-    return { status: 'warn', latencyMs, detail: message };
+    return { status: 'warn', detail: message };
   }
 }
 

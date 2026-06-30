@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/audit';
 import { createSessionToken, loginTechnician, setSessionCookie } from '@/lib/auth';
-import { apiError, handleRouteError, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError, handleRouteError } from '@/lib/errors';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
-import { loginSchema, parseBody } from '@/lib/validation';
+import { logApiWriteRequest } from '@/lib/requestLogging';
+import { AUTH_JSON_BODY_LIMIT_BYTES, loginSchema, parseRequestBody } from '@/lib/validation';
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   const rateLimited = await checkRateLimit(request, 'auth.login', RATE_LIMITS.auth);
   if (rateLimited) return rateLimited;
 
   try {
-    const body = await request.json();
-    const parsed = parseBody(loginSchema, body);
+    const parsed = await parseRequestBody(request, loginSchema, AUTH_JSON_BODY_LIMIT_BYTES);
     if ('error' in parsed) {
-      return apiError(VALIDATION_ERROR, 400);
+      return parsed.error;
     }
 
     const { d7Number, password } = parsed.data;
@@ -32,8 +33,24 @@ export async function POST(request: Request) {
       ipAddress: getRequestIp(request),
     });
 
-    return NextResponse.json({ session });
+    const response = NextResponse.json({ session });
+    logApiWriteRequest({
+      routeKey: 'auth.login',
+      method: request.method,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      technicianId: session.technicianId,
+      dealershipId: session.dealershipId,
+    });
+    return response;
   } catch (error) {
+    logApiWriteRequest({
+      routeKey: 'auth.login',
+      method: request.method,
+      status: 500,
+      durationMs: Date.now() - startedAt,
+      failed: true,
+    });
     return handleRouteError(error, 'auth.login');
   }
 }

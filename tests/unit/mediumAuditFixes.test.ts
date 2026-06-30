@@ -62,15 +62,17 @@ describe('Medium audit fixes (M1–M30)', () => {
   });
 
   it('M12: CSP middleware blocks eval', () => {
+    const policy = readSrc('security-policy.mjs');
     const mw = readSrc('src/middleware.ts');
     const nextCfg = readSrc('next.config.mjs');
-    assert.ok(mw.includes("'unsafe-inline'"));
-    assert.equal(mw.includes('unsafe-eval'), false);
+    assert.ok(policy.includes("'unsafe-inline'"));
+    assert.equal(policy.includes('unsafe-eval'), false);
     assert.equal(nextCfg.includes('unsafe-eval'), false);
-    assert.ok(mw.includes("manifest-src 'self' data:"));
-    assert.ok(mw.includes('https://*.sentry.io'));
-    assert.ok(mw.includes('connect-src'));
-    assert.equal(mw.includes('https://vercel.com'), false);
+    assert.ok(policy.includes("manifest-src 'self' data:"));
+    assert.ok(policy.includes('https://*.sentry.io'));
+    assert.ok(policy.includes('connect-src'));
+    assert.equal(policy.includes('https://vercel.com'), false);
+    assert.ok(mw.includes('security-policy.mjs'));
   });
 
   it('M13: audit metadata sanitization', () => {
@@ -102,6 +104,11 @@ describe('Medium audit fixes (M1–M30)', () => {
   it('M21: useRepairOrders split into focused hooks', () => {
     assert.ok(readSrc('src/hooks/repairOrders/useROPersistence.ts').includes('useROPersistence'));
     assert.ok(readSrc('src/hooks/repairOrders/useROStoryWorkflow.ts').includes('useROStoryWorkflow'));
+    assert.ok(readSrc('src/hooks/repairOrders/roImageUtils.ts').includes('removeImageAtIndex'));
+    assert.ok(readSrc('src/hooks/repairOrders/roXentryAnalysis.ts').includes('analyzeXentryImage'));
+    assert.ok(readSrc('src/hooks/repairOrders/currentLineStoryState.ts').includes('deriveCurrentLineStoryState'));
+    assert.ok(readSrc('src/lib/lineViewUtils.ts').includes('readWarrantyStoryText'));
+    assert.ok(readSrc('src/hooks/lineView/useLineViewPdfExport.ts').includes('useLineViewPdfExport'));
   });
 
   it('M22/M23: images route uses withAuth', () => {

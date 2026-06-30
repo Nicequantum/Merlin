@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
+import { clientLog } from '@/lib/clientLog';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { OFFLINE_ERROR } from '@/lib/errors';
 import { isStoryQualityCurrent } from '@/lib/storyQualityState';
@@ -155,8 +156,6 @@ export function useROStoryWorkflow(
 
   const generateStory = useCallback(
     async (lineId: string) => {
-      console.log('Generate Story clicked', { lineId });
-
       if (refs.storyGenerationInFlightRef.current) {
         toast.message('Story generation already in progress…');
         return;
@@ -227,7 +226,7 @@ export function useROStoryWorkflow(
         toast.success('Warranty story generated — tap Audit Story when ready for MI scoring');
       } catch (error: unknown) {
         if (seq === refs.generateStorySeqRef.current) {
-          console.error('[Merlin] Generate warranty story failed', error);
+          clientLog.error('story.generate_failed', error);
           toast.error(getStoryWorkflowErrorMessage(error, 'Story generation failed'));
         }
       } finally {
@@ -321,7 +320,7 @@ export function useROStoryWorkflow(
         toast.success(`MI audit score: ${quality.score}/100 (${quality.grade})`);
       } catch (error: unknown) {
         if (seq === refs.scoreStorySeqRef.current) {
-          console.error('[Merlin] Audit warranty story failed', error);
+          clientLog.error('story.audit_failed', error);
           toast.error(getStoryWorkflowErrorMessage(error, 'Story audit failed'));
         }
       } finally {
@@ -413,7 +412,7 @@ export function useROStoryWorkflow(
         toast.success(`MI 4.3 review complete — ${review.score}/100 (${review.grade})`);
       } catch (error: unknown) {
         if (seq === refs.reviewStorySeqRef.current) {
-          console.error('[Merlin] Review warranty story failed', error);
+          clientLog.error('story.review_failed', error);
           toast.error(getStoryWorkflowErrorMessage(error, 'Story review failed'));
         }
       } finally {

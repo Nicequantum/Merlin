@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
-import { runDiagnosticOCR } from '@/services/ocr';
 import type {
   AppView,
   ExtractedData,
@@ -19,11 +18,8 @@ import type {
 } from '@/types';
 import {
   emptyExtractedData,
-  formatExtractionAsOcrText,
   mergeExtracted,
   normalizeExtractedData,
-  parseDiagnosticExtraction,
-  rebuildExtractedFromOcrTexts,
 } from '@/utils/diagnosticParser';
 
 
@@ -39,12 +35,16 @@ import {
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { hydrateStoryWorkflowFromRO } from '@/lib/storyCertificationClient';
 import { hydrateStoryQualityFromRO } from '@/lib/storyQualityHydration';
-import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import {
   createManualRepairOrder,
   createNewRepairLine,
   ensureComplaintIds,
 } from '@/utils/repairOrderFactory';
+import { deriveCurrentLineStoryState } from '@/hooks/repairOrders/currentLineStoryState';
+import { removeImageAtIndex } from '@/hooks/repairOrders/roImageUtils';
+import { analyzeXentryImage } from '@/hooks/repairOrders/roXentryAnalysis';
+import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
+import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
 import { uploadFileAsAttachment } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
@@ -203,23 +203,29 @@ export function useRepairOrders({
           setLastGeneratedStoryByLine({});
           setStoryQualityByLine({});
           setStoryReviewByLine({});
-          generateStorySeqRef.current += 1;
-          scoreStorySeqRef.current += 1;
-          reviewStorySeqRef.current += 1;
-          storyGenerationInFlightRef.current = false;
-          storyScoringInFlightRef.current = false;
-          storyReviewInFlightRef.current = false;
-          setIsGenerating(false);
-          setGeneratingLineId(null);
-          setIsScoring(false);
-          setScoringLineId(null);
-          setIsReviewing(false);
-          setReviewingLineId(null);
+          resetStoryWorkflowUiState(
+            {
+              generateStorySeqRef,
+              scoreStorySeqRef,
+              reviewStorySeqRef,
+              storyGenerationInFlightRef,
+              storyScoringInFlightRef,
+              storyReviewInFlightRef,
+            },
+            {
+              setIsGenerating,
+              setGeneratingLineId,
+              setIsScoring,
+              setScoringLineId,
+              setIsReviewing,
+              setReviewingLineId,
+            }
+          );
           setView('home');
         }
         toast.success('Repair order deleted');
       } catch (e) {
-        console.error('[Merlin] Delete repair order failed', e);
+        clientLog.error('ro.delete_failed', e);
         toast.error(e instanceof Error ? e.message : 'Delete failed');
       }
     },
@@ -244,18 +250,24 @@ export function useRepairOrders({
         setStoryCertificationByLine(certificationByLine);
         setStoryQualityByLine(qualityByLine);
         setStoryReviewByLine(reviewByLine);
-        generateStorySeqRef.current += 1;
-        scoreStorySeqRef.current += 1;
-        reviewStorySeqRef.current += 1;
-        storyGenerationInFlightRef.current = false;
-        storyScoringInFlightRef.current = false;
-        storyReviewInFlightRef.current = false;
-        setIsGenerating(false);
-        setGeneratingLineId(null);
-        setIsScoring(false);
-        setScoringLineId(null);
-        setIsReviewing(false);
-        setReviewingLineId(null);
+        resetStoryWorkflowUiState(
+          {
+            generateStorySeqRef,
+            scoreStorySeqRef,
+            reviewStorySeqRef,
+            storyGenerationInFlightRef,
+            storyScoringInFlightRef,
+            storyReviewInFlightRef,
+          },
+          {
+            setIsGenerating,
+            setGeneratingLineId,
+            setIsScoring,
+            setScoringLineId,
+            setIsReviewing,
+            setReviewingLineId,
+          }
+        );
         setAllROs((prev) => {
           const idx = prev.findIndex((r) => r.id === normalized.id);
           if (idx >= 0) {
@@ -308,17 +320,13 @@ export function useRepairOrders({
   const isStoryCertificationPending = useCallback(
     (lineId: string, line?: RepairLine): boolean => {
       const targetLine = line ?? roRef.current?.repairLines.find((l) => l.id === lineId);
-      if (!targetLine || isCustomerPayRepairLine(targetLine)) return false;
-      if (!lastGeneratedStoryByLine[lineId]) return false;
-
-      const quality = storyQualityByLine[lineId];
-      if (!quality) return false;
-
-      const storyText = targetLine.warrantyStory?.trim() ?? '';
-      if (!storyText || !isStoryQualityCurrent(quality, storyText)) return false;
-
-      const certification = storyCertificationByLine[lineId];
-      return !certification || certification.storyText !== storyText;
+      return isStoryCertificationPendingForLine(
+        lineId,
+        targetLine,
+        lastGeneratedStoryByLine,
+        storyQualityByLine,
+        storyCertificationByLine
+      );
     },
     [lastGeneratedStoryByLine, roRef, storyCertificationByLine, storyQualityByLine]
   );
@@ -405,41 +413,6 @@ export function useRepairOrders({
     navigateView('line');
   }, [flushPendingSave, navigateView, persistRO]);
 
-  const analyzeXentryImage = useCallback(
-    async (file: File, attachment: ImageAttachment, onProgress: (p: number) => void) => {
-      let extracted: Partial<ExtractedData> = {};
-      let text = '';
-
-      onProgress(10);
-      try {
-        const grokData = await api.extractDiagnostics(attachment.pathname);
-        extracted = mergeExtracted(emptyExtractedData(), grokData);
-        text = formatExtractionAsOcrText(grokData);
-        onProgress(50);
-      } catch (err) {
-        clientLog.warn('Grok diagnostic extraction failed, falling back to OCR', err);
-      }
-
-      try {
-        const ocrText = await runDiagnosticOCR(file, (p) => onProgress(text ? 50 + Math.round(p * 0.45) : Math.round(p * 0.9)));
-        if (ocrText.trim()) {
-          const ocrExtracted = parseDiagnosticExtraction(ocrText);
-          extracted = mergeExtracted(mergeExtracted(emptyExtractedData(), extracted), ocrExtracted);
-          text = text ? `${text}\n\n[OCR SUPPLEMENT]\n${ocrText}` : ocrText;
-        }
-      } catch (err) {
-        clientLog.warn('Diagnostic OCR failed for one image', err);
-      }
-
-      if (!text.trim()) {
-        text = '[No diagnostic text extracted from image]';
-      }
-
-      return { text, extracted };
-    },
-    []
-  );
-
   const processXentryImages = useCallback(
     async (files: File[], existingImages: ImageAttachment[], existingOcr: string[], existingExtracted: ExtractedData) => {
       let updatedExtracted = normalizeExtractedData(existingExtracted);
@@ -468,14 +441,6 @@ export function useRepairOrders({
     [analyzeXentryImage, setOcrProgress]
   );
 
-  const removeImageAtIndex = useCallback((images: ImageAttachment[], ocrTexts: string[], imageId: string) => {
-    const index = images.findIndex((img) => img.id === imageId);
-    if (index < 0) return null;
-    const nextImages = images.filter((img) => img.id !== imageId);
-    const nextOcr = ocrTexts.filter((_, i) => i !== index);
-    return { nextImages, nextOcr, rebuilt: rebuildExtractedFromOcrTexts(nextOcr) };
-  }, []);
-
   const deleteLineXentryImage = useCallback(
     async (lineId: string, imageId: string) => {
       if (!window.confirm('Delete this diagnostic photo? Extracted data will be updated.')) return;
@@ -501,11 +466,11 @@ export function useRepairOrders({
         await saveROImmediate({ ...latestRO, repairLines: updatedLines });
         toast.success('Diagnostic photo deleted');
       } catch (error: unknown) {
-        console.error('[Merlin] Delete diagnostic photo failed', error);
+        clientLog.error('ro.delete_diagnostic_photo_failed', error);
         toast.error(error instanceof Error ? error.message : 'Failed to delete diagnostic photo');
       }
     },
-    [removeImageAtIndex, saveROImmediate]
+    [saveROImmediate]
   );
 
   const deleteROXentryImage = useCallback(
@@ -540,11 +505,11 @@ export function useRepairOrders({
         });
         toast.success('Xentry photo deleted');
       } catch (error: unknown) {
-        console.error('[Merlin] Delete Xentry photo failed', error);
+        clientLog.error('ro.delete_xentry_photo_failed', error);
         toast.error(error instanceof Error ? error.message : 'Failed to delete Xentry photo');
       }
     },
-    [removeImageAtIndex, saveROImmediate]
+    [saveROImmediate]
   );
 
   const addXentryPhotos = useCallback(
@@ -810,49 +775,32 @@ export function useRepairOrders({
     });
   }, []);
 
-  const currentLine = currentRO?.repairLines.find((l) => l.id === currentLineId);
-  const lastGeneratedStoryForLine =
-    currentLineId && lastGeneratedStoryByLine[currentLineId]
-      ? lastGeneratedStoryByLine[currentLineId]
-      : null;
-  const cdkSanitizedForLine = Boolean(currentLineId && cdkSanitizedByLine[currentLineId]);
-
-  const isGeneratingForLine = isGenerating && generatingLineId === currentLineId;
-  const isScoringForLine = isScoring && scoringLineId === currentLineId;
-  const isReviewingForLine = isReviewing && reviewingLineId === currentLineId;
-  const storyQualityForLine = (() => {
-    if (!currentLineId || isGeneratingForLine || isScoringForLine || isReviewingForLine) return null;
-    const quality = storyQualityByLine[currentLineId];
-    if (!quality) return null;
-    const storyText = currentLine?.warrantyStory?.trim() ?? '';
-    if (!storyText) return null;
-    if (!isStoryQualityCurrent(quality, storyText)) return null;
-    return quality;
-  })();
-
-  const storyReviewForLine = (() => {
-    if (!currentLineId || isGeneratingForLine || isScoringForLine || isReviewingForLine) return null;
-    if (!storyQualityForLine) return null;
-    return storyReviewByLine[currentLineId] ?? null;
-  })();
-
-  const storyQualityStaleForLine = (() => {
-    if (!currentLineId || isGeneratingForLine || isScoringForLine || isReviewingForLine) return false;
-    const quality = storyQualityByLine[currentLineId];
-    const storyText = currentLine?.warrantyStory?.trim() ?? '';
-    if (!quality || !storyText) return false;
-    return !isStoryQualityCurrent(quality, storyText);
-  })();
-
-  const storyCertificationForLine = (() => {
-    if (!currentLineId) return null;
-    const certification = storyCertificationByLine[currentLineId];
-    const storyText = currentLine?.warrantyStory?.trim() ?? '';
-    if (!certification || !storyText || certification.storyText !== storyText) return null;
-    return certification;
-  })();
-
-
+  const {
+    currentLine,
+    lastGeneratedStoryForLine,
+    cdkSanitizedForLine,
+    isGeneratingForLine,
+    isScoringForLine,
+    isReviewingForLine,
+    storyQualityForLine,
+    storyReviewForLine,
+    storyQualityStaleForLine,
+    storyCertificationForLine,
+  } = deriveCurrentLineStoryState({
+    currentRO,
+    currentLineId,
+    isGenerating,
+    generatingLineId,
+    isScoring,
+    scoringLineId,
+    isReviewing,
+    reviewingLineId,
+    storyQualityByLine,
+    storyReviewByLine,
+    storyCertificationByLine,
+    lastGeneratedStoryByLine,
+    cdkSanitizedByLine,
+  });
 
   /** @deprecated Use todayROs / searchROs — kept for any legacy callers. */
   const filteredROs = searchTerm.trim() ? searchROs : todayROs;

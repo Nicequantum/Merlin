@@ -31,13 +31,13 @@ export function AppFooter() {
     };
   }, []);
 
-  const version = status?.version ?? process.env.NEXT_PUBLIC_APP_VERSION ?? '3.0.1';
+  const version = status?.version ?? process.env.NEXT_PUBLIC_APP_VERSION ?? '2.0.0';
   const commit = status?.buildCommit ?? process.env.NEXT_PUBLIC_BUILD_COMMIT ?? 'dev';
   const built = status?.buildDate ? formatDisplayDate(status.buildDate) : null;
 
   return (
     <footer className="benz-app-footer" aria-label="Application version">
-      <span>Merlin v{version}</span>
+      <span>Merlinus v{version}</span>
       <span className="benz-app-footer-sep" aria-hidden>
         ·
       </span>

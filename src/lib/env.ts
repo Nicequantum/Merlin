@@ -1,7 +1,9 @@
 /**
- * Centralized environment validation for Merlin.
+ * Centralized environment validation for Merlinus.
  * Called at Node startup (instrumentation) and before production builds (scripts/validate-env.mjs).
  */
+
+import { logger } from '@/lib/logger';
 
 const REQUIRED_ENV_VARS = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'] as const;
 
@@ -50,7 +52,7 @@ export function getBuildDate(): string {
 }
 
 export function getAppVersion(): string {
-  return process.env.npm_package_version || '3.0.3';
+  return process.env.npm_package_version || '2.0.0';
 }
 
 export function validateEnvironment(options: { throwOnError?: boolean; production?: boolean } = {}): EnvironmentValidationResult {
@@ -105,14 +107,14 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
 
   if (!valid) {
     const message = `Missing required environment variables: ${missing.join(', ')}`;
-    console.error(`[merlin:env] ${message}`);
+    logger.error('env.validation_failed', { missing });
     if (options.throwOnError) {
       throw new Error(message);
     }
   }
 
   for (const warning of warnings) {
-    console.warn(`[merlin:env] ${warning}`);
+    logger.warn('env.validation_warning', { warning });
   }
 
   return { missing, warnings, valid };

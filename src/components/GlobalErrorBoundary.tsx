@@ -5,5 +5,5 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 /** Root-level React error boundary — catches render errors anywhere under the app shell. */
 export function GlobalErrorBoundary({ children }: { children: ReactNode }) {
-  return <ErrorBoundary scope="Merlin">{children}</ErrorBoundary>;
+  return <ErrorBoundary scope="Merlinus">{children}</ErrorBoundary>;
 }

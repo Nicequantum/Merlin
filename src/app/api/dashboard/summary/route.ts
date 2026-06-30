@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { withAuth } from '@/lib/apiRoute';
 import { getAuditDashboardSummary } from '@/lib/auditSummary';
 import { prisma } from '@/lib/db';
+import { readRoNumberFromDb } from '@/lib/piiFieldRead';
 
 function buildRoleScopedRoWhere(session: {
   role: string;
@@ -15,7 +16,7 @@ function buildRoleScopedRoWhere(session: {
   if (session.role === 'service_advisor' && session.serviceAdvisorId) {
     return { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId };
   }
-  return { technicianId: session.technicianId };
+  return { dealershipId: session.dealershipId, technicianId: session.technicianId };
 }
 
 export async function GET(request: Request) {
@@ -67,7 +68,7 @@ export async function GET(request: Request) {
         },
         recentRepairOrders: recentRos.map((ro) => ({
           id: ro.id,
-          roNumber: ro.roNumber,
+          roNumber: readRoNumberFromDb(ro),
           year: ro.year,
           make: ro.make,
           model: ro.model,

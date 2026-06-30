@@ -16,6 +16,7 @@ import { SettingsView } from '@/components/SettingsView';
 import { ViewErrorBoundary } from '@/components/ViewErrorBoundary';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
+import { clientLog } from '@/lib/clientLog';
 import { recordTechnicianAppStart } from '@/lib/recordTechnicianAppStart';
 import type { TechnicianSession } from '@/types';
 
@@ -55,7 +56,7 @@ const AdvisorDashboard = dynamic(
 
 function runAction(label: string, action: () => void | Promise<void>): void {
   void Promise.resolve(action()).catch((error: unknown) => {
-    console.error(`[Merlin] ${label} failed`, error);
+    clientLog.error('ui.action_failed', { label, error });
     toast.error(error instanceof Error ? error.message : `${label} failed`);
   });
 }
@@ -65,7 +66,7 @@ interface BenzTechAuthenticatedAppProps {
   onLogout: () => Promise<void>;
 }
 
-/** Post-auth Merlin shell — isolated from login so heavy RO/OCR modules never load on sign-in. */
+/** Post-auth Merlinus shell — isolated from login so heavy RO/OCR modules never load on sign-in. */
 export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenticatedAppProps) {
   const ocr = useOcrProgress();
   const ro = useRepairOrders({
@@ -294,7 +295,10 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
             onGenerateStory={() => {
               const lineId = ro.currentLineId;
               if (!lineId || typeof ro.generateStory !== 'function') {
-                console.error('Generate story unavailable', { lineId, generateStory: ro.generateStory });
+                clientLog.error('story.generate_unavailable', {
+                  lineId,
+                  hasGenerateStory: typeof ro.generateStory === 'function',
+                });
                 toast.error('Story generation is unavailable — refresh and try again');
                 return;
               }

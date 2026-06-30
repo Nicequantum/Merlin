@@ -6,12 +6,12 @@ import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { reviewWarrantyStory } from '@/lib/grok';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
-import { parseRequestBody, reviewStorySchema } from '@/lib/validation';
+import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
 
 /** Must match STORY_REVIEW_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 120;
@@ -20,7 +20,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const { id, lineId } = await params;
+  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id, lineId } = routeParams.data;
 
   return withAuth(
     request,
@@ -81,10 +83,11 @@ export async function POST(
         ipAddress: getRequestIp(request),
       });
 
-      await prisma.repairLine.update({
-        where: { id: lineId },
+      const lineUpdated = await prisma.repairLine.updateMany({
+        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
         data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
       });
+      if (lineUpdated.count === 0) return apiError(NOT_FOUND_ERROR, 404);
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,

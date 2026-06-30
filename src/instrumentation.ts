@@ -23,6 +23,9 @@ export async function register() {
     if (!result.valid) {
       logger.error('merlin.startup.env_invalid');
     }
+
+    const { warmDatabaseConnectionInBackground } = await import('./lib/db');
+    warmDatabaseConnectionInBackground();
   }
 
   if (process.env.NEXT_RUNTIME === 'edge') {

@@ -1,5 +1,9 @@
+import 'server-only';
+
 import type { Prisma } from '@prisma/client';
 import { getStartOfDealershipDay } from '@/lib/dealershipDayBoundary';
+import { buildRoNumberSearchQueryTokens } from '@/lib/piiSearchToken';
+import { repairOrderListQuerySchema } from '@/lib/validation';
 
 export type RepairOrderListScope = 'today' | 'previous';
 
@@ -11,20 +15,9 @@ export interface RepairOrderListParams {
   q?: string;
 }
 
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 100;
-
 export function parseRepairOrderListParams(url: URL): RepairOrderListParams {
-  const limitRaw = Number(url.searchParams.get('limit') ?? DEFAULT_PAGE_SIZE);
-  const limit = Math.min(
-    MAX_PAGE_SIZE,
-    Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : DEFAULT_PAGE_SIZE)
-  );
-  const scopeParam = url.searchParams.get('scope')?.trim().toLowerCase();
-  const scope: RepairOrderListScope = scopeParam === 'previous' ? 'previous' : 'today';
-  const cursor = url.searchParams.get('cursor')?.trim() || undefined;
-  const q = url.searchParams.get('q')?.trim() || undefined;
-  return { scope, limit, cursor, q };
+  const raw = Object.fromEntries(url.searchParams.entries());
+  return repairOrderListQuerySchema.parse(raw);
 }
 
 export function buildRepairOrderListWhere(
@@ -41,19 +34,24 @@ export function buildRepairOrderListWhere(
       ? { dealershipId: session.dealershipId }
       : session.role === 'service_advisor' && session.serviceAdvisorId
         ? { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId }
-        : { technicianId: session.technicianId };
+        : { dealershipId: session.dealershipId, technicianId: session.technicianId };
 
   if (params.q) {
     const term = params.q;
+    const roSearchTokens = buildRoNumberSearchQueryTokens(term);
+    const orClauses: Prisma.RepairOrderWhereInput[] = [
+      { year: { contains: term, mode: 'insensitive' } },
+      { make: { contains: term, mode: 'insensitive' } },
+      { model: { contains: term, mode: 'insensitive' } },
+    ];
+
+    if (roSearchTokens.length > 0) {
+      orClauses.unshift({ roNumberSearchTokens: { hasSome: roSearchTokens } });
+    }
+
     return {
       ...roleWhere,
-      OR: [
-        // S2 PLAINTEXT SEARCH: queries RepairOrder.roNumber directly — migrate to search token in Phase 3.
-        { roNumber: { contains: term, mode: 'insensitive' } },
-        { year: { contains: term, mode: 'insensitive' } },
-        { make: { contains: term, mode: 'insensitive' } },
-        { model: { contains: term, mode: 'insensitive' } },
-      ],
+      OR: orClauses,
     };
   }
 

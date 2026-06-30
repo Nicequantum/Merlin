@@ -1,3 +1,5 @@
+import 'server-only';
+
 import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder, StoryQualityResult } from '@/types';
 import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
 import {
@@ -19,6 +21,8 @@ import { mapStoryCertificationFromDbLine, storyCertificationMatchesStory } from 
 import { mapSoldMetricsFromDb } from './repairLineSoldMetrics';
 import { sanitizeForCDK } from './sanitizeForCDK';
 import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
+import { readAdvisorDisplayNameFromDb, readDescriptionFromDb, readRoNumberFromDb } from './piiFieldRead';
+import { buildRoNumberSearchTokens } from './piiSearchToken';
 
 function parseJson<T>(raw: string, fallback: T): T {
   try {
@@ -94,7 +98,7 @@ export function imageAttachmentsToJson(images?: ImageAttachment[]): string {
 
 type DbROWithAdvisor = DbRO & {
   repairLines: DbLine[];
-  serviceAdvisor?: { id: string; displayName: string } | null;
+  serviceAdvisor?: { id: string; displayNameEncrypted?: string } | null;
 };
 
 export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
@@ -102,10 +106,11 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
     ? decryptPII(ro.serviceAdvisorNameEncrypted)
     : undefined;
 
-  const roNumberEncrypted = (ro as DbRO & { roNumberEncrypted?: string }).roNumberEncrypted;
-  const decryptedRoNumber = roNumberEncrypted ? decryptPII(roNumberEncrypted) : '';
-  // S2 PLAINTEXT READ FALLBACK: ro.roNumber until Phase 3 encrypted-only reads (see schema.prisma migration plan).
-  const roNumber = decryptedRoNumber || ro.roNumber;
+  const roNumber = readRoNumberFromDb(ro);
+
+  const serviceAdvisorDisplayName = ro.serviceAdvisor
+    ? readAdvisorDisplayNameFromDb(ro.serviceAdvisor)
+    : undefined;
 
   return {
     id: ro.id,
@@ -130,12 +135,11 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
     serviceAdvisor: ro.serviceAdvisor
       ? {
           id: ro.serviceAdvisor.id,
-          displayName: ro.serviceAdvisor.displayName,
+          displayName: serviceAdvisorDisplayName || '',
           matchConfidence: ro.advisorMatchConfidence ?? undefined,
         }
       : undefined,
-    // S2 PLAINTEXT READ: ServiceAdvisor.displayName join fallback until displayNameEncrypted is populated on write.
-    serviceAdvisorName: advisorName || ro.serviceAdvisor?.displayName,
+    serviceAdvisorName: advisorName || serviceAdvisorDisplayName,
     xentryImages: parseImageAttachments(ro.xentryImageUrls),
     xentryOcrTexts: decryptStringArray(ro.xentryOcrTextsEncrypted),
     repairLines: ro.repairLines.sort((a, b) => a.lineNumber - b.lineNumber).map(dbToRepairLine),
@@ -147,12 +151,7 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
 }
 
 export function dbToRepairLine(line: DbLine): RepairLine {
-  const descriptionEncrypted = (line as DbLine & { descriptionEncrypted?: string }).descriptionEncrypted;
-  // S2 PLAINTEXT READ FALLBACK: line.description until Phase 3 encrypted-only reads.
-  const description =
-    descriptionEncrypted && descriptionEncrypted.trim()
-      ? decryptSensitiveText(descriptionEncrypted)
-      : line.description;
+  const description = readDescriptionFromDb(line);
 
   return {
     id: line.id,
@@ -225,10 +224,11 @@ export interface RepairOrderInput {
 export function repairOrderToDbFields(
   input: RepairOrderInput & { serviceAdvisorName?: string }
 ) {
+  const roNumber = input.roNumber.trim();
+
   return {
-    // S2 PLAINTEXT WRITE: roNumber retained for list search until Phase 4 write cutover (see schema.prisma).
-    roNumber: input.roNumber,
-    roNumberEncrypted: encryptPII(input.roNumber),
+    roNumberEncrypted: encryptPII(roNumber),
+    roNumberSearchTokens: buildRoNumberSearchTokens(roNumber),
     vinEncrypted: encryptPII(input.vehicle.vin),
     year: input.vehicle.year,
     make: input.vehicle.make,
@@ -249,8 +249,6 @@ export function repairOrderToDbFields(
 export function repairLineToDbFields(line: RepairLine) {
   return {
     lineNumber: line.lineNumber,
-    // S2 PLAINTEXT WRITE: description retained for legacy read fallback until Phase 4 write cutover.
-    description: line.description,
     descriptionEncrypted: encryptSensitiveText(line.description),
     customerConcernEncrypted: encryptPII(line.customerConcern),
     technicianNotesEncrypted: encryptSensitiveText(line.technicianNotes),

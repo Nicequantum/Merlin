@@ -40,12 +40,15 @@ export type AuditAction =
   | 'advisor.delete'
   | 'advisor.sold_metrics'
   | 'template.save'
+  | 'template.use'
+  | 'customerPay.clear'
   | 'customerPayTemplateApplied'
   | 'customerPayStory.edit'
   | 'customerPayStory.pdf_export';
 
 /** Customer Pay — lightweight audit; no Merlin promptVersion. */
 export const CUSTOMER_PAY_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
+  'customerPay.clear',
   'customerPayTemplateApplied',
   'customerPayStory.edit',
   'customerPayStory.pdf_export',

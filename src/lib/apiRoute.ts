@@ -15,6 +15,7 @@ import {
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
 import { prisma } from './db';
 import { logPerformance } from './perf';
+import { logApiWriteRequest } from './requestLogging';
 import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from './rate-limit';
 import { isDailyUsageLimitReached, logApiUsage } from './usageMonitoring';
 
@@ -103,11 +104,11 @@ export async function withAuth<T>(
   }
 
   const startedAt = Date.now();
+  const method = request.method;
   try {
     const result = await handler(session);
-    const isSuccessResponse =
-      !(result instanceof NextResponse || result instanceof Response) ||
-      (result.status >= 200 && result.status < 300);
+    const status = result instanceof NextResponse || result instanceof Response ? result.status : 200;
+    const isSuccessResponse = status >= 200 && status < 300;
     if (options.trackUsage && isSuccessResponse) {
       await logApiUsage({
         technicianId: session.technicianId,
@@ -115,12 +116,20 @@ export async function withAuth<T>(
         routeKey: routeKey,
       });
     }
+    logApiWriteRequest({
+      routeKey,
+      method,
+      status,
+      durationMs: Date.now() - startedAt,
+      technicianId: session.technicianId,
+      dealershipId: session.dealershipId,
+    });
     if (options.perfEvent) {
       logPerformance(options.perfEvent, Date.now() - startedAt, {
         routeKey,
         technicianId: session.technicianId,
         dealershipId: session.dealershipId,
-        status: result instanceof NextResponse || result instanceof Response ? result.status : 200,
+        status,
       });
     }
     if (result instanceof NextResponse || result instanceof Response) {
@@ -128,6 +137,15 @@ export async function withAuth<T>(
     }
     return NextResponse.json(result);
   } catch (error) {
+    logApiWriteRequest({
+      routeKey,
+      method,
+      status: 500,
+      durationMs: Date.now() - startedAt,
+      technicianId: session.technicianId,
+      dealershipId: session.dealershipId,
+      failed: true,
+    });
     if (options.perfEvent) {
       logPerformance(options.perfEvent, Date.now() - startedAt, {
         routeKey,
@@ -158,16 +176,31 @@ export async function withPublicRoute<T>(
   if (rateLimited) return rateLimited;
 
   const startedAt = Date.now();
+  const method = request.method;
   try {
     const result = await handler();
+    const status = result instanceof NextResponse || result instanceof Response ? result.status : 200;
+    logApiWriteRequest({
+      routeKey,
+      method,
+      status,
+      durationMs: Date.now() - startedAt,
+    });
     if (options.perfEvent) {
-      logPerformance(options.perfEvent, Date.now() - startedAt, { routeKey });
+      logPerformance(options.perfEvent, Date.now() - startedAt, { routeKey, status });
     }
     if (result instanceof NextResponse || result instanceof Response) {
       return result;
     }
     return NextResponse.json(result);
   } catch (error) {
+    logApiWriteRequest({
+      routeKey,
+      method,
+      status: 500,
+      durationMs: Date.now() - startedAt,
+      failed: true,
+    });
     if (options.perfEvent) {
       logPerformance(options.perfEvent, Date.now() - startedAt, { routeKey, failed: true });
     }

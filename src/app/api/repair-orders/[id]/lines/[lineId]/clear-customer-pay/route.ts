@@ -33,6 +33,8 @@ export async function POST(
         repairOrderId: id,
         repairLineId: lineId,
         dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        ipAddress: getRequestIp(request),
       });
 
       return { ok: true, isCustomerPay: false };

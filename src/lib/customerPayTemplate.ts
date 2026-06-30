@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { appendAuditLogInTransaction } from '@/lib/audit';
+import { appendAuditLogInTransaction, writeAuditLog } from '@/lib/audit';
 import { encryptOptionalSensitiveText, decryptSensitiveText, decryptOptionalSensitiveText } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { GLOBAL_DEALERSHIP_ID } from '@/lib/templateLibrary';
@@ -29,6 +29,8 @@ export interface ClearCustomerPayModeInput {
   repairOrderId: string;
   repairLineId: string;
   dealershipId: string;
+  technicianId: string;
+  ipAddress?: string;
 }
 
 /**
@@ -49,6 +51,16 @@ export async function clearCustomerPayMode(input: ClearCustomerPayModeInput): Pr
       repairOrder: { id: input.repairOrderId, dealershipId: input.dealershipId },
     },
     data: { isCustomerPay: false },
+  });
+
+  await writeAuditLog({
+    action: 'customerPay.clear',
+    dealershipId: input.dealershipId,
+    technicianId: input.technicianId,
+    entityType: 'repairLine',
+    entityId: input.repairLineId,
+    metadata: { repairOrderId: input.repairOrderId },
+    ipAddress: input.ipAddress,
   });
 }
 

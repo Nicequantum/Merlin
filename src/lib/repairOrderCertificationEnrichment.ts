@@ -5,14 +5,17 @@ import { hashWarrantyStory } from './storyHash';
 import type { RepairOrder } from '@/types';
 
 /** Legacy rows: hydrate certification from TechnicianCertifiedStory when RepairLine fields are empty. */
-export async function enrichRepairOrderCertification(ro: RepairOrder): Promise<RepairOrder> {
+export async function enrichRepairOrderCertification(
+  ro: RepairOrder,
+  dealershipId: string
+): Promise<RepairOrder> {
   const needsEnrichment = ro.repairLines.some(
     (line) => !line.isCustomerPay && line.warrantyStory?.trim() && !line.storyCertification
   );
   if (!needsEnrichment) return ro;
 
   const certifiedStories = await prisma.technicianCertifiedStory.findMany({
-    where: { repairOrderId: ro.id },
+    where: { repairOrderId: ro.id, dealershipId },
     orderBy: { certifiedAt: 'desc' },
     select: {
       repairLineId: true,

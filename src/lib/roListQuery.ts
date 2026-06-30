@@ -44,7 +44,7 @@ export function buildRepairOrderListWhere(
       ? { dealershipId: session.dealershipId }
       : session.role === 'service_advisor' && session.serviceAdvisorId
         ? { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId }
-        : { technicianId: session.technicianId };
+        : { dealershipId: session.dealershipId, technicianId: session.technicianId };
 
   if (params.q) {
     const term = params.q;

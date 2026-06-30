@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { scoreWarrantyStory } from '@/lib/grok';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -77,10 +77,11 @@ export async function POST(
         ipAddress: getRequestIp(request),
       });
 
-      await prisma.repairLine.update({
-        where: { id: lineId },
+      const lineUpdated = await prisma.repairLine.updateMany({
+        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
         data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
       });
+      if (lineUpdated.count === 0) return apiError(NOT_FOUND_ERROR, 404);
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,

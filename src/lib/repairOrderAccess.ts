@@ -65,3 +65,23 @@ export async function loadStoryRouteRepairOrder(
 ) {
   return canAccessRepairOrder(session, roId, { repairLines: true });
 }
+
+/** Defense-in-depth filter for repair-line mutations tied to a dealership-scoped RO. */
+export function scopedRepairLineWhere(
+  lineId: string,
+  repairOrderId: string,
+  dealershipId: string
+): Prisma.RepairLineWhereInput {
+  return {
+    id: lineId,
+    repairOrder: { id: repairOrderId, dealershipId },
+  };
+}
+
+/** Defense-in-depth filter for repair-order lookups and mutations. */
+export function scopedRepairOrderWhere(
+  repairOrderId: string,
+  dealershipId: string
+): Prisma.RepairOrderWhereInput {
+  return { id: repairOrderId, dealershipId };
+}

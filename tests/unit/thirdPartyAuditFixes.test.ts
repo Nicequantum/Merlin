@@ -187,6 +187,27 @@ describe('Third-party audit hardening', () => {
     assert.ok(readSrc('prisma/migrations/20250630140000_drop_pii_plaintext_columns/migration.sql').includes('DROP COLUMN'));
   });
 
+  it('technician-scoped queries include dealershipId defense-in-depth', () => {
+    const roListQuery = readSrc('src/lib/roListQuery.ts');
+    const dashboardSummary = readSrc('src/app/api/dashboard/summary/route.ts');
+    const repairOrderAccess = readSrc('src/lib/repairOrderAccess.ts');
+    const roRoute = readSrc('src/app/api/repair-orders/[id]/route.ts');
+    const generateStory = readSrc(
+      'src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts'
+    );
+    const changePassword = readSrc('src/app/api/auth/change-password/route.ts');
+
+    assert.ok(roListQuery.includes('dealershipId: session.dealershipId, technicianId: session.technicianId'));
+    assert.ok(dashboardSummary.includes('dealershipId: session.dealershipId, technicianId: session.technicianId'));
+    assert.ok(repairOrderAccess.includes('scopedRepairLineWhere'));
+    assert.ok(repairOrderAccess.includes('scopedRepairOrderWhere'));
+    assert.ok(roRoute.includes('scopedRepairOrderWhere'));
+    assert.ok(roRoute.includes('scopedRepairLineWhere'));
+    assert.equal(roRoute.includes('repairLine.upsert'), false);
+    assert.ok(generateStory.includes('scopedRepairLineWhere'));
+    assert.ok(changePassword.includes('dealershipId: session.dealershipId'));
+  });
+
   it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {
     const shell = readSrc('src/components/BenzTechApp.tsx');
     assert.ok(shell.includes('LoginView'));

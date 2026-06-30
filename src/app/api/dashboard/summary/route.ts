@@ -16,7 +16,7 @@ function buildRoleScopedRoWhere(session: {
   if (session.role === 'service_advisor' && session.serviceAdvisorId) {
     return { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId };
   }
-  return { technicianId: session.technicianId };
+  return { dealershipId: session.dealershipId, technicianId: session.technicianId };
 }
 
 export async function GET(request: Request) {

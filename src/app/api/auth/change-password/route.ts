@@ -13,7 +13,9 @@ export async function POST(request: Request) {
       const parsed = await parseRequestBody(request, changePasswordSchema);
       if ('error' in parsed) return parsed.error;
 
-      const tech = await prisma.technician.findUnique({ where: { id: session.technicianId } });
+      const tech = await prisma.technician.findFirst({
+        where: { id: session.technicianId, dealershipId: session.dealershipId },
+      });
       if (!tech) {
         return apiError('Account not found.', 404);
       }
@@ -24,8 +26,8 @@ export async function POST(request: Request) {
       }
 
       const passwordHash = await hashPassword(parsed.data.newPassword);
-      await prisma.technician.update({
-        where: { id: session.technicianId },
+      await prisma.technician.updateMany({
+        where: { id: session.technicianId, dealershipId: session.dealershipId },
         data: { passwordHash },
       });
 

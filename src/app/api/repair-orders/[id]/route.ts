@@ -15,7 +15,11 @@ import { logger } from '@/lib/logger';
 import { getRequestIp } from '@/lib/rate-limit';
 import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
 import { parseRequestBody, updateRepairOrderSchema } from '@/lib/validation';
-import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
+import {
+  canAccessRepairOrder,
+  scopedRepairLineWhere,
+  scopedRepairOrderWhere,
+} from '@/lib/repairOrderAccess';
 import { enrichRepairOrderCertification } from '@/lib/repairOrderCertificationEnrichment';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
@@ -28,16 +32,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const ro = await canAccessRepairOrder(session, id);
       if (!ro) return apiError(NOT_FOUND_ERROR, 404);
 
-      const full = await prisma.repairOrder.findUnique({
-        where: { id },
+      const full = await prisma.repairOrder.findFirst({
+        where: scopedRepairOrderWhere(id, session.dealershipId),
         include: {
           repairLines: true,
           serviceAdvisor: { select: { id: true, displayNameEncrypted: true } },
         },
       });
+      if (!full) return apiError(NOT_FOUND_ERROR, 404);
 
-      const mapped = dbToRepairOrder(full!);
-      const repairOrder = await enrichRepairOrderCertification(mapped);
+      const mapped = dbToRepairOrder(full);
+      const repairOrder = await enrichRepairOrderCertification(mapped, session.dealershipId);
       return { repairOrder };
     },
     { rateLimitKey: 'ros.get' }
@@ -134,10 +139,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
 
       const advisorCapture = await prisma.$transaction(async (tx) => {
-        await tx.repairOrder.update({
-          where: { id },
+        const roUpdated = await tx.repairOrder.updateMany({
+          where: scopedRepairOrderWhere(id, session.dealershipId),
           data: repairOrderToDbFields(input as Parameters<typeof repairOrderToDbFields>[0]),
         });
+        if (roUpdated.count === 0) {
+          throw new Error('Repair order not found for update');
+        }
 
         if (data.repairLines && Array.isArray(data.repairLines)) {
           for (const line of data.repairLines) {
@@ -177,26 +185,38 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                   (existingLine as { storyCertifiedHash?: string }).storyCertifiedHash?.trim()
                 );
 
-              await tx.repairLine.upsert({
-                where: { id: line.id },
-                update: {
-                  ...lineFields,
-                  ...(certificationCleared ? CLEAR_STORY_CERTIFICATION_DB : {}),
-                },
-                create: {
-                  id: line.id,
-                  repairOrderId: id,
-                  ...lineFields,
-                },
-              });
+              if (existingLine) {
+                await tx.repairLine.updateMany({
+                  where: scopedRepairLineWhere(line.id, id, session.dealershipId),
+                  data: {
+                    ...lineFields,
+                    ...(certificationCleared ? CLEAR_STORY_CERTIFICATION_DB : {}),
+                  },
+                });
+              } else {
+                await tx.repairLine.create({
+                  data: {
+                    id: line.id,
+                    repairOrderId: id,
+                    ...lineFields,
+                  },
+                });
+              }
             }
           }
 
           const incomingIds = new Set(data.repairLines.map((l) => l.id).filter(Boolean));
-          const dbLines = await tx.repairLine.findMany({ where: { repairOrderId: id } });
+          const dbLines = await tx.repairLine.findMany({
+            where: {
+              repairOrderId: id,
+              repairOrder: { dealershipId: session.dealershipId },
+            },
+          });
           for (const dbLine of dbLines) {
             if (!incomingIds.has(dbLine.id)) {
-              await tx.repairLine.delete({ where: { id: dbLine.id } });
+              await tx.repairLine.deleteMany({
+                where: scopedRepairLineWhere(dbLine.id, id, session.dealershipId),
+              });
             }
           }
         }
@@ -240,13 +260,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         });
       }
 
-      const updated = await prisma.repairOrder.findUnique({
-        where: { id },
+      const updated = await prisma.repairOrder.findFirst({
+        where: scopedRepairOrderWhere(id, session.dealershipId),
         include: {
           repairLines: true,
           serviceAdvisor: { select: { id: true, displayNameEncrypted: true } },
         },
       });
+      if (!updated) return apiError(NOT_FOUND_ERROR, 404);
 
       await writeAuditLog({
         action: 'ro.update',
@@ -255,7 +276,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         entityType: 'repairOrder',
         entityId: id,
         // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
-        metadata: { roNumber: readRoNumberFromDb(updated!) },
+        metadata: { roNumber: readRoNumberFromDb(updated) },
         ipAddress: getRequestIp(request),
       });
 
@@ -285,7 +306,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         }
       }
 
-      return { repairOrder: dbToRepairOrder(updated!) };
+      return { repairOrder: dbToRepairOrder(updated) };
     },
     { rateLimitKey: 'ros.update' }
   );
@@ -303,7 +324,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       const existing = await canAccessRepairOrder(session, id);
       if (!existing) return apiError(NOT_FOUND_ERROR, 404);
 
-      await prisma.repairOrder.delete({ where: { id } });
+      await prisma.repairOrder.deleteMany({
+        where: scopedRepairOrderWhere(id, session.dealershipId),
+      });
 
       await writeAuditLog({
         action: 'ro.delete',

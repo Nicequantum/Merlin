@@ -43,8 +43,11 @@ export async function clearCustomerPayMode(input: ClearCustomerPayModeInput): Pr
   const line = ro.repairLines.find((l) => l.id === input.repairLineId);
   if (!line) throw new Error('Repair line not found');
 
-  await prisma.repairLine.update({
-    where: { id: input.repairLineId },
+  await prisma.repairLine.updateMany({
+    where: {
+      id: input.repairLineId,
+      repairOrder: { id: input.repairOrderId, dealershipId: input.dealershipId },
+    },
     data: { isCustomerPay: false },
   });
 }
@@ -137,8 +140,11 @@ export async function applyCustomerPayTemplate(
 
   // M2: atomic apply — rollback line + usage + audit together on failure.
   await prisma.$transaction(async (tx) => {
-    await tx.repairLine.update({
-      where: { id: input.repairLineId },
+    await tx.repairLine.updateMany({
+      where: {
+        id: input.repairLineId,
+        repairOrder: { id: input.repairOrderId, dealershipId: input.dealershipId },
+      },
       data: {
         warrantyStoryEncrypted: encryptedStory,
         isCustomerPay: true,

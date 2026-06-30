@@ -6,6 +6,7 @@ import { getRequestIp } from '@/lib/rate-limit';
 import {
   canAccessRepairOrder,
   isServiceAdvisorUser,
+  scopedRepairLineWhere,
 } from '@/lib/repairOrderAccess';
 import { mapSoldMetricsFromDb, soldMetricsToDbUpdateFields } from '@/lib/repairLineSoldMetrics';
 import { parseRequestBody, soldMetricsSchema } from '@/lib/validation';
@@ -36,9 +37,16 @@ export async function PATCH(
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      const updated = await prisma.repairLine.update({
-        where: { id: lineId },
+      const lineUpdated = await prisma.repairLine.updateMany({
+        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
         data: soldMetricsToDbUpdateFields(parsed.data),
+      });
+      if (lineUpdated.count === 0) {
+        return apiError(NOT_FOUND_ERROR, 404);
+      }
+
+      const updated = await prisma.repairLine.findFirst({
+        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
         select: {
           id: true,
           lineNumber: true,
@@ -50,6 +58,9 @@ export async function PATCH(
           soldMetricsUpdatedAt: true,
         },
       });
+      if (!updated) {
+        return apiError(NOT_FOUND_ERROR, 404);
+      }
 
       await writeAuditLog({
         action: 'advisor.sold_metrics',

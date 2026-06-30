@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
@@ -106,8 +106,8 @@ export async function POST(
           ipAddress: getRequestIp(request),
         });
 
-        await tx.repairLine.update({
-          where: { id: lineId },
+        const lineUpdated = await tx.repairLine.updateMany({
+          where: scopedRepairLineWhere(lineId, id, session.dealershipId),
           data: {
             warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
             ...buildStoryCertificationDbFields({
@@ -118,6 +118,9 @@ export async function POST(
             }),
           },
         });
+        if (lineUpdated.count === 0) {
+          throw new Error('Repair line not found for certification');
+        }
 
         return newAuditLogId;
       });

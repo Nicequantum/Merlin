@@ -5,7 +5,7 @@ import { generateWarrantyStory } from '@/lib/grok';
 import { buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
-import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -90,14 +90,15 @@ export async function POST(
         ipAddress: getRequestIp(request),
       });
 
-      await prisma.repairLine.update({
-        where: { id: lineId },
+      const lineUpdated = await prisma.repairLine.updateMany({
+        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
         data: {
           warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
           storyQualityAuditEncrypted: '',
           ...CLEAR_STORY_CERTIFICATION_DB,
         },
       });
+      if (lineUpdated.count === 0) return apiError(NOT_FOUND_ERROR, 404);
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,

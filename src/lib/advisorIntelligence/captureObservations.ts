@@ -38,8 +38,8 @@ export async function captureAdvisorIntelligence(
     return { serviceAdvisor: null };
   }
 
-  const existingRo = await client.repairOrder.findUnique({
-    where: { id: input.repairOrderId },
+  const existingRo = await client.repairOrder.findFirst({
+    where: { id: input.repairOrderId, dealershipId: input.dealershipId },
     select: { serviceAdvisorId: true },
   });
 
@@ -53,8 +53,8 @@ export async function captureAdvisorIntelligence(
 
   const vehicleFamily = inferVehicleFamily(input.vehicle.make || '', input.vehicle.model || '');
 
-  await client.repairOrder.update({
-    where: { id: input.repairOrderId },
+  await client.repairOrder.updateMany({
+    where: { id: input.repairOrderId, dealershipId: input.dealershipId },
     data: {
       serviceAdvisorId: resolved.id,
       serviceAdvisorNameEncrypted: encryptPII(advisorName),

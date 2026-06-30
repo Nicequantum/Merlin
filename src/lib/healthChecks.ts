@@ -177,7 +177,7 @@ export async function checkGrokApi(): Promise<DependencyCheck> {
 
 /** Live Grok API connectivity via models list (no completion tokens consumed). */
 export async function checkGrokApiConnectivity(): Promise<DependencyCheck> {
-  if (isCiOrTestRuntime()) {
+  if (isCiOrTestRuntime() || !isProductionEnv()) {
     return checkGrokApi();
   }
 
@@ -368,12 +368,12 @@ export function aggregateHealthStatus(
   return 'ok';
 }
 
-/** Critical deps that map to HTTP 503 on manager /api/health (database only). */
+/** Critical deps that map to HTTP 503 on manager /api/health. */
 export function getCriticalHealthServices(): string[] {
-  return ['database'];
+  return isProductionEnv() ? ['database', 'kv'] : ['database'];
 }
 
-/** Manager /api/health — 503 only when database fails. */
+/** Manager /api/health — 503 only when a critical dependency fails. */
 export function aggregateAuthenticatedHealthStatus(
   checks: Record<string, DependencyCheck>
 ): 'ok' | 'degraded' | 'error' {

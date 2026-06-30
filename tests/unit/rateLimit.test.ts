@@ -65,11 +65,15 @@ describe('rate limiting', () => {
     const saved = {
       nodeEnv: process.env.NODE_ENV,
       vercelEnv: process.env.VERCEL_ENV,
+      ci: process.env.CI,
+      githubActions: process.env.GITHUB_ACTIONS,
       kvUrl: process.env.KV_REST_API_URL,
       kvToken: process.env.KV_REST_API_TOKEN,
     };
     process.env.NODE_ENV = 'production';
     delete process.env.VERCEL_ENV;
+    delete process.env.CI;
+    delete process.env.GITHUB_ACTIONS;
     delete process.env.KV_REST_API_URL;
     delete process.env.KV_REST_API_TOKEN;
 
@@ -83,6 +87,16 @@ describe('rate limiting', () => {
     } finally {
       process.env.NODE_ENV = saved.nodeEnv;
       process.env.VERCEL_ENV = saved.vercelEnv;
+      if (saved.ci === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = saved.ci;
+      }
+      if (saved.githubActions === undefined) {
+        delete process.env.GITHUB_ACTIONS;
+      } else {
+        process.env.GITHUB_ACTIONS = saved.githubActions;
+      }
       process.env.KV_REST_API_URL = saved.kvUrl;
       process.env.KV_REST_API_TOKEN = saved.kvToken;
     }

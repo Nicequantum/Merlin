@@ -115,7 +115,7 @@ describe('enterprise health checks', () => {
         kv: { status: 'error' },
         grok: { status: 'warn' },
       }),
-      'degraded'
+      'error'
     );
     assert.equal(
       resolveAuthenticatedHealthHttpStatus({
@@ -123,7 +123,7 @@ describe('enterprise health checks', () => {
         kv: { status: 'error' },
         grok: { status: 'warn' },
       }),
-      200
+      503
     );
 
     process.env.NODE_ENV = originalNodeEnv;

@@ -3,8 +3,8 @@ import { PWA_ICON_ENTRIES } from '@/lib/pwaIcons';
 
 export function getPwaManifest(): MetadataRoute.Manifest {
   return {
-    name: 'Merlin — Mercedes-Benz Warranty Platform',
-    short_name: 'Merlin',
+    name: 'Merlinus — Mercedes-Benz Warranty Platform',
+    short_name: 'Merlinus',
     description:
       'Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.',
     start_url: '/',

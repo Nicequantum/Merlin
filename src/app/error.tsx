@@ -11,14 +11,14 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('[Merlin] route error:', error);
+    console.error('[Merlinus] route error:', error);
     Sentry.captureException(error);
   }, [error]);
 
   return (
     <div className="app-container benz-page py-10 text-center min-h-dvh flex items-center justify-center px-6" role="alert">
       <div className="benz-card-elevated p-7 max-w-md w-full">
-        <div className="text-lg font-semibold mb-2 tracking-tight">Merlin hit a snag</div>
+        <div className="text-lg font-semibold mb-2 tracking-tight">Merlinus hit a snag</div>
         <p className="text-sm text-benz-secondary mb-2 leading-relaxed">
           Something unexpected happened. Your repair order data on this page was not lost — try again or return to the
           home screen.

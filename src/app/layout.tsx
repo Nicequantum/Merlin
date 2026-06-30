@@ -13,7 +13,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Merlin',
+  title: 'Merlinus',
   description: 'Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.',
   manifest: getInlineManifestDataUri(),
   icons: {
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Merlin',
+    title: 'Merlinus',
   },
   other: {
     'apple-mobile-web-app-capable': 'yes',

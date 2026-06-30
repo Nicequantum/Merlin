@@ -4,7 +4,7 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 export function AppInitLoading() {
   return (
     <LoadingScreen
-      label="Starting Merlin"
+      label="Starting Merlinus"
       sublabel="Loading warranty documentation tools…"
     />
   );

@@ -13,7 +13,7 @@ if (dsn) {
       debug: false,
     });
   } catch (error) {
-    console.error('[Merlin] Sentry client init failed — continuing without telemetry', error);
+    console.error('[Merlinus] Sentry client init failed — continuing without telemetry', error);
   }
 }
 

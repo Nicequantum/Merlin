@@ -24,7 +24,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    clientLog.error('Merlin error boundary', { scope: this.props.scope, error, info });
+    clientLog.error('Merlinus error boundary', { scope: this.props.scope, error, info });
     try {
       Sentry.captureException(error, {
         extra: { componentStack: info.componentStack, scope: this.props.scope },
@@ -45,7 +45,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="app-container benz-page py-10 text-center" role="alert">
           <div className="benz-card-elevated p-7">
-            <div className="text-lg font-semibold mb-2 tracking-tight">Merlin hit a snag</div>
+            <div className="text-lg font-semibold mb-2 tracking-tight">Merlinus hit a snag</div>
             <p className="text-sm text-benz-secondary mb-2 leading-relaxed">
               Something unexpected happened{scopeLabel}. Your typed notes are still on the repair order.
             </p>

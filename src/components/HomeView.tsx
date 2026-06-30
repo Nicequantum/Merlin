@@ -77,7 +77,7 @@ export function HomeView({
       <div className="pt-10">
         <div className="merlin-brand-hero mb-8">
           <MerlinLogoMark size="lg" className="mb-1" />
-          <p className="merlin-wordmark text-[1.25rem]">Merlin</p>
+          <p className="merlin-wordmark text-[1.25rem]">Merlinus</p>
           <div className="merlin-brand-divider" aria-hidden="true" />
           <DealershipBranding size="lg" className="mb-2" />
           <p className="text-benz-secondary text-sm font-medium">{technicianName || 'Technician'}</p>

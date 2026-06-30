@@ -55,7 +55,7 @@ const AdvisorDashboard = dynamic(
 
 function runAction(label: string, action: () => void | Promise<void>): void {
   void Promise.resolve(action()).catch((error: unknown) => {
-    console.error(`[Merlin] ${label} failed`, error);
+    console.error(`[Merlinus] ${label} failed`, error);
     toast.error(error instanceof Error ? error.message : `${label} failed`);
   });
 }
@@ -65,7 +65,7 @@ interface BenzTechAuthenticatedAppProps {
   onLogout: () => Promise<void>;
 }
 
-/** Post-auth Merlin shell — isolated from login so heavy RO/OCR modules never load on sign-in. */
+/** Post-auth Merlinus shell — isolated from login so heavy RO/OCR modules never load on sign-in. */
 export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenticatedAppProps) {
   const ocr = useOcrProgress();
   const ro = useRepairOrders({

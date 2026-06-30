@@ -23,7 +23,7 @@ const BenzTechAuthenticatedApp = dynamic(
   {
     loading: () => (
       <LoadingScreen
-        label="Starting Merlin"
+        label="Starting Merlinus"
         sublabel="Loading warranty documentation tools…"
       />
     ),
@@ -54,7 +54,7 @@ export function BenzTechApp() {
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        console.error('[Merlin] Session check failed — showing login', error);
+        console.error('[Merlinus] Session check failed — showing login', error);
         setSessionPhase('anonymous');
       });
 
@@ -91,7 +91,7 @@ export function BenzTechApp() {
             const consentAt = await acceptConsentSession();
             setSession((prev) => (prev ? { ...prev, consentAt } : prev));
           } catch (error: unknown) {
-            console.error('[Merlin] Consent acceptance failed', error);
+            console.error('[Merlinus] Consent acceptance failed', error);
             toast.error(error instanceof Error ? error.message : 'Could not save consent — try again');
           } finally {
             setConsentLoading(false);
@@ -115,7 +115,7 @@ export function BenzTechApp() {
               return { ...prev, legalDisclaimerAt };
             });
           } catch (error: unknown) {
-            console.error('[Merlin] Legal disclaimer acceptance failed', error);
+            console.error('[Merlinus] Legal disclaimer acceptance failed', error);
             toast.error(
               error instanceof Error ? error.message : 'Could not save legal acknowledgment — try again'
             );

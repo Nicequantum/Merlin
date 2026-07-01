@@ -7,7 +7,8 @@ import { mapBlobRouteError, mapGrokRouteError } from '@/lib/scanRouteErrors';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
 import { logger } from '@/lib/logger';
-import { RATE_LIMITS } from '@/lib/rate-limit';
+import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { writeRoExtractAudit } from '@/lib/roExtractAudit';
 import { imagePathnamesSchema, parseRequestBody } from '@/lib/validation';
 
 /** Must match RO_EXTRACT_ROUTE_MAX_DURATION_S in @/lib/timeouts */
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
       const parsed = await parseRequestBody(request, imagePathnamesSchema);
       if ('error' in parsed) return parsed.error;
 
+      const extractStartedAt = Date.now();
       const pathnames = parsed.data.imagePathnames.map((ref) => extractPathnameFromImageRef(ref) || ref);
 
       const accessResults = await Promise.all(
@@ -73,10 +75,21 @@ export async function POST(request: Request) {
 
       try {
         const extracted = await extractROFromImages(imageDataUrls);
+        const durationMs = Date.now() - extractStartedAt;
+
+        await writeRoExtractAudit({
+          dealershipId: session.dealershipId,
+          technicianId: session.technicianId,
+          pageCount: pathnames.length,
+          durationMs,
+          extracted,
+          ipAddress: getRequestIp(request),
+        });
+
         logger.info('ro.extract.success', {
           technicianId: session.technicianId,
           pageCount: pathnames.length,
-          roNumber: extracted.roNumber || null,
+          durationMs,
           complaintCount: extracted.complaints?.length ?? 0,
         });
         return extracted;

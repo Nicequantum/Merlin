@@ -29,6 +29,7 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /userCanAccessImage/);
     assert.match(src, /fetchPrivateBlobAsVisionDataUrl/);
     assert.match(src, /extractROFromImages/);
+    assert.match(src, /writeRoExtractAudit/);
     assert.match(src, /rateLimitKey: 'ro\.extract'/);
     assert.equal(src.includes('withDbConnectionRetry'), false);
   });
@@ -41,10 +42,9 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /scopedRepairLineWhere/);
     assert.match(src, /warrantyStoryEncrypted/);
 
-    const auditIdx = src.indexOf("action: 'story.generate'");
-    const persistIdx = src.indexOf('prisma.repairLine.updateMany');
-    assert.ok(auditIdx >= 0 && persistIdx >= 0);
-    assert.ok(auditIdx < persistIdx, 'story.generate audit must precede DB persist');
+    assert.match(src, /persistRepairLineStoryInTransaction/);
+    assert.match(src, /prisma\.\$transaction/);
+    assert.match(src, /action: 'story\.generate'/);
     assert.equal(src.includes('withDbConnectionRetry'), false);
   });
 

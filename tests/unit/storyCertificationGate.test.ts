@@ -54,16 +54,16 @@ describe('story certification gate', () => {
     assert.ok(STORY_PROMPT_AUDIT_ACTIONS.has('story.score'));
   });
 
-  it('certify-story route enforces server-side gate before persisting certification', () => {
+  it('certify-story route enforces server-side gate under row lock inside transaction', () => {
     const certifyRoute = readSrc(
       'src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts'
     );
     const scoreRoute = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route.ts');
 
-    assert.ok(certifyRoute.includes('validateStoryCertificationPrerequisites'));
+    assert.ok(certifyRoute.includes('lockRepairLineForCertification'));
+    assert.ok(certifyRoute.includes('validateStoryCertificationPrerequisitesInTransaction'));
     assert.ok(certifyRoute.includes('story.certify.gate_rejected'));
-    assert.ok(scoreRoute.includes("action: 'story.score'"));
-    assert.equal(scoreRoute.includes('scoreOnly'), false);
+    assert.ok(scoreRoute.includes('persistRepairLineStoryInTransaction'));
     assert.ok(scoreRoute.includes('storyHash'));
   });
 });

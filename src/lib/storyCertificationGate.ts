@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { Prisma } from '@prisma/client';
 import { decryptJsonObject } from '@/lib/encryption';
 import { hashWarrantyStory } from '@/lib/storyHash';
 import { isStoryQualityCurrent } from '@/lib/storyQualityState';
@@ -25,6 +26,17 @@ export interface StoryCertificationGateResult {
   message: string;
   storyHash?: string;
   quality?: StoryQualityResult;
+}
+
+/** Thrown inside certification transactions when prerequisites fail under row lock. */
+export class StoryCertificationGateError extends Error {
+  readonly result: StoryCertificationGateResult;
+
+  constructor(result: StoryCertificationGateResult) {
+    super(result.message);
+    this.name = 'StoryCertificationGateError';
+    this.result = result;
+  }
 }
 
 export function parseStoredStoryQualityAudit(
@@ -55,11 +67,12 @@ export function auditMetadataMatchesStoryHash(
 }
 
 async function findMatchingMiScoreAuditLog(
+  client: Prisma.TransactionClient | typeof prisma,
   dealershipId: string,
   repairLineId: string,
   storyHash: string
 ): Promise<boolean> {
-  const logs = await prisma.auditLog.findMany({
+  const logs = await client.auditLog.findMany({
     where: {
       dealershipId,
       entityType: 'repairLine',
@@ -75,16 +88,14 @@ async function findMatchingMiScoreAuditLog(
   return logs.some((log) => auditMetadataMatchesStoryHash(log.metadata, storyHash));
 }
 
-/**
- * Server-side certification prerequisites — non-bypassable compliance gate.
- * Requires a current persisted MI quality audit and a matching durable score/review audit log.
- */
-export async function validateStoryCertificationPrerequisites(input: {
+function evaluateStoryCertificationPrerequisites(input: {
   dealershipId: string;
   repairLineId: string;
-  /** CDK-sanitized warranty story text submitted for certification. */
   warrantyStory: string;
-}): Promise<StoryCertificationGateResult> {
+  storyQualityAuditEncrypted: string | null | undefined;
+  hasGenerateAudit: boolean;
+  hasScoreAuditLog: boolean;
+}): StoryCertificationGateResult {
   const storyHash = hashWarrantyStory(input.warrantyStory);
 
   if (!input.warrantyStory.trim()) {
@@ -96,17 +107,7 @@ export async function validateStoryCertificationPrerequisites(input: {
     };
   }
 
-  const hasGenerateAudit = await prisma.auditLog.findFirst({
-    where: {
-      dealershipId: input.dealershipId,
-      entityType: 'repairLine',
-      entityId: input.repairLineId,
-      action: 'story.generate',
-      entryHash: { not: '' },
-    },
-    select: { id: true },
-  });
-  if (!hasGenerateAudit) {
+  if (!input.hasGenerateAudit) {
     return {
       ok: false,
       reason: 'missing_generate_audit',
@@ -115,15 +116,7 @@ export async function validateStoryCertificationPrerequisites(input: {
     };
   }
 
-  const dbLine = await prisma.repairLine.findFirst({
-    where: {
-      id: input.repairLineId,
-      repairOrder: { dealershipId: input.dealershipId },
-    },
-    select: { storyQualityAuditEncrypted: true },
-  });
-
-  const quality = parseStoredStoryQualityAudit(dbLine?.storyQualityAuditEncrypted);
+  const quality = parseStoredStoryQualityAudit(input.storyQualityAuditEncrypted);
   if (!quality) {
     return {
       ok: false,
@@ -154,12 +147,7 @@ export async function validateStoryCertificationPrerequisites(input: {
     };
   }
 
-  const hasScoreAuditLog = await findMatchingMiScoreAuditLog(
-    input.dealershipId,
-    input.repairLineId,
-    storyHash
-  );
-  if (!hasScoreAuditLog) {
+  if (!input.hasScoreAuditLog) {
     return {
       ok: false,
       reason: 'missing_score_audit_log',
@@ -186,4 +174,115 @@ export async function validateStoryCertificationPrerequisites(input: {
     storyHash,
     quality,
   };
+}
+
+/**
+ * Lock the repair line row for certification — must run at the start of the certify transaction.
+ * SELECT FOR UPDATE prevents concurrent story/audit edits between gate check and certify write.
+ */
+export async function lockRepairLineForCertification(
+  tx: Prisma.TransactionClient,
+  input: { repairLineId: string; dealershipId: string }
+): Promise<{ id: string; storyQualityAuditEncrypted: string } | null> {
+  const rows = await tx.$queryRaw<Array<{ id: string; storyQualityAuditEncrypted: string }>>`
+    SELECT rl.id, rl."storyQualityAuditEncrypted"
+    FROM "RepairLine" rl
+    INNER JOIN "RepairOrder" ro ON ro.id = rl."repairOrderId"
+    WHERE rl.id = ${input.repairLineId}
+      AND ro."dealershipId" = ${input.dealershipId}
+    FOR UPDATE OF rl
+  `;
+  return rows[0] ?? null;
+}
+
+/**
+ * Certification prerequisites evaluated inside an open transaction on a locked repair line.
+ * Eliminates TOCTOU between gate check and certify persist.
+ */
+export async function validateStoryCertificationPrerequisitesInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    dealershipId: string;
+    repairLineId: string;
+    warrantyStory: string;
+    lockedLine: { storyQualityAuditEncrypted: string };
+  }
+): Promise<StoryCertificationGateResult> {
+  const hasGenerateAudit = await tx.auditLog.findFirst({
+    where: {
+      dealershipId: input.dealershipId,
+      entityType: 'repairLine',
+      entityId: input.repairLineId,
+      action: 'story.generate',
+      entryHash: { not: '' },
+    },
+    select: { id: true },
+  });
+
+  const storyHash = hashWarrantyStory(input.warrantyStory);
+  const hasScoreAuditLog = await findMatchingMiScoreAuditLog(
+    tx,
+    input.dealershipId,
+    input.repairLineId,
+    storyHash
+  );
+
+  return evaluateStoryCertificationPrerequisites({
+    dealershipId: input.dealershipId,
+    repairLineId: input.repairLineId,
+    warrantyStory: input.warrantyStory,
+    storyQualityAuditEncrypted: input.lockedLine.storyQualityAuditEncrypted,
+    hasGenerateAudit: Boolean(hasGenerateAudit),
+    hasScoreAuditLog,
+  });
+}
+
+/**
+ * Server-side certification prerequisites — non-bypassable compliance gate.
+ * Requires a current persisted MI quality audit and a matching durable score/review audit log.
+ *
+ * @deprecated Prefer validateStoryCertificationPrerequisitesInTransaction inside certify txn.
+ */
+export async function validateStoryCertificationPrerequisites(input: {
+  dealershipId: string;
+  repairLineId: string;
+  /** CDK-sanitized warranty story text submitted for certification. */
+  warrantyStory: string;
+}): Promise<StoryCertificationGateResult> {
+  const storyHash = hashWarrantyStory(input.warrantyStory);
+
+  const hasGenerateAudit = await prisma.auditLog.findFirst({
+    where: {
+      dealershipId: input.dealershipId,
+      entityType: 'repairLine',
+      entityId: input.repairLineId,
+      action: 'story.generate',
+      entryHash: { not: '' },
+    },
+    select: { id: true },
+  });
+
+  const dbLine = await prisma.repairLine.findFirst({
+    where: {
+      id: input.repairLineId,
+      repairOrder: { dealershipId: input.dealershipId },
+    },
+    select: { storyQualityAuditEncrypted: true },
+  });
+
+  const hasScoreAuditLog = await findMatchingMiScoreAuditLog(
+    prisma,
+    input.dealershipId,
+    input.repairLineId,
+    storyHash
+  );
+
+  return evaluateStoryCertificationPrerequisites({
+    dealershipId: input.dealershipId,
+    repairLineId: input.repairLineId,
+    warrantyStory: input.warrantyStory,
+    storyQualityAuditEncrypted: dbLine?.storyQualityAuditEncrypted,
+    hasGenerateAudit: Boolean(hasGenerateAudit),
+    hasScoreAuditLog,
+  });
 }

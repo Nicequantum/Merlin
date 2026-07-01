@@ -21,6 +21,7 @@ export type AuditAction =
   | 'ro.create'
   | 'ro.update'
   | 'ro.delete'
+  | 'ro.extract'
   | 'story.generate'
   | 'story.score'
   | 'story.review'
@@ -68,6 +69,7 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'auth.password_change',
   'consent.accept',
   'legalDisclaimer.accept',
+  'ro.extract',
   'story.generate',
   'story.score',
   'story.review',

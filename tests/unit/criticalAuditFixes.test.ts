@@ -24,6 +24,7 @@ describe('Critical audit fixes (C1–C7)', () => {
   });
 
   it('C2: compliance-critical audit actions are defined', () => {
+    assert.ok(CRITICAL_AUDIT_ACTIONS.has('ro.extract'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.generate'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.score'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.review'));
@@ -45,12 +46,11 @@ describe('Critical audit fixes (C1–C7)', () => {
     assert.ok(src.includes('hashWarrantyStory'));
   });
 
-  it('C3: generate-story audits before repairLine.update', () => {
+  it('C3: generate-story atomically persists audit and repair line in one transaction', () => {
     const src = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts');
-    const auditIdx = src.indexOf("action: 'story.generate'");
-    const updateIdx = src.indexOf('repairLine.update');
-    assert.ok(auditIdx !== -1 && updateIdx !== -1);
-    assert.ok(auditIdx < updateIdx);
+    assert.ok(src.includes("action: 'story.generate'"));
+    assert.ok(src.includes('persistRepairLineStoryInTransaction'));
+    assert.ok(src.includes('prisma.$transaction'));
   });
 
   it('C4: security-status requires manager auth', () => {

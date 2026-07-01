@@ -31,11 +31,44 @@ export function isRetriableScanMessage(message: string): boolean {
 /** Grok returned enough structured data — skip waiting for slow on-device OCR. */
 export function isStrongGrokExtraction(grok: StructuredROExtraction | null): boolean {
   if (!grok) return false;
+  return assessRoExtractionQuality(grok).extractionStrength === 'strong';
+}
 
-  const complaints = grok.complaints?.filter((line) => line?.trim()) ?? [];
-  if (complaints.length > 0) return true;
+export type RoExtractionStrength = 'strong' | 'partial' | 'weak';
 
-  const roNumber = grok.roNumber?.trim() ?? '';
-  const vin = grok.vehicle?.vin?.trim() ?? '';
-  return Boolean(roNumber && vin.length === 17);
+export interface RoExtractionQualitySignals {
+  extractionStrength: RoExtractionStrength;
+  complaintCount: number;
+  complaintLabelCount: number;
+  hasRoNumber: boolean;
+  hasVin17: boolean;
+  hasVehicleIdentity: boolean;
+}
+
+/** PII-free quality signals for ro.extract audit metadata and scan telemetry. */
+export function assessRoExtractionQuality(extracted: StructuredROExtraction): RoExtractionQualitySignals {
+  const complaints = extracted.complaints?.filter((line) => line?.trim()) ?? [];
+  const complaintCount = complaints.length;
+  const complaintLabelCount = extracted.complaintLabels?.filter((l) => l?.trim()).length ?? 0;
+  const hasRoNumber = Boolean(extracted.roNumber?.trim());
+  const hasVin17 = (extracted.vehicle?.vin?.trim() ?? '').length === 17;
+  const hasVehicleIdentity = Boolean(
+    extracted.vehicle?.year?.trim() && extracted.vehicle?.make?.trim()
+  );
+
+  let extractionStrength: RoExtractionStrength = 'weak';
+  if (complaintCount > 0 || (hasRoNumber && hasVin17)) {
+    extractionStrength = 'strong';
+  } else if (complaintCount > 0 || hasRoNumber || hasVin17 || hasVehicleIdentity) {
+    extractionStrength = 'partial';
+  }
+
+  return {
+    extractionStrength,
+    complaintCount,
+    complaintLabelCount,
+    hasRoNumber,
+    hasVin17,
+    hasVehicleIdentity,
+  };
 }

@@ -7,7 +7,11 @@ import { logger } from '@/lib/logger';
 
 const REQUIRED_ENV_VARS = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'] as const;
 
-const RECOMMENDED_ENV_VARS = ['GROK_API_KEY', 'BLOB_READ_WRITE_TOKEN'] as const;
+/** Production hard requirement — RO and Xentry scanning cannot work without blob + vision AI. */
+export const PRODUCTION_SCANNING_REQUIRED_ENV_VARS = [
+  'BLOB_READ_WRITE_TOKEN',
+  'GROK_API_KEY',
+] as const;
 
 /** H8: KV recommended in production for distributed rate limiting across serverless instances. */
 const PRODUCTION_RECOMMENDED_ENV_VARS = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'] as const;
@@ -81,9 +85,14 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     warnings.push('SESSION_SECRET is shorter than the recommended 32 characters');
   }
 
-  for (const key of RECOMMENDED_ENV_VARS) {
+  for (const key of PRODUCTION_SCANNING_REQUIRED_ENV_VARS) {
     if (!process.env[key]?.trim()) {
-      warnings.push(`${key} not configured`);
+      const scanMessage = `${key} not configured — RO and Xentry photo scanning disabled`;
+      if (isProduction) {
+        missing.push(key);
+      } else {
+        warnings.push(scanMessage);
+      }
     }
   }
 

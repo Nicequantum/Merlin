@@ -26,6 +26,26 @@ describe('environment validation', () => {
     process.env.SESSION_SECRET = saved.SESSION_SECRET;
   });
 
+  test('requires BLOB_READ_WRITE_TOKEN in production for scanning', () => {
+    const saved = {
+      BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
+      GROK_API_KEY: process.env.GROK_API_KEY,
+    };
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    delete process.env.GROK_API_KEY;
+
+    const prod = validateEnvironment({ throwOnError: false, production: true });
+    assert.ok(prod.missing.includes('BLOB_READ_WRITE_TOKEN'));
+    assert.ok(prod.missing.includes('GROK_API_KEY'));
+
+    const dev = validateEnvironment({ throwOnError: false, production: false });
+    assert.ok(dev.warnings.some((w) => w.includes('BLOB_READ_WRITE_TOKEN')));
+    assert.ok(dev.warnings.some((w) => w.includes('GROK_API_KEY')));
+
+    process.env.BLOB_READ_WRITE_TOKEN = saved.BLOB_READ_WRITE_TOKEN;
+    process.env.GROK_API_KEY = saved.GROK_API_KEY;
+  });
+
   test('getBuildCommit falls back to dev', () => {
     const prev = process.env.NEXT_PUBLIC_BUILD_COMMIT;
     delete process.env.NEXT_PUBLIC_BUILD_COMMIT;

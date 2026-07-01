@@ -253,6 +253,32 @@ async function checkEnvironment(): Promise<void> {
     record('Environment', 'Required environment variables', 'fail', `Missing: ${env.missing.join(', ')}`);
   }
 
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  if (!blobToken) {
+    record(
+      'Environment',
+      'Blob storage for RO/Xentry scanning',
+      'fail',
+      'BLOB_READ_WRITE_TOKEN missing — connect Vercel Blob (Storage → Create/Connect Blob Store) and redeploy',
+      true
+    );
+  } else {
+    record('Environment', 'Blob storage for RO/Xentry scanning', 'pass', 'BLOB_READ_WRITE_TOKEN configured');
+  }
+
+  const grokKey = process.env.GROK_API_KEY?.trim();
+  if (!grokKey) {
+    record(
+      'Environment',
+      'Grok vision for RO/Xentry scanning',
+      'fail',
+      'GROK_API_KEY missing — server-only xAI key required for photo extraction',
+      true
+    );
+  } else {
+    record('Environment', 'Grok vision for RO/Xentry scanning', 'pass', 'GROK_API_KEY configured');
+  }
+
   const blockingWarnings = env.warnings.filter(
     (w) => w.includes('NEXT_PUBLIC_*') || w.includes('shorter than')
   );

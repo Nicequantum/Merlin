@@ -118,6 +118,19 @@ function checkProductionEnv() {
   }
 }
 
+function checkScanningEnvironment() {
+  const scanningRequired = ['BLOB_READ_WRITE_TOKEN', 'GROK_API_KEY'];
+  const missing = scanningRequired.filter((key) => !process.env[key]?.trim());
+  if (missing.length > 0) {
+    fail(
+      `Scanning environment incomplete (missing: ${missing.join(', ')}) — RO and Xentry photo scanning will fail. ` +
+        'On Vercel: Project → Storage → connect a Blob store, then confirm BLOB_READ_WRITE_TOKEN in Environment Variables.'
+    );
+    return;
+  }
+  pass('Scanning environment (BLOB_READ_WRITE_TOKEN + GROK_API_KEY)');
+}
+
 function checkSentryDsn() {
   const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN?.trim();
   if (!dsn) {
@@ -253,6 +266,7 @@ async function main() {
   loadDotEnvFile('.env.production');
 
   checkProductionEnv();
+  checkScanningEnvironment();
   checkSentryDsn();
   checkAiRouteMaxDuration();
   checkPlaintextPiiWriteGuards();

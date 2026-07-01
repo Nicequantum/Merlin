@@ -8,6 +8,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const REQUIRED = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'];
+/** Required in production — RO/Xentry scanning uploads photos to Vercel Blob before Grok vision. */
+const PRODUCTION_SCANNING_REQUIRED = ['BLOB_READ_WRITE_TOKEN', 'GROK_API_KEY'];
 /** Required in production — distributed rate limiting must not fall back to per-instance memory. */
 const PRODUCTION_REQUIRED = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'];
 
@@ -43,6 +45,20 @@ if (missing.length > 0) {
 }
 
 if (isProduction) {
+  const missingScanning = PRODUCTION_SCANNING_REQUIRED.filter((key) => !process.env[key]?.trim());
+  if (missingScanning.length > 0) {
+    console.error(
+      `[merlin:build] Missing required scanning environment variables: ${missingScanning.join(', ')}`
+    );
+    console.error(
+      '[merlin:build] RO and Xentry scanning require Vercel Blob (BLOB_READ_WRITE_TOKEN) and Grok vision (GROK_API_KEY).'
+    );
+    console.error(
+      '[merlin:build] Vercel: Project → Storage → Create Blob Store → connect to this project (auto-injects BLOB_READ_WRITE_TOKEN).'
+    );
+    process.exit(1);
+  }
+
   const missingProd = PRODUCTION_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingProd.length > 0) {
     console.error(
@@ -54,6 +70,12 @@ if (isProduction) {
     process.exit(1);
   }
 } else {
+  const missingScanning = PRODUCTION_SCANNING_REQUIRED.filter((key) => !process.env[key]?.trim());
+  if (missingScanning.length > 0) {
+    console.warn(
+      `[merlin:build] Scanning disabled until configured (optional for local builds): ${missingScanning.join(', ')}`
+    );
+  }
   const missingKv = PRODUCTION_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingKv.length > 0) {
     console.warn(

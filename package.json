@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "validate:env": "node scripts/validate-env.mjs",
+    "verify:scan-env": "node scripts/verify-scan-env.mjs",
     "validate:pre-deploy": "node scripts/validate-pre-deploy.mjs",
     "validate:pre-rollout": "tsx --import ./tests/setup/preload.mjs scripts/pre-rollout-validation.ts",
     "ready-to-deploy": "npm run validate:pre-deploy && npm run validate:pre-rollout && node scripts/validate-pre-rollout.mjs && echo Merlinus is ready for Mercedes-Benz dealership deployment && echo \"Run: npm run db:migrate-pii-safe (dry-run first)\"",

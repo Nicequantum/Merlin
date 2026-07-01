@@ -2,11 +2,12 @@ import { fetchPrivateBlobAsDataUrl } from '@/lib/blob';
 import { withAuth } from '@/lib/apiRoute';
 import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { extractDiagnosticsFromImage } from '@/lib/grok';
-import { apiError, FORBIDDEN_ERROR } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR, IMAGE_STORAGE_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
-import { RATE_LIMITS } from '@/lib/rate-limit';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
+import { logger } from '@/lib/logger';
+import { RATE_LIMITS } from '@/lib/rate-limit';
 import { imagePathnamesSchema, parseRequestBody } from '@/lib/validation';
 
 /** Must match DIAGNOSTIC_EXTRACT_ROUTE_MAX_DURATION_S in @/lib/timeouts */
@@ -26,19 +27,49 @@ export async function POST(request: Request) {
         extractPathnameFromImageRef(parsed.data.imagePathnames[0]) || parsed.data.imagePathnames[0];
 
       if (!isAllowedImagePathname(pathname)) {
+        logger.warn('diagnostics.extract.invalid_pathname', {
+          pathname,
+          technicianId: session.technicianId,
+        });
         return apiError(FORBIDDEN_ERROR, 403);
       }
       const allowed = await userCanAccessImage(session, pathname);
       if (!allowed) {
-        return apiError(FORBIDDEN_ERROR, 403);
+        logger.warn('diagnostics.extract.image_access_denied', {
+          pathname,
+          technicianId: session.technicianId,
+          dealershipId: session.dealershipId,
+        });
+        return apiError(IMAGE_ACCESS_ERROR, 403);
       }
 
-      const imageDataUrl = await fetchPrivateBlobAsDataUrl(pathname);
+      let imageDataUrl: string;
+      try {
+        imageDataUrl = await fetchPrivateBlobAsDataUrl(pathname);
+      } catch (error) {
+        logger.error('diagnostics.extract.blob_fetch_failed', {
+          pathname,
+          technicianId: session.technicianId,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
+        return apiError(IMAGE_STORAGE_ERROR, 502);
+      }
+
       try {
         const extracted = await extractDiagnosticsFromImage(imageDataUrl);
+        logger.info('diagnostics.extract.success', {
+          technicianId: session.technicianId,
+          codeCount: extracted.codes?.length ?? 0,
+        });
         return extracted;
       } catch (error) {
         const mapped = mapGrokRouteError(error, 'Diagnostic scan');
+        logger.error('diagnostics.extract.grok_failed', {
+          pathname,
+          technicianId: session.technicianId,
+          status: mapped.status,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
         return apiError(mapped.message, mapped.status);
       }
     },

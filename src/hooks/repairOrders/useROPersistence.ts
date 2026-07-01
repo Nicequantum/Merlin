@@ -63,7 +63,7 @@ export function useROPersistence(
   );
 
   const saveROImmediate = useCallback(
-    async (ro: RepairOrder | null) => {
+    async (ro: RepairOrder | null, options?: { throwOnError?: boolean }) => {
       if (ro) {
         try {
           const persisted = await persistRO(ro);
@@ -87,9 +87,14 @@ export function useROPersistence(
         } catch (e) {
           if (e instanceof ApiError && e.status === 409) {
             toast.error(e.message);
+            if (options?.throwOnError) throw e;
             return;
           }
-          toast.error(e instanceof Error ? e.message : 'Failed to save repair order');
+          const message = e instanceof Error ? e.message : 'Failed to save repair order';
+          toast.error(message);
+          if (options?.throwOnError) {
+            throw e instanceof Error ? e : new Error(message);
+          }
         }
       } else {
         roRef.current = null;

@@ -414,6 +414,23 @@ export function useRepairOrders({
     navigateView('line');
   }, [flushPendingSave, navigateView, persistRO]);
 
+  const toastXentryResult = useCallback((fileCount: number, ocrTexts: string[]) => {
+    const failed = ocrTexts.filter((text) => text.includes('[Analysis failed:')).length;
+    if (failed === fileCount) {
+      const detail =
+        ocrTexts
+          .find((text) => text.includes('[Analysis failed:'))
+          ?.match(/\[Analysis failed: (.+)\]/)?.[1] || 'Diagnostic analysis failed.';
+      toast.error(detail);
+      return;
+    }
+    if (failed > 0) {
+      toast.warning(`${fileCount - failed} photo(s) analyzed; ${failed} need a retake or sharper image.`);
+      return;
+    }
+    toast.success(`${fileCount} diagnostic photo(s) saved and analyzed`);
+  }, []);
+
   const processXentryImages = useCallback(
     async (
       files: File[],
@@ -585,7 +602,7 @@ export function useRepairOrders({
                     }
                   : l
               );
-              await saveROImmediate({ ...snapshot, repairLines: updatedLines });
+              await saveROImmediate({ ...snapshot, repairLines: updatedLines }, { throwOnError: true });
             }
           );
           const finalRO = roRef.current;
@@ -600,8 +617,8 @@ export function useRepairOrders({
                 }
               : l
           );
-          await saveROImmediate({ ...finalRO, repairLines: updatedLines });
-          toast.success(`${files.length} diagnostic photo(s) saved`);
+          await saveROImmediate({ ...finalRO, repairLines: updatedLines }, { throwOnError: true });
+          toastXentryResult(files.length, result.updatedOcrTexts);
         } catch (err) {
           toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
         } finally {
@@ -611,7 +628,7 @@ export function useRepairOrders({
       };
       input.click();
     },
-    [currentRO, flushPendingSave, processXentryImages, saveROImmediate, onOcrStart, onOcrFinish]
+    [currentRO, flushPendingSave, processXentryImages, saveROImmediate, toastXentryResult, onOcrStart, onOcrFinish]
   );
 
   const addROXentryPhotos = useCallback(() => {
@@ -667,12 +684,15 @@ export function useRepairOrders({
                   : l
               );
             }
-            await saveROImmediate({
-              ...snapshot,
-              xentryImages: uploaded.allImages,
-              xentryOcrTexts: uploaded.updatedOcrTexts,
-              repairLines: updatedLines,
-            });
+            await saveROImmediate(
+              {
+                ...snapshot,
+                xentryImages: uploaded.allImages,
+                xentryOcrTexts: uploaded.updatedOcrTexts,
+                repairLines: updatedLines,
+              },
+              { throwOnError: true }
+            );
           }
         );
         const finalRO = roRef.current;
@@ -691,13 +711,16 @@ export function useRepairOrders({
               : l
           );
         }
-        await saveROImmediate({
-          ...finalRO,
-          xentryImages: result.allImages,
-          xentryOcrTexts: result.updatedOcrTexts,
-          repairLines: updatedLines,
-        });
-        toast.success(`${files.length} Xentry photo(s) saved`);
+        await saveROImmediate(
+          {
+            ...finalRO,
+            xentryImages: result.allImages,
+            xentryOcrTexts: result.updatedOcrTexts,
+            repairLines: updatedLines,
+          },
+          { throwOnError: true }
+        );
+        toastXentryResult(files.length, result.updatedOcrTexts);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
       } finally {
@@ -706,7 +729,7 @@ export function useRepairOrders({
       }
     };
     input.click();
-  }, [currentRO, flushPendingSave, processXentryImages, saveROImmediate, onOcrStart, onOcrFinish]);
+  }, [currentRO, flushPendingSave, processXentryImages, saveROImmediate, toastXentryResult, onOcrStart, onOcrFinish]);
 
   const invalidateReviewRequests = useCallback(() => {
     reviewStorySeqRef.current += 1;

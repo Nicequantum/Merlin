@@ -58,6 +58,9 @@ export const CUSTOMER_PAY_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
  * Compliance-critical audit actions — DB write failure must abort the parent operation (C2).
  * Non-critical actions (e.g. ro.update, image.upload) may log and continue.
  */
+/** Upload audit must succeed — extract routes grant access from this entry. */
+export const UPLOAD_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set(['image.upload']);
+
 export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'auth.login',
   'auth.logout',
@@ -230,7 +233,7 @@ export async function writeAuditLog(input: AuditLogInput): Promise<string | void
       error: error instanceof Error ? error.message : 'unknown',
     });
     // C2: warranty/auth compliance actions must not succeed without a durable audit entry.
-    if (CRITICAL_AUDIT_ACTIONS.has(input.action)) {
+    if (CRITICAL_AUDIT_ACTIONS.has(input.action) || UPLOAD_AUDIT_ACTIONS.has(input.action)) {
       throw error instanceof Error
         ? error
         : new Error(`Critical audit log write failed for action "${input.action}"`);

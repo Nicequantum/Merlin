@@ -19,6 +19,10 @@ export const MAINTENANCE_MODE_ERROR =
   'Merlinus is in maintenance mode. Story generation and uploads are paused — try again shortly.';
 export const GROK_UNAVAILABLE_ERROR =
   'AI story generation is temporarily unavailable. Check bay Wi‑Fi or type your notes manually.';
+export const IMAGE_ACCESS_ERROR =
+  'This photo is not available for processing. Please re-upload and try again.';
+export const IMAGE_STORAGE_ERROR =
+  'Could not load uploaded photos from storage. Please re-upload and try again.';
 export const PAYLOAD_TOO_LARGE_ERROR = 'Request is too large. Reduce attachments or split your input.';
 export const OFFLINE_ERROR = 'No network connection. Your typed notes are safe — reconnect and try again.';
 export const CONFLICT_ERROR =

@@ -165,7 +165,8 @@ describe('Third-party audit hardening', () => {
   it('image access verifies exact pathname matches', () => {
     const src = readSrc('src/lib/imageAccess.ts');
     assert.ok(src.includes('imageJsonContainsPathname'));
-    assert.ok(src.includes('auditMetadataContainsPathname'));
+    assert.ok(src.includes('auditMetadataHasPathname'));
+    assert.ok(src.includes('recentUploadGrantsAccess'));
   });
 
   it('encryption and PII modules are server-only', () => {

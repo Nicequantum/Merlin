@@ -1,5 +1,6 @@
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
+import { formatScanApiError } from '@/lib/scanPipeline';
 import { runDiagnosticOCR } from '@/services/ocr';
 import type { ExtractedData, ImageAttachment } from '@/types';
 import {
@@ -28,13 +29,22 @@ export async function analyzeXentryImage(
   let text = '';
 
   onProgress(10);
+  let extractError: string | null = null;
   try {
     const grokData = await api.extractDiagnostics(attachment.pathname);
     extracted = mergeExtracted(emptyExtractedData(), grokData);
     text = formatExtractionAsOcrText(grokData);
     onProgress(50);
   } catch (err) {
-    clientLog.warn('Grok diagnostic extraction failed, falling back to OCR', err);
+    extractError = formatScanApiError(
+      err,
+      'Diagnostic photo analysis failed on the server.'
+    );
+    clientLog.error('xentry.extract_api_failed', {
+      message: extractError,
+      status: err instanceof ApiError ? err.status : undefined,
+      pathname: attachment.pathname,
+    });
   }
 
   if (hasDiagnosticContent(extracted)) {
@@ -52,11 +62,18 @@ export async function analyzeXentryImage(
       text = text ? `${text}\n\n[OCR SUPPLEMENT]\n${ocrText}` : ocrText;
     }
   } catch (err) {
-    clientLog.warn('Diagnostic OCR failed for one image', err);
+    clientLog.error('xentry.ocr_failed', {
+      pathname: attachment.pathname,
+      error: err instanceof Error ? err.message : 'unknown',
+    });
   }
 
   if (!text.trim()) {
-    text = '[No diagnostic text extracted from image]';
+    text = extractError
+      ? `[Analysis failed: ${extractError}]`
+      : '[No diagnostic text extracted from image]';
+  } else if (extractError && !hasDiagnosticContent(extracted)) {
+    text = `${text}\n\n[AI vision note: ${extractError}]`;
   }
 
   return { text, extracted };

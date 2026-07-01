@@ -1,5 +1,6 @@
 import { prisma } from './db';
 import { extractPathnameFromImageRef } from './imageUrls';
+import { logger } from './logger';
 
 export type ImageAccessSession = {
   technicianId: string;
@@ -7,6 +8,9 @@ export type ImageAccessSession = {
   dealershipId: string;
   serviceAdvisorId?: string | null;
 };
+
+/** How long a freshly uploaded blob stays accessible before RO attachment. */
+export const RECENT_UPLOAD_ACCESS_MS = 60 * 60 * 1000;
 
 function pathnamesFromImageJson(raw: string): string[] {
   try {
@@ -35,17 +39,17 @@ function pathnamesFromImageJson(raw: string): string[] {
   }
 }
 
-function imageJsonContainsPathname(raw: string, pathname: string): boolean {
-  return pathnamesFromImageJson(raw).includes(pathname);
-}
-
-function auditMetadataContainsPathname(raw: string, pathname: string): boolean {
+export function auditMetadataHasPathname(metadataRaw: string, pathname: string): boolean {
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return typeof parsed.pathname === 'string' && parsed.pathname === pathname;
+    const parsed = JSON.parse(metadataRaw) as Record<string, unknown>;
+    return parsed.pathname === pathname;
   } catch {
     return false;
   }
+}
+
+function imageJsonContainsPathname(raw: string, pathname: string): boolean {
+  return pathnamesFromImageJson(raw).includes(pathname);
 }
 
 /** H9: targeted lookup — avoid scanning every RO in the dealership. */
@@ -85,6 +89,39 @@ async function repairOrderContainsPathname(
   return false;
 }
 
+async function recentUploadGrantsAccess(
+  session: ImageAccessSession,
+  pathname: string
+): Promise<boolean> {
+  const since = new Date(Date.now() - RECENT_UPLOAD_ACCESS_MS);
+
+  const byEntityId = await prisma.auditLog.findFirst({
+    where: {
+      action: 'image.upload',
+      dealershipId: session.dealershipId,
+      technicianId: session.technicianId,
+      entityId: pathname,
+      createdAt: { gte: since },
+    },
+    select: { id: true },
+  });
+  if (byEntityId) return true;
+
+  const recentUploads = await prisma.auditLog.findMany({
+    where: {
+      action: 'image.upload',
+      dealershipId: session.dealershipId,
+      technicianId: session.technicianId,
+      createdAt: { gte: since },
+    },
+    select: { metadata: true },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+
+  return recentUploads.some((entry) => auditMetadataHasPathname(entry.metadata, pathname));
+}
+
 /** True when the session may read this private blob (RO attachment or recent own upload). */
 export async function userCanAccessImage(
   session: ImageAccessSession,
@@ -94,20 +131,7 @@ export async function userCanAccessImage(
     return true;
   }
 
-  // Allow freshly uploaded images not yet attached to an RO (same dealership session)
-  const recentUploads = await prisma.auditLog.findMany({
-    where: {
-      action: 'image.upload',
-      dealershipId: session.dealershipId,
-      technicianId: session.technicianId,
-      createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
-      metadata: { contains: pathname },
-    },
-    select: { metadata: true },
-    take: 20,
-  });
-
-  return recentUploads.some((entry) => auditMetadataContainsPathname(entry.metadata, pathname));
+  return recentUploadGrantsAccess(session, pathname);
 }
 
 /** Returns the first pathname the session may not attach, or null when all are allowed. */
@@ -119,6 +143,11 @@ export async function findForbiddenImagePathname(
   for (const pathname of unique) {
     const allowed = await userCanAccessImage(session, pathname);
     if (!allowed) {
+      logger.warn('image.access_denied', {
+        pathname,
+        technicianId: session.technicianId,
+        dealershipId: session.dealershipId,
+      });
       return pathname;
     }
   }

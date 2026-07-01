@@ -2,8 +2,9 @@
 
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
+import { formatScanApiError, isRetriableScanMessage } from '@/lib/scanPipeline';
 import { runFastRoScanOcr, warmupOcrWorker } from '@/services/ocr';
 import type { PendingImage, RepairOrder } from '@/types';
 import {
@@ -224,11 +225,21 @@ export function useROScan({
         setOcrProgress(35);
         setScanStatusMessage('Starting on-device OCR and AI vision in parallel…');
         const ocrPromise = runClientOcr().catch((error) => {
-          clientLog.warn('On-device OCR failed; continuing with AI vision if available', error);
+          clientLog.error('ro.scan.ocr_failed', error);
           return emptyOcrResult();
         });
+
+        let extractError: string | null = null;
         const grokPromise = api.extractRO(imagePathnames).catch((error) => {
-          clientLog.warn('Server RO extraction failed or timed out', error);
+          extractError = formatScanApiError(
+            error,
+            'Repair order scan failed on the server. Please try again.'
+          );
+          clientLog.error('ro.scan.extract_api_failed', {
+            message: extractError,
+            status: error instanceof ApiError ? error.status : undefined,
+            pageCount: imagePathnames.length,
+          });
           return null;
         });
 
@@ -242,9 +253,18 @@ export function useROScan({
         const structuredFromPasses = ocrResult.structuredFromPasses;
 
         if (!ocrText?.trim() && !grokExtracted) {
+          const detail =
+            extractError ||
+            'Could not read the repair order. Check your connection and try sharper photos or fewer pages.';
           throw new Error(
-            'Could not read the repair order. Check your connection and try sharper photos or fewer pages.'
+            isRetriableScanMessage(detail)
+              ? detail
+              : `${detail} If this keeps happening, re-upload the photos and try again.`
           );
+        }
+
+        if (!grokExtracted && extractError && ocrText?.trim()) {
+          toast.warning(`On-device OCR used — AI vision unavailable: ${extractError}`);
         }
 
         setOcrProgress(82);
@@ -284,12 +304,16 @@ export function useROScan({
         setScanStatusMessage('Opening repair order…');
       } catch (error) {
         if (!isActiveSession()) return;
-        clientLog.error('RO scan error', error);
-        const message = error instanceof Error ? error.message : 'Scan failed. Try fewer pages or sharper photos.';
-        const friendly = /timed out/i.test(message)
-          ? 'Scan is still processing or timed out — wait a moment and try again with fewer pages if this repeats.'
-          : message;
-        toast.error(friendly);
+        const message = formatScanApiError(
+          error,
+          'Scan failed. Try fewer pages or sharper photos.'
+        );
+        clientLog.error('ro.scan.failed', {
+          message,
+          status: error instanceof ApiError ? error.status : undefined,
+          pageCount: images.length,
+        });
+        toast.error(message);
         if (!createdSuccessfully) {
           setPendingROImages(images);
         } else {

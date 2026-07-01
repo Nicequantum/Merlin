@@ -132,7 +132,7 @@ describe('critical path HTTP routes', () => {
         technicianId,
         entityType: 'image',
         entityId: extractPathname,
-        metadata: JSON.stringify({ pathname: extractPathname }),
+        metadata: JSON.stringify({ pathname: extractPathname, size: 1024 }),
         ipAddress: '127.0.0.1',
         promptVersion: '',
         previousHash: '',

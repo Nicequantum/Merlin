@@ -22,6 +22,7 @@ const ALLOWED_STRING_KEYS = new Set([
   'repairOrderId',
   'lineNumber',
   'd7Number',
+  'pathname',
   'role',
   'routeKey',
   'promptVersion',

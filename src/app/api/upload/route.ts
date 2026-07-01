@@ -5,7 +5,15 @@ import { apiError, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const ALLOWED_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+]);
 
 type UploadFile = {
   name: string;
@@ -52,7 +60,9 @@ export async function POST(request: Request) {
         action: 'image.upload',
         dealershipId: session.dealershipId,
         technicianId: session.technicianId,
-        metadata: { filename: file.name, size: file.size, pathname: uploaded.pathname },
+        entityType: 'image',
+        entityId: uploaded.pathname,
+        metadata: { pathname: uploaded.pathname, size: file.size },
         ipAddress: getRequestIp(request),
       });
 

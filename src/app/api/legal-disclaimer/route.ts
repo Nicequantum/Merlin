@@ -35,6 +35,10 @@ export async function POST(request: Request) {
         legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
       };
     },
-    { rateLimitKey: 'legal_disclaimer', skipLegalDisclaimer: true }
+    {
+      rateLimitKey: 'legal_disclaimer',
+      skipConsent: true,
+      skipLegalDisclaimer: true,
+    }
   );
 }

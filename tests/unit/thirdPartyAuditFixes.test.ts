@@ -239,6 +239,16 @@ describe('Third-party audit hardening', () => {
     assert.ok(changePassword.includes('dealershipId: session.dealershipId'));
   });
 
+  it('post-login compliance gates match server policy versions', () => {
+    const shell = readSrc('src/components/BenzTechApp.tsx');
+    assert.ok(shell.includes('needsConsent'));
+    assert.ok(shell.includes('needsLegalDisclaimer'));
+    assert.ok(shell.includes('consentVersion'));
+    assert.ok(shell.includes('legalDisclaimerVersion'));
+    assert.ok(readSrc('src/lib/complianceSession.ts').includes('CONSENT_VERSION'));
+    assert.ok(readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route.ts').includes('parseFailed'));
+  });
+
   it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {
     const shell = readSrc('src/components/BenzTechApp.tsx');
     assert.ok(shell.includes('LoginView'));

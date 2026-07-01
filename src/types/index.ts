@@ -167,6 +167,8 @@ export interface StoryQualityResult {
   technicianDetails: TechnicianDetailPrompt[];
   summary: string;
   scoredAgainstStory?: string;
+  /** True when Grok returned unreadable output — not a real zero score. */
+  parseFailed?: boolean;
 }
 
 export interface StoryReviewFeedback {
@@ -338,7 +340,9 @@ export interface TechnicianSession {
   dealershipName: string;
   serviceAdvisorId: string | null;
   consentAt: string | null;
+  consentVersion: string | null;
   legalDisclaimerAt: string | null;
+  legalDisclaimerVersion: string | null;
 }
 
 export interface TechnicianUsageSummary {

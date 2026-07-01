@@ -1,4 +1,4 @@
-import type { TechnicianSession } from '@/types';
+import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION, type TechnicianSession } from '@/types';
 
 /** Minimal auth fetch helpers — kept separate so the login shell never imports @/lib/api. */
 
@@ -40,23 +40,40 @@ export async function logoutSession(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
 }
 
-export async function acceptConsentSession(): Promise<string> {
+export async function acceptConsentSession(): Promise<{
+  consentAt: string;
+  consentVersion: string;
+}> {
   const res = await fetch('/api/consent', { method: 'POST', credentials: 'include' });
-  const data = (await res.json().catch(() => ({}))) as { consentAt?: string; error?: string };
+  const data = (await res.json().catch(() => ({}))) as {
+    consentAt?: string;
+    consentVersion?: string;
+    error?: string;
+  };
   if (!res.ok) throw new Error(data.error || 'Could not save consent');
   if (!data.consentAt) throw new Error('Consent accepted but no timestamp returned');
-  return data.consentAt;
+  return {
+    consentAt: data.consentAt,
+    consentVersion: data.consentVersion ?? CONSENT_VERSION,
+  };
 }
 
-export async function acceptLegalDisclaimerSession(): Promise<string> {
+export async function acceptLegalDisclaimerSession(): Promise<{
+  legalDisclaimerAt: string;
+  legalDisclaimerVersion: string;
+}> {
   const res = await fetch('/api/legal-disclaimer', { method: 'POST', credentials: 'include' });
   const data = (await res.json().catch(() => ({}))) as {
     legalDisclaimerAt?: string;
+    legalDisclaimerVersion?: string;
     error?: string;
   };
   if (!res.ok) throw new Error(data.error || 'Could not save legal acknowledgment');
   if (!data.legalDisclaimerAt) {
     throw new Error('Legal disclaimer accepted but no timestamp returned');
   }
-  return data.legalDisclaimerAt;
+  return {
+    legalDisclaimerAt: data.legalDisclaimerAt,
+    legalDisclaimerVersion: data.legalDisclaimerVersion ?? LEGAL_DISCLAIMER_VERSION,
+  };
 }

@@ -26,15 +26,20 @@ export function useLineViewCertificationForm({
   const [certificationChecked, setCertificationChecked] = useState(false);
   const [certificationName, setCertificationName] = useState('');
 
-  const showCertificationSection = !isCustomerPayLine && Boolean(storyQuality);
   const isStoryCertified = Boolean(storyCertification);
+  const hasAiGeneratedStory = Boolean(lastGeneratedStoryText);
+  const hasCurrentAuditScore = Boolean(storyQuality);
+  const certificationPendingReaudit = storyQualityStale && !isStoryCertified;
+  const showCertificationSection =
+    !isCustomerPayLine &&
+    hasAiGeneratedStory &&
+    (hasCurrentAuditScore || certificationPendingReaudit || isStoryCertified);
   const isCertificationComplete =
     certificationChecked && certificationName.trim().length >= 2;
-  const hasCompletedAuditForCurrentStory = Boolean(storyQuality) || storyQualityStale;
   const certificationActionsLocked =
     !isCustomerPayLine &&
-    Boolean(lastGeneratedStoryText) &&
-    hasCompletedAuditForCurrentStory &&
+    hasAiGeneratedStory &&
+    (hasCurrentAuditScore || certificationPendingReaudit) &&
     !isStoryCertified;
 
   useEffect(() => {
@@ -66,6 +71,7 @@ export function useLineViewCertificationForm({
     certificationName,
     setCertificationName,
     showCertificationSection,
+    certificationPendingReaudit,
     isStoryCertified,
     isCertificationComplete,
     certificationActionsLocked,

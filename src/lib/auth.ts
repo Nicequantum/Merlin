@@ -40,7 +40,9 @@ export interface SessionPayload {
   dealershipName: string;
   serviceAdvisorId: string | null;
   consentAt: string | null;
+  consentVersion: string | null;
   legalDisclaimerAt: string | null;
+  legalDisclaimerVersion: string | null;
   sessionVersion: number;
 }
 
@@ -140,7 +142,9 @@ async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<Sess
     dealershipName: tech.dealership.name,
     serviceAdvisorId: tech.serviceAdvisorId ?? null,
     consentAt: tech.consentAt?.toISOString() ?? null,
+    consentVersion: tech.consentVersion ?? null,
     legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
+    legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
     sessionVersion: tech.sessionVersion,
   };
 }
@@ -214,7 +218,9 @@ export async function loginTechnician(d7Number: string, password: string): Promi
     dealershipName: tech.dealership.name,
     serviceAdvisorId: tech.serviceAdvisorId ?? null,
     consentAt: tech.consentAt?.toISOString() ?? null,
+    consentVersion: tech.consentVersion ?? null,
     legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
+    legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
     sessionVersion: tech.sessionVersion,
   };
 }

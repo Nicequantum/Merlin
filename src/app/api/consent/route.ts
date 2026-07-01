@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         });
       });
 
-      return { consentAt: now.toISOString() };
+      return { consentAt: now.toISOString(), consentVersion: CONSENT_VERSION };
     },
     { rateLimitKey: 'consent', skipConsent: true, skipLegalDisclaimer: true }
   );

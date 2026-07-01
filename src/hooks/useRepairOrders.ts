@@ -875,7 +875,7 @@ export function useRepairOrders({
         );
         toast.success('Story certified and saved');
       } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : 'Failed to certify and save story');
+        throw error instanceof Error ? error : new Error('Failed to certify and save story');
       } finally {
         setIsCertifyingStory(false);
       }

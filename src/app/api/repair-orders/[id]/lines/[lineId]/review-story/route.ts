@@ -10,6 +10,7 @@ import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOr
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
+import { logger } from '@/lib/logger';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
 
@@ -59,6 +60,18 @@ export async function POST(
       let review;
       try {
         review = await reviewWarrantyStory(mapped, line, warrantyStory);
+        if (review.parseFailed) {
+          logger.error('story.review.parse_failed', {
+            repairOrderId: id,
+            lineId,
+            technicianId: session.technicianId,
+            summary: review.summary,
+          });
+          return apiError(
+            `Story review could not read the AI score. ${review.summary} Tap Review with AI to try again.`,
+            502
+          );
+        }
       } catch (error) {
         const mapped = mapGrokRouteError(error, 'Story review');
         return apiError(mapped.message, mapped.status);

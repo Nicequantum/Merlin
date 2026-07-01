@@ -15,8 +15,9 @@ import {
   logoutSession,
 } from '@/lib/loginSession';
 import { clientLog } from '@/lib/clientLog';
+import { needsConsent, needsLegalDisclaimer } from '@/lib/complianceSession';
 import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
-import type { TechnicianSession } from '@/types';
+import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION, type TechnicianSession } from '@/types';
 
 const BenzTechAuthenticatedApp = dynamic(
   () =>
@@ -90,15 +91,23 @@ export function BenzTechApp() {
     return <LoginView onLogin={login} />;
   }
 
-  if (!session.consentAt) {
+  if (needsConsent(session)) {
     return (
       <ConsentModal
         loading={consentLoading}
         onAccept={async () => {
           setConsentLoading(true);
           try {
-            const consentAt = await acceptConsentSession();
-            setSession((prev) => (prev ? { ...prev, consentAt } : prev));
+            const accepted = await acceptConsentSession();
+            setSession((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    consentAt: accepted.consentAt,
+                    consentVersion: accepted.consentVersion ?? CONSENT_VERSION,
+                  }
+                : prev
+            );
           } catch (error: unknown) {
             clientLog.error('compliance.consent_accept_failed', error);
             toast.error(error instanceof Error ? error.message : 'Could not save consent — try again');
@@ -110,18 +119,23 @@ export function BenzTechApp() {
     );
   }
 
-  if (!session.legalDisclaimerAt) {
+  if (needsLegalDisclaimer(session)) {
     return (
       <LegalDisclaimerModal
         loading={legalDisclaimerLoading}
         onAccept={async () => {
           setLegalDisclaimerLoading(true);
           try {
-            const legalDisclaimerAt = await acceptLegalDisclaimerSession();
+            const accepted = await acceptLegalDisclaimerSession();
             setSession((prev) => {
               if (!prev) return prev;
               cacheLegalDisclaimerLocally(prev.technicianId);
-              return { ...prev, legalDisclaimerAt };
+              return {
+                ...prev,
+                legalDisclaimerAt: accepted.legalDisclaimerAt,
+                legalDisclaimerVersion:
+                  accepted.legalDisclaimerVersion ?? LEGAL_DISCLAIMER_VERSION,
+              };
             });
           } catch (error: unknown) {
             clientLog.error('compliance.legal_disclaimer_accept_failed', error);

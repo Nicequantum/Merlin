@@ -122,6 +122,7 @@ export function LineView({
     certificationName,
     setCertificationName,
     showCertificationSection,
+    certificationPendingReaudit,
     isStoryCertified,
     isCertificationComplete,
     certificationActionsLocked,
@@ -186,7 +187,7 @@ export function LineView({
   };
 
   const handleCertifyAndSave = () => {
-    if (!isCertificationComplete || isStoryCertified) return;
+    if (!isCertificationComplete || isStoryCertified || certificationPendingReaudit) return;
     void onCertifyAndSaveStory(readStoryText(), certificationName.trim());
   };
 
@@ -465,6 +466,7 @@ export function LineView({
                 onNameChange={setCertificationName}
                 isComplete={isCertificationComplete}
                 isSaved={isStoryCertified}
+                pendingReaudit={certificationPendingReaudit}
               />
             )}
 
@@ -484,7 +486,10 @@ export function LineView({
                     type="button"
                     onClick={handleCertifyAndSave}
                     disabled={
-                      !isCertificationComplete || isCertifyingStory || isStoryCertified
+                      !isCertificationComplete ||
+                      isCertifyingStory ||
+                      isStoryCertified ||
+                      certificationPendingReaudit
                     }
                     className="secondary-btn benz-btn-accent-outline h-13 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
                   >

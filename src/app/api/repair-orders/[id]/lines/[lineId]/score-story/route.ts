@@ -8,6 +8,7 @@ import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
@@ -56,6 +57,18 @@ export async function POST(
       let quality;
       try {
         quality = { ...(await scoreWarrantyStory(mapped, line, warrantyStory)), scoredAgainstStory: warrantyStory };
+        if (quality.parseFailed) {
+          logger.error('story.score.parse_failed', {
+            repairOrderId: id,
+            lineId,
+            technicianId: session.technicianId,
+            summary: quality.summary,
+          });
+          return apiError(
+            `Story audit could not read the AI score. ${quality.summary} Tap Audit Story to try again.`,
+            502
+          );
+        }
       } catch (error) {
         const mappedError = mapGrokRouteError(error, 'Story scoring');
         return apiError(mappedError.message, mappedError.status);

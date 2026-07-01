@@ -37,8 +37,8 @@ jobs:
       KV_REST_API_TOKEN: ci-kv-token
       GROK_API_KEY: ci-grok-key
       NEXT_PUBLIC_SENTRY_DSN: https://fake@o0.ingest.sentry.io/0
-      ADMIN_SEED_PASSWORD: ci-admin-seed-password-min8
-      TECH_SEED_PASSWORD: ci-tech-seed-password-min8
+      ADMIN_SEED_PASSWORD: password123
+      TECH_SEED_PASSWORD: password123
 
     steps:
       - name: Checkout

@@ -7,8 +7,9 @@ async function main() {
   const result = await runDatabaseSeed();
   console.log(`  Template library: ${result.templates} templates, ${result.knowledgeBase} knowledge-base entries`);
   console.log('Seed complete.');
-  console.log(`  ${result.managerD7} (manager) — password from ADMIN_SEED_PASSWORD`);
-  console.log(`  ${result.techD7} (technician) — password from TECH_SEED_PASSWORD`);
+  console.log(`  Primary login: ${result.managerD7} (service manager)`);
+  console.log(`  Technician login: ${result.techD7}`);
+  console.log('  Password: ADMIN_SEED_PASSWORD / TECH_SEED_PASSWORD (default password123 in .env.example)');
 }
 
 main()

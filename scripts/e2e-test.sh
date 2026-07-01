@@ -64,7 +64,9 @@ check_http "$RESP" 200 "Manager logout" > /dev/null
 rm -f "$COOKIE_JAR"
 
 log "5. Technician login"
-RESP=$(api POST /api/auth/login '{"d7Number":"D7TECH001","password":"changeme123"}')
+: "${TECH_SEED_PASSWORD:?Set TECH_SEED_PASSWORD before running e2e tests}"
+TECH_SEED_D7="${TECH_SEED_D7:-D7TECH001}"
+RESP=$(api POST /api/auth/login "{\"d7Number\":\"${TECH_SEED_D7}\",\"password\":\"${TECH_SEED_PASSWORD}\"}")
 BODY=$(check_http "$RESP" 200 "Technician login")
 echo "$BODY" | grep -q '"role":"technician"' && pass "Technician role in session" || fail "Technician role missing"
 

@@ -248,10 +248,13 @@ cd viti-ai-clone
 npm install
 cp .env.example .env.local
 npm run db:migrate:deploy
+npm run db:seed
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) after configuring environment variables.
+
+**Default seed login (service manager):** D7 `D7HARRIH` / password `password123` (from `.env.example`). Rotate via Settings before production go-live.
 
 ### Environment variables
 
@@ -264,7 +267,7 @@ Open [http://localhost:3000](http://localhost:3000) after configuring environmen
 | `BLOB_READ_WRITE_TOKEN` | For uploads | Private diagnostic image storage |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Production | Distributed rate limiting |
 | `MERLIN_MAINTENANCE_MODE` | Optional | `true` pauses AI routes during maintenance |
-| `ADMIN_SEED_PASSWORD` | For seed | Initial manager password — never commit |
+| `ADMIN_SEED_PASSWORD` / `TECH_SEED_PASSWORD` | For seed | Default `password123` in `.env.example` — rotate before go-live |
 
 Build-time validation runs automatically via `npm run validate:env` (also part of `npm run build`).
 

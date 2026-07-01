@@ -72,6 +72,9 @@ async function upsertSeedAccount(input: SeedAccountInput): Promise<void> {
   }
 }
 
+/** Documented dev default — see .env.example; override in production before go-live. */
+export const DOCUMENTED_DEV_SEED_PASSWORD = 'password123';
+
 function requireEnv(name: string, minLength = 1): string {
   const value = process.env[name]?.trim();
   if (!value || value.length < minLength) {
@@ -80,6 +83,15 @@ function requireEnv(name: string, minLength = 1): string {
     );
   }
   return value;
+}
+
+function resolveSeedPassword(name: 'ADMIN_SEED_PASSWORD' | 'TECH_SEED_PASSWORD'): string {
+  const value = process.env[name]?.trim();
+  if (value && value.length >= 8) return value;
+  const productionDeploy =
+    process.env.NODE_ENV === 'production' && process.env.VERCEL_ENV === 'production';
+  if (productionDeploy) return requireEnv(name, 8);
+  return DOCUMENTED_DEV_SEED_PASSWORD;
 }
 
 export interface SeedResult {
@@ -92,8 +104,8 @@ export interface SeedResult {
 export async function runDatabaseSeed(): Promise<SeedResult> {
   const managerD7 = (process.env.ADMIN_SEED_D7?.trim() || 'D7HARRIH').toUpperCase();
   const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
-  const managerPassword = requireEnv('ADMIN_SEED_PASSWORD', 8);
-  const techPassword = requireEnv('TECH_SEED_PASSWORD', 8);
+  const managerPassword = resolveSeedPassword('ADMIN_SEED_PASSWORD');
+  const techPassword = resolveSeedPassword('TECH_SEED_PASSWORD');
 
   const dealership = await prisma.dealership.upsert({
     where: { id: 'seed-dealership' },

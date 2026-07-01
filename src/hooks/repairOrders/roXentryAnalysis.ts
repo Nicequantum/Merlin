@@ -36,10 +36,7 @@ export async function analyzeXentryImage(
     text = formatExtractionAsOcrText(grokData);
     onProgress(50);
   } catch (err) {
-    extractError = formatScanApiError(
-      err,
-      'Diagnostic photo analysis failed on the server.'
-    );
+    extractError = formatScanApiError(err);
     clientLog.error('xentry.extract_api_failed', {
       message: extractError,
       status: err instanceof ApiError ? err.status : undefined,

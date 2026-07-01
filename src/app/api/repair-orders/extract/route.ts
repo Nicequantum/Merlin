@@ -2,8 +2,8 @@ import { fetchPrivateBlobAsDataUrl } from '@/lib/blob';
 import { withAuth } from '@/lib/apiRoute';
 import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { extractROFromImages } from '@/lib/grok';
-import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR, IMAGE_STORAGE_ERROR } from '@/lib/errors';
-import { mapGrokRouteError } from '@/lib/grokErrors';
+import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR } from '@/lib/errors';
+import { mapBlobRouteError, mapGrokRouteError } from '@/lib/scanRouteErrors';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
 import { logger } from '@/lib/logger';
@@ -48,12 +48,14 @@ export async function POST(request: Request) {
       try {
         imageDataUrls = await Promise.all(pathnames.map((pathname) => fetchPrivateBlobAsDataUrl(pathname)));
       } catch (error) {
+        const mapped = mapBlobRouteError(error, 'fetch');
         logger.error('ro.extract.blob_fetch_failed', {
           pathnames,
           technicianId: session.technicianId,
-          error: error instanceof Error ? error.message : 'unknown',
+          status: mapped.status,
+          error: mapped.logDetail,
         });
-        return apiError(IMAGE_STORAGE_ERROR, 502);
+        return apiError(mapped.message, mapped.status);
       }
 
       try {
@@ -71,7 +73,7 @@ export async function POST(request: Request) {
           technicianId: session.technicianId,
           pageCount: pathnames.length,
           status: mapped.status,
-          error: error instanceof Error ? error.message : 'unknown',
+          error: mapped.logDetail,
         });
         return apiError(mapped.message, mapped.status);
       }

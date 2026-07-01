@@ -4,7 +4,7 @@ import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
-import { formatScanApiError, isRetriableScanMessage } from '@/lib/scanPipeline';
+import { formatScanApiError } from '@/lib/scanPipeline';
 import { runFastRoScanOcr, warmupOcrWorker } from '@/services/ocr';
 import type { PendingImage, RepairOrder } from '@/types';
 import {
@@ -231,14 +231,12 @@ export function useROScan({
 
         let extractError: string | null = null;
         const grokPromise = api.extractRO(imagePathnames).catch((error) => {
-          extractError = formatScanApiError(
-            error,
-            'Repair order scan failed on the server. Please try again.'
-          );
+          extractError = formatScanApiError(error);
           clientLog.error('ro.scan.extract_api_failed', {
             message: extractError,
             status: error instanceof ApiError ? error.status : undefined,
             pageCount: imagePathnames.length,
+            pathnames: imagePathnames,
           });
           return null;
         });
@@ -255,12 +253,8 @@ export function useROScan({
         if (!ocrText?.trim() && !grokExtracted) {
           const detail =
             extractError ||
-            'Could not read the repair order. Check your connection and try sharper photos or fewer pages.';
-          throw new Error(
-            isRetriableScanMessage(detail)
-              ? detail
-              : `${detail} If this keeps happening, re-upload the photos and try again.`
-          );
+            'Could not read the repair order — no text from on-device OCR or AI vision.';
+          throw new Error(detail);
         }
 
         if (!grokExtracted && extractError && ocrText?.trim()) {
@@ -304,14 +298,12 @@ export function useROScan({
         setScanStatusMessage('Opening repair order…');
       } catch (error) {
         if (!isActiveSession()) return;
-        const message = formatScanApiError(
-          error,
-          'Scan failed. Try fewer pages or sharper photos.'
-        );
+        const message = formatScanApiError(error);
         clientLog.error('ro.scan.failed', {
           message,
           status: error instanceof ApiError ? error.status : undefined,
           pageCount: images.length,
+          rawError: error instanceof Error ? error.message : undefined,
         });
         toast.error(message);
         if (!createdSuccessfully) {

@@ -35,6 +35,7 @@ import {
 } from '@/lib/timeouts';
 import { parseStructuredROText } from '@/utils/roExtractor';
 import { logger } from '@/lib/logger';
+import { parseGrokApiErrorBody } from '@/lib/scanRouteErrors';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
@@ -100,11 +101,16 @@ async function grokChat(
 
     if (!response.ok) {
       const errBody = await response.text();
+      const detail = parseGrokApiErrorBody(errBody);
       logger.warn('grok.api_error', {
         status: response.status,
         bodyLength: errBody.length,
+        detail: detail || undefined,
+        perfLabel: options.perfLabel,
+        model,
       });
-      throw new Error(`Grok API error: ${response.status}`);
+      const suffix = detail ? ` — ${detail}` : '';
+      throw new Error(`Grok API error: ${response.status}${suffix}`);
     }
 
     const apiResponse = await response.json();

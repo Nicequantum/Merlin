@@ -67,5 +67,9 @@ describe('critical path HTTP route coverage', () => {
     const mock = readSrc('tests/setup/cookiesMock.mjs');
     assert.match(mock, /next\/headers/);
     assert.match(mock, /\.\/dist\/server\/request\/cookies/);
+    assert.match(mock, /fetchPrivateBlobAsVisionDataUrl/);
+    const loader = readSrc('tests/setup/server-only-loader.mjs');
+    assert.match(loader, /isBlobModuleRequest/);
+    assert.match(loader, /BLOB_MOCK_SOURCE/);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import type { RepairOrderSummary, TechnicianSession } from '@/types';
@@ -21,8 +21,17 @@ interface UseROListOptions {
   onComplianceRequired?: () => void;
 }
 
+function useStableComplianceCallback(
+  callback: (() => void) | undefined
+): MutableRefObject<(() => void) | undefined> {
+  const ref = useRef(callback);
+  ref.current = callback;
+  return ref;
+}
+
 /** Today + previous pagination for the repair order home lists. */
 export function useROList(session: TechnicianSession | null, options: UseROListOptions = {}) {
+  const onComplianceRequiredRef = useStableComplianceCallback(options.onComplianceRequired);
   const [allROs, setAllROs] = useState<RepairOrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -78,7 +87,7 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
       if (error instanceof ApiError && isComplianceBlockedError(error)) {
         setAllROs([]);
         setListError(null);
-        options.onComplianceRequired?.();
+        onComplianceRequiredRef.current?.();
         return;
       }
       setListError('Could not load repair orders. Check your connection and try again.');
@@ -87,7 +96,7 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
       setLoading(false);
       setListRetrying(false);
     }
-  }, [options.onComplianceRequired, session]);
+  }, [onComplianceRequiredRef, session]);
 
   const loadPreviousPage = useCallback(
     async (append: boolean) => {

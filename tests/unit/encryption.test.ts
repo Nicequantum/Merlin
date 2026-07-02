@@ -94,6 +94,25 @@ describe('sensitive field encryption', () => {
     assert.equal(migratePlaintextJsonObjectToEncrypted(encrypted), encrypted);
   });
 
+  test('decryptJsonObject returns fallback when ciphertext cannot be decrypted', () => {
+    const fallback = { codes: [] as string[] };
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreign = encryptJsonObject({ codes: ['P0300'] });
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    assert.deepEqual(decryptJsonObject(foreign, fallback), fallback);
+  });
+
+  test('decryptStringArray returns empty array when ciphertext cannot be decrypted', () => {
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreign = encryptStringArray(['Quick test OCR']);
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    assert.deepEqual(decryptStringArray(foreign), []);
+  });
+
   test('decryptComplaintsPayload returns empty complaints when ciphertext cannot be decrypted', () => {
     const valid = encryptComplaintsPayload(['Check engine light']);
     assert.deepEqual(decryptComplaintsPayload(valid).complaints, ['Check engine light']);

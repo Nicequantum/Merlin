@@ -99,7 +99,12 @@ export function decryptStringArray(ciphertext: string): string[] {
       return [];
     }
   }
-  const raw = decryptPII(ciphertext);
+  let raw: string;
+  try {
+    raw = decryptPII(ciphertext);
+  } catch {
+    return [];
+  }
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -221,7 +226,12 @@ export function decryptJsonObject<T>(ciphertext: string, fallback: T): T {
       return fallback;
     }
   }
-  const raw = decryptPII(ciphertext);
+  let raw: string;
+  try {
+    raw = decryptPII(ciphertext);
+  } catch {
+    return fallback;
+  }
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;

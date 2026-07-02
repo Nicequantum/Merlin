@@ -236,6 +236,77 @@ describe('roMapper sensitive field encryption', () => {
     assert.equal(mapped.storyQualityAudit?.scoredAgainstStory, sampleLine.warrantyStory);
   });
 
+  test('dbToRepairOrder tolerates unreadable encrypted PII fields', () => {
+    const roFields = repairOrderToDbFields({
+      roNumber: sampleRo.roNumber,
+      vehicle: sampleRo.vehicle,
+      customer: sampleRo.customer,
+      complaints: sampleRo.complaints,
+      repairLines: [],
+    });
+    const lineFields = repairLineToDbFields(sampleLine);
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreignVin = repairOrderToDbFields({
+      roNumber: sampleRo.roNumber,
+      vehicle: { ...sampleRo.vehicle, vin: 'WDDZF8EB5MA999999' },
+      customer: sampleRo.customer,
+      complaints: sampleRo.complaints,
+      repairLines: [],
+    }).vinEncrypted;
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    const mapped = dbToRepairOrder({
+      id: 'ro-corrupt',
+      roNumberEncrypted: roFields.roNumberEncrypted,
+      roNumberSearchTokens: roFields.roNumberSearchTokens,
+      technicianId: 'tech-1',
+      dealershipId: 'dealer-1',
+      serviceAdvisorId: null,
+      serviceAdvisorNameEncrypted: foreignVin,
+      advisorMatchConfidence: null,
+      advisorIdentifiedAt: null,
+      vinEncrypted: foreignVin,
+      year: roFields.year,
+      make: roFields.make,
+      model: roFields.model,
+      engine: roFields.engine,
+      mileageIn: roFields.mileageIn,
+      mileageOut: roFields.mileageOut,
+      customerNameEncrypted: foreignVin,
+      complaintsEncrypted: roFields.complaintsEncrypted,
+      xentryImageUrls: roFields.xentryImageUrls,
+      xentryOcrTextsEncrypted: roFields.xentryOcrTextsEncrypted,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      repairLines: [
+        {
+          id: sampleLine.id,
+          repairOrderId: 'ro-corrupt',
+          lineNumber: sampleLine.lineNumber,
+          descriptionEncrypted: lineFields.descriptionEncrypted,
+          customerConcernEncrypted: foreignVin,
+          technicianNotesEncrypted: lineFields.technicianNotesEncrypted,
+          xentryImageUrls: lineFields.xentryImageUrls,
+          xentryOcrTextsEncrypted: lineFields.xentryOcrTextsEncrypted,
+          extractedDataEncrypted: foreignVin,
+          warrantyStoryEncrypted: lineFields.warrantyStoryEncrypted,
+          storyQualityAuditEncrypted: '',
+          isCustomerPay: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      serviceAdvisor: null,
+    });
+
+    assert.equal(mapped.roNumber, sampleRo.roNumber);
+    assert.equal(mapped.vehicle.vin, '');
+    assert.equal(mapped.customer.name, '');
+    assert.equal(mapped.repairLines[0]?.customerConcern, '');
+    assert.deepEqual(mapped.repairLines[0]?.extractedData?.codes, []);
+  });
+
   test('dbToRepairOrderSummary avoids decrypting line PII and story text', () => {
     const roFields = repairOrderToDbFields({
       roNumber: sampleRo.roNumber,

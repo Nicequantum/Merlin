@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { AppFooter } from '@/components/AppFooter';
 import { AppHeader } from '@/components/AppHeader';
@@ -74,15 +74,16 @@ export function BenzTechAuthenticatedApp({
   onSessionRefresh,
 }: BenzTechAuthenticatedAppProps) {
   const ocr = useOcrProgress();
+  const handleComplianceRequired = useCallback(() => {
+    void onSessionRefresh();
+  }, [onSessionRefresh]);
   const ro = useRepairOrders({
     session,
     onOcrStart: ocr.startOcr,
     onOcrFinish: ocr.finishOcr,
     setOcrProgress: ocr.setOcrProgress,
     setScanStatusMessage: ocr.setScanStatusMessage,
-    onComplianceRequired: () => {
-      void onSessionRefresh();
-    },
+    onComplianceRequired: handleComplianceRequired,
   });
 
   const isServiceAdvisor = session.role === 'service_advisor';

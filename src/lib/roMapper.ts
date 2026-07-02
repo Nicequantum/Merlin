@@ -14,7 +14,6 @@ import {
   decryptComplaintsPayload,
   decryptJsonObject,
   decryptOptionalSensitiveText,
-  decryptPII,
   decryptSensitiveText,
   decryptStringArray,
   encryptComplaintsPayload,
@@ -29,7 +28,12 @@ import { mapStoryCertificationFromDbLine, storyCertificationMatchesStory } from 
 import { mapSoldMetricsFromDb } from './repairLineSoldMetrics';
 import { sanitizeForCDK } from './sanitizeForCDK';
 import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
-import { readAdvisorDisplayNameFromDb, readDescriptionFromDb, readRoNumberFromDb } from './piiFieldRead';
+import {
+  readAdvisorDisplayNameFromDb,
+  readDescriptionFromDb,
+  readEncryptedPiiFromDb,
+  readRoNumberFromDb,
+} from './piiFieldRead';
 import { buildRoNumberSearchTokens } from './piiSearchToken';
 
 function parseJson<T>(raw: string, fallback: T): T {
@@ -159,9 +163,7 @@ export function dbToRepairOrderSummary(ro: DbROListRow): RepairOrderSummary {
 }
 
 export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
-  const advisorName = ro.serviceAdvisorNameEncrypted
-    ? decryptPII(ro.serviceAdvisorNameEncrypted)
-    : undefined;
+  const advisorName = readEncryptedPiiFromDb({ encrypted: ro.serviceAdvisorNameEncrypted }) || undefined;
 
   const roNumber = readRoNumberFromDb(ro);
 
@@ -173,7 +175,7 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
     id: ro.id,
     roNumber,
     vehicle: {
-      vin: decryptPII(ro.vinEncrypted),
+      vin: readEncryptedPiiFromDb({ encrypted: ro.vinEncrypted }),
       year: ro.year,
       make: ro.make,
       model: ro.model,
@@ -181,7 +183,7 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
       mileageIn: ro.mileageIn,
       mileageOut: ro.mileageOut,
     },
-    customer: { name: decryptPII(ro.customerNameEncrypted) },
+    customer: { name: readEncryptedPiiFromDb({ encrypted: ro.customerNameEncrypted }) },
     ...(() => {
       const payload = decryptComplaintsPayload(ro.complaintsEncrypted);
       return {
@@ -214,7 +216,7 @@ export function dbToRepairLine(line: DbLine): RepairLine {
     id: line.id,
     lineNumber: line.lineNumber,
     description,
-    customerConcern: decryptPII(line.customerConcernEncrypted),
+    customerConcern: readEncryptedPiiFromDb({ encrypted: line.customerConcernEncrypted }),
     technicianNotes: decryptSensitiveText(line.technicianNotesEncrypted),
     xentryImages: parseImageAttachments(line.xentryImageUrls),
     xentryOcrTexts: decryptStringArray(line.xentryOcrTextsEncrypted),

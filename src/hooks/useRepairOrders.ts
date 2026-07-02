@@ -148,6 +148,11 @@ export function useRepairOrders({
   const navigateView = useCallback(
     (next: AppView) => {
       flushPendingSave();
+      if (next === 'home') {
+        roRef.current = null;
+        setCurrentRO(null);
+        setCurrentLineId(null);
+      }
       setView(next);
     },
     [flushPendingSave]

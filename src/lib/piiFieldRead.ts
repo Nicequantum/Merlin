@@ -46,3 +46,18 @@ export function readAdvisorDisplayNameFromDb(row: AdvisorDisplayNameRow): string
     return '';
   }
 }
+
+type EncryptedTextRow = {
+  encrypted?: string | null;
+};
+
+/** Tolerant PII read — detail routes must not 500 when one legacy ciphertext is unreadable. */
+export function readEncryptedPiiFromDb(row: EncryptedTextRow): string {
+  const encrypted = row.encrypted?.trim();
+  if (!encrypted) return '';
+  try {
+    return decryptPII(encrypted);
+  } catch {
+    return '';
+  }
+}

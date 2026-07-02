@@ -65,12 +65,31 @@ export function BenzTechApp() {
     };
   }, []);
 
-  const login = useCallback(async (d7Number: string, password: string) => {
-    const nextSession = await loginWithCredentials(d7Number, password);
-    setSession(nextSession);
-    setSessionPhase('authenticated');
-    return nextSession;
+  const refreshSession = useCallback(async () => {
+    try {
+      const latest = await fetchCurrentSession();
+      if (latest) {
+        setSession(latest);
+        setSessionPhase('authenticated');
+        return latest;
+      }
+      setSession(null);
+      setSessionPhase('anonymous');
+      return null;
+    } catch (error: unknown) {
+      clientLog.error('auth.session_refresh_failed', error);
+      return null;
+    }
   }, []);
+
+  const login = useCallback(async (d7Number: string, password: string) => {
+    await loginWithCredentials(d7Number, password);
+    const latest = await refreshSession();
+    if (!latest) {
+      throw new Error('Login succeeded but session could not be verified');
+    }
+    return latest;
+  }, [refreshSession]);
 
   const logout = useCallback(async () => {
     await logoutSession();
@@ -120,7 +139,8 @@ export function BenzTechApp() {
           try {
             const accepted = await acceptLegalDisclaimerSession();
             cacheLegalDisclaimerLocally(accepted.technicianId);
-            setSession(accepted);
+            const latest = await refreshSession();
+            setSession(latest ?? accepted);
           } catch (error: unknown) {
             clientLog.error('compliance.legal_disclaimer_accept_failed', error);
             toast.error(
@@ -134,5 +154,11 @@ export function BenzTechApp() {
     );
   }
 
-  return <BenzTechAuthenticatedApp session={session} onLogout={logout} />;
+  return (
+    <BenzTechAuthenticatedApp
+      session={session}
+      onLogout={logout}
+      onSessionRefresh={refreshSession}
+    />
+  );
 }

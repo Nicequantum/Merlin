@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
+import { CONSENT_VERSION } from '@/types';
 import { internalEmailForD7, normalizeD7Number } from './d7Number';
 import { prisma } from './db';
 import { seedTemplateLibraryIfEmpty } from './templateLibrary';
@@ -12,11 +12,12 @@ export const CANONICAL_SEED_PASSWORD = 'Oceanic1735!';
 /** @deprecated Use CANONICAL_SEED_PASSWORD */
 export const DOCUMENTED_DEV_SEED_PASSWORD = CANONICAL_SEED_PASSWORD;
 
-const seedOnboarding = {
+/** Seed accounts complete legal disclaimer in-app after login — never pre-accept at seed time. */
+const seedConsentOnly = {
   consentAt: new Date(),
   consentVersion: CONSENT_VERSION,
-  legalDisclaimerAt: new Date(),
-  legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
+  legalDisclaimerAt: null,
+  legalDisclaimerVersion: null,
 };
 
 interface SeedAccountInput {
@@ -100,7 +101,7 @@ async function ensureCanonicalSeedAccount(input: SeedAccountInput): Promise<void
     isActive: true,
     deletedAt: null,
     dealershipId: input.dealershipId,
-    ...seedOnboarding,
+    ...seedConsentOnly,
   };
 
   const primary = pickPrimaryCandidate(candidates, d7, canonicalEmail, legacyEmail);

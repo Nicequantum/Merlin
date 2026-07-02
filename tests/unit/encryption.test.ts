@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
 import {
+  decryptComplaintsPayload,
   decryptJsonObject,
   decryptOptionalSensitiveText,
   decryptSensitiveText,
   decryptStringArray,
+  encryptComplaintsPayload,
   encryptJsonObject,
   encryptOptionalSensitiveText,
   encryptPII,
@@ -90,5 +92,17 @@ describe('sensitive field encryption', () => {
     assert.ok(isLikelyEncryptedPayload(encrypted));
     assert.deepEqual(decryptJsonObject(encrypted, {}), JSON.parse(legacy));
     assert.equal(migratePlaintextJsonObjectToEncrypted(encrypted), encrypted);
+  });
+
+  test('decryptComplaintsPayload returns empty complaints when ciphertext cannot be decrypted', () => {
+    const valid = encryptComplaintsPayload(['Check engine light']);
+    assert.deepEqual(decryptComplaintsPayload(valid).complaints, ['Check engine light']);
+
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreign = encryptComplaintsPayload(['Foreign key complaint']);
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    assert.deepEqual(decryptComplaintsPayload(foreign).complaints, []);
   });
 });

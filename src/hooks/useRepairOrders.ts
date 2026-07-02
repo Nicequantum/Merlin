@@ -55,6 +55,7 @@ interface UseRepairOrdersOptions {
   onOcrFinish: () => void;
   setOcrProgress: (p: number) => void;
   setScanStatusMessage: (message: string) => void;
+  onComplianceRequired?: () => void;
 }
 
 export function useRepairOrders({
@@ -63,6 +64,7 @@ export function useRepairOrders({
   onOcrFinish,
   setOcrProgress,
   setScanStatusMessage,
+  onComplianceRequired,
 }: UseRepairOrdersOptions) {
   const [view, setView] = useState<AppView>('home');
   const [currentRO, setCurrentRO] = useState<RepairOrder | null>(null);
@@ -116,7 +118,7 @@ export function useRepairOrders({
     previousHasMore,
     loadMorePrevious,
     todayROs,
-  } = useROList(session);
+  } = useROList(session, { onComplianceRequired });
 
   const { flushPendingSave, cancelPendingSave, applyROUpdate, saveROImmediate, persistRO } =
     useROPersistence(allROs, setAllROs, roRef, setCurrentRO);

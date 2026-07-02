@@ -10,8 +10,19 @@ import {
   PREVIOUS_PAGE_SIZE,
 } from '@/hooks/repairOrders/roListUtils';
 
+function isComplianceBlockedError(error: ApiError): boolean {
+  return (
+    error.status === 403 &&
+    (error.message.includes('Legal disclaimer') || error.message.includes('consent'))
+  );
+}
+
+interface UseROListOptions {
+  onComplianceRequired?: () => void;
+}
+
 /** Today + previous pagination for the repair order home lists. */
-export function useROList(session: TechnicianSession | null) {
+export function useROList(session: TechnicianSession | null, options: UseROListOptions = {}) {
   const [allROs, setAllROs] = useState<RepairOrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -64,13 +75,19 @@ export function useROList(session: TechnicianSession | null) {
         setListError(null);
         return;
       }
+      if (error instanceof ApiError && isComplianceBlockedError(error)) {
+        setAllROs([]);
+        setListError(null);
+        options.onComplianceRequired?.();
+        return;
+      }
       setListError('Could not load repair orders. Check your connection and try again.');
       throw error;
     } finally {
       setLoading(false);
       setListRetrying(false);
     }
-  }, [session]);
+  }, [options.onComplianceRequired, session]);
 
   const loadPreviousPage = useCallback(
     async (append: boolean) => {

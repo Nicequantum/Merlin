@@ -155,7 +155,12 @@ export function decryptComplaintsPayload(ciphertext: string): ComplaintsPayload 
       return { complaints: [] };
     }
   }
-  const raw = decryptPII(ciphertext);
+  let raw: string;
+  try {
+    raw = decryptPII(ciphertext);
+  } catch {
+    return { complaints: [] };
+  }
   if (!raw) return { complaints: [] };
   try {
     const parsed = JSON.parse(raw);

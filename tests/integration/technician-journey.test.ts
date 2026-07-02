@@ -21,10 +21,8 @@ import { SESSION_COOKIE } from '../../src/lib/auth';
 import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import {
-  captureTechnicianCompliance,
-  clearTechnicianCompliance,
-  restoreTechnicianCompliance,
-  type TechnicianComplianceSnapshot,
+  JOURNEY_INTEGRATION_D7,
+  provisionJourneyTechnician,
 } from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
@@ -69,8 +67,6 @@ describe('technician journey (E2E integration)', () => {
   let testLineId = '';
   const extractPathname = `benz-tech/journey-${Date.now()}.png`;
   const originalFetch = globalThis.fetch;
-  let originalCompliance: TechnicianComplianceSnapshot | null = null;
-
   before(async () => {
     process.env.GROK_API_KEY = process.env.GROK_API_KEY || 'test-key-for-integration';
 
@@ -98,14 +94,22 @@ describe('technician journey (E2E integration)', () => {
       return originalFetch(input, init);
     }) as typeof fetch;
 
-    techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
-    const technician = await prisma.technician.findUnique({ where: { d7Number: techD7 } });
-    assert.ok(technician, 'Seed technician required — run npm run db:seed first');
-    technicianId = technician.id;
-    dealershipId = technician.dealershipId;
-    techName = technician.name;
-    originalCompliance = captureTechnicianCompliance(technician);
-    await clearTechnicianCompliance(prisma, technicianId);
+    const seedD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
+    const seedTechnician = await prisma.technician.findUnique({ where: { d7Number: seedD7 } });
+    assert.ok(seedTechnician, 'Seed technician required — run npm run db:seed first');
+
+    const journeyTechnician = await provisionJourneyTechnician(prisma, {
+      dealershipId: seedTechnician.dealershipId,
+      passwordHash: seedTechnician.passwordHash,
+      name: 'Journey Integration Technician',
+    });
+
+    techD7 = JOURNEY_INTEGRATION_D7;
+    technicianId = journeyTechnician.id;
+    dealershipId = journeyTechnician.dealershipId;
+    techName = journeyTechnician.name;
+    assert.equal(journeyTechnician.legalDisclaimerAt, null);
+    assert.equal(journeyTechnician.consentAt, null);
 
     await prisma.auditLog.create({
       data: {
@@ -129,18 +133,15 @@ describe('technician journey (E2E integration)', () => {
     if (testRoId) {
       await prisma.repairOrder.delete({ where: { id: testRoId } }).catch(() => undefined);
     }
-    if (originalCompliance) {
-      await restoreTechnicianCompliance(prisma, technicianId, originalCompliance);
-    }
+    await prisma.technician
+      .delete({ where: { d7Number: JOURNEY_INTEGRATION_D7 } })
+      .catch(() => undefined);
     await prisma.$disconnect();
   });
 
   test('full journey from login through story certification', async () => {
     const journeyStartedAt = new Date();
     const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD;
-
-    // Other integration suites may have provisioned compliance on the shared seed technician.
-    await clearTechnicianCompliance(prisma, technicianId);
 
     const loginResponse = await runWithNextRouteContext(
       new Request('http://localhost/api/auth/login', {

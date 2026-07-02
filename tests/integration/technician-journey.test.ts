@@ -20,6 +20,12 @@ import { POST as postCertifyStory } from '../../src/app/api/repair-orders/[id]/l
 import { SESSION_COOKIE } from '../../src/lib/auth';
 import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
+import {
+  captureTechnicianCompliance,
+  clearTechnicianCompliance,
+  restoreTechnicianCompliance,
+  type TechnicianComplianceSnapshot,
+} from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
 
@@ -63,12 +69,7 @@ describe('technician journey (E2E integration)', () => {
   let testLineId = '';
   const extractPathname = `benz-tech/journey-${Date.now()}.png`;
   const originalFetch = globalThis.fetch;
-  let originalCompliance: {
-    consentAt: Date | null;
-    consentVersion: string | null;
-    legalDisclaimerAt: Date | null;
-    legalDisclaimerVersion: string | null;
-  } | null = null;
+  let originalCompliance: TechnicianComplianceSnapshot | null = null;
 
   before(async () => {
     process.env.GROK_API_KEY = process.env.GROK_API_KEY || 'test-key-for-integration';
@@ -103,22 +104,8 @@ describe('technician journey (E2E integration)', () => {
     technicianId = technician.id;
     dealershipId = technician.dealershipId;
     techName = technician.name;
-    originalCompliance = {
-      consentAt: technician.consentAt,
-      consentVersion: technician.consentVersion,
-      legalDisclaimerAt: technician.legalDisclaimerAt,
-      legalDisclaimerVersion: technician.legalDisclaimerVersion,
-    };
-
-    await prisma.technician.update({
-      where: { id: technicianId },
-      data: {
-        consentAt: null,
-        consentVersion: null,
-        legalDisclaimerAt: null,
-        legalDisclaimerVersion: null,
-      },
-    });
+    originalCompliance = captureTechnicianCompliance(technician);
+    await clearTechnicianCompliance(prisma, technicianId);
 
     await prisma.auditLog.create({
       data: {
@@ -143,10 +130,7 @@ describe('technician journey (E2E integration)', () => {
       await prisma.repairOrder.delete({ where: { id: testRoId } }).catch(() => undefined);
     }
     if (originalCompliance) {
-      await prisma.technician.update({
-        where: { id: technicianId },
-        data: originalCompliance,
-      });
+      await restoreTechnicianCompliance(prisma, technicianId, originalCompliance);
     }
     await prisma.$disconnect();
   });
@@ -154,6 +138,9 @@ describe('technician journey (E2E integration)', () => {
   test('full journey from login through story certification', async () => {
     const journeyStartedAt = new Date();
     const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD;
+
+    // Other integration suites may have provisioned compliance on the shared seed technician.
+    await clearTechnicianCompliance(prisma, technicianId);
 
     const loginResponse = await runWithNextRouteContext(
       new Request('http://localhost/api/auth/login', {
@@ -166,11 +153,16 @@ describe('technician journey (E2E integration)', () => {
     );
 
     const loginJson = await readJsonResponse<{
-      session?: { technicianId: string; consentAt?: string | null };
+      session?: {
+        technicianId: string;
+        consentAt?: string | null;
+        legalDisclaimerAt?: string | null;
+      };
     }>(loginResponse);
     assert.equal(loginJson.status, 200, `login failed: ${JSON.stringify(loginJson.body)}`);
     assert.equal(loginJson.body.session?.technicianId, technicianId);
     assert.equal(loginJson.body.session?.consentAt ?? null, null);
+    assert.equal(loginJson.body.session?.legalDisclaimerAt ?? null, null);
 
     let sessionToken = pickSessionToken(loginResponse, '');
     assert.ok(sessionToken, 'login should set session cookie');
@@ -181,10 +173,15 @@ describe('technician journey (E2E integration)', () => {
       (req) => postConsent(req)
     );
     const consentJson = await readJsonResponse<{
-      session?: { consentAt?: string; consentVersion?: string };
+      session?: {
+        consentAt?: string;
+        consentVersion?: string;
+        legalDisclaimerAt?: string | null;
+      };
     }>(consentResponse);
     assert.equal(consentJson.status, 200);
     assert.equal(consentJson.body.session?.consentVersion, CONSENT_VERSION);
+    assert.equal(consentJson.body.session?.legalDisclaimerAt ?? null, null);
     sessionToken = pickSessionToken(consentResponse, sessionToken);
 
     const disclaimerResponse = await runWithNextRouteContext(

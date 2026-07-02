@@ -19,7 +19,12 @@ import {
 } from '../../src/lib/auth';
 import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
-import { ensureTechnicianCompliance } from '../helpers/integrationCompliance';
+import {
+  captureTechnicianCompliance,
+  ensureTechnicianCompliance,
+  restoreTechnicianCompliance,
+  type TechnicianComplianceSnapshot,
+} from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
 
@@ -30,12 +35,7 @@ describe('JWT session refresh (H4)', () => {
   let dealershipId = '';
   let techName = '';
   let sessionVersion = 1;
-  let originalCompliance: {
-    consentAt: Date | null;
-    consentVersion: string | null;
-    legalDisclaimerAt: Date | null;
-    legalDisclaimerVersion: string | null;
-  } | null = null;
+  let originalCompliance: TechnicianComplianceSnapshot | null = null;
 
   before(async () => {
     const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
@@ -45,12 +45,7 @@ describe('JWT session refresh (H4)', () => {
     dealershipId = technician.dealershipId;
     techName = technician.name;
     sessionVersion = technician.sessionVersion;
-    originalCompliance = {
-      consentAt: technician.consentAt,
-      consentVersion: technician.consentVersion,
-      legalDisclaimerAt: technician.legalDisclaimerAt,
-      legalDisclaimerVersion: technician.legalDisclaimerVersion,
-    };
+    originalCompliance = captureTechnicianCompliance(technician);
 
     await ensureTechnicianCompliance(prisma, technicianId);
     sessionVersion = (
@@ -60,10 +55,7 @@ describe('JWT session refresh (H4)', () => {
 
   after(async () => {
     if (originalCompliance) {
-      await prisma.technician.update({
-        where: { id: technicianId },
-        data: originalCompliance,
-      });
+      await restoreTechnicianCompliance(prisma, technicianId, originalCompliance);
     }
     clearCriticalPathMocks();
     await prisma.$disconnect();

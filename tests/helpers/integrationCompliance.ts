@@ -10,6 +10,54 @@ export const INTEGRATION_COMPLIANCE_DB = {
   legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
 } as const;
 
+export type TechnicianComplianceSnapshot = {
+  consentAt: Date | null;
+  consentVersion: string | null;
+  legalDisclaimerAt: Date | null;
+  legalDisclaimerVersion: string | null;
+};
+
+export function captureTechnicianCompliance(tech: {
+  consentAt: Date | null;
+  consentVersion: string | null;
+  legalDisclaimerAt: Date | null;
+  legalDisclaimerVersion: string | null;
+}): TechnicianComplianceSnapshot {
+  return {
+    consentAt: tech.consentAt,
+    consentVersion: tech.consentVersion,
+    legalDisclaimerAt: tech.legalDisclaimerAt,
+    legalDisclaimerVersion: tech.legalDisclaimerVersion,
+  };
+}
+
+/** Reset onboarding gates so journey tests can exercise consent → disclaimer in order. */
+export async function clearTechnicianCompliance(
+  prisma: PrismaClient,
+  technicianId: string
+): Promise<void> {
+  await prisma.technician.update({
+    where: { id: technicianId },
+    data: {
+      consentAt: null,
+      consentVersion: null,
+      legalDisclaimerAt: null,
+      legalDisclaimerVersion: null,
+    },
+  });
+}
+
+export async function restoreTechnicianCompliance(
+  prisma: PrismaClient,
+  technicianId: string,
+  snapshot: TechnicianComplianceSnapshot
+): Promise<void> {
+  await prisma.technician.update({
+    where: { id: technicianId },
+    data: snapshot,
+  });
+}
+
 export async function ensureTechnicianCompliance(
   prisma: PrismaClient,
   technicianId: string

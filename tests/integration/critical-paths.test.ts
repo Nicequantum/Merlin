@@ -15,7 +15,12 @@ import { POST as postGenerateStory } from '../../src/app/api/repair-orders/[id]/
 import { SESSION_COOKIE } from '../../src/lib/auth';
 import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
-import { createCompliantSessionToken } from '../helpers/integrationCompliance';
+import {
+  captureTechnicianCompliance,
+  createCompliantSessionToken,
+  restoreTechnicianCompliance,
+  type TechnicianComplianceSnapshot,
+} from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
 
@@ -41,6 +46,7 @@ describe('critical path HTTP routes', () => {
   let techToken = '';
   let testRoId = '';
   let testLineId = '';
+  let originalCompliance: TechnicianComplianceSnapshot | null = null;
   const extractPathname = `benz-tech/critical-path-${Date.now()}.png`;
   const originalFetch = globalThis.fetch;
 
@@ -71,6 +77,7 @@ describe('critical path HTTP routes', () => {
     assert.ok(technician, 'Seed technician required — run npm run db:seed first');
     technicianId = technician.id;
     dealershipId = technician.dealershipId;
+    originalCompliance = captureTechnicianCompliance(technician);
 
     techToken = await createCompliantSessionToken(prisma, technician, 'Integration Dealership');
 
@@ -134,6 +141,9 @@ describe('critical path HTTP routes', () => {
     clearCriticalPathMocks();
     if (testRoId) {
       await prisma.repairOrder.delete({ where: { id: testRoId } }).catch(() => undefined);
+    }
+    if (originalCompliance) {
+      await restoreTechnicianCompliance(prisma, technicianId, originalCompliance);
     }
     await prisma.$disconnect();
   });

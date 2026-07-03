@@ -307,8 +307,20 @@ export function useROXentryScan({
     abortControllerRef.current = null;
     xentryInFlightRef.current = false;
     xentryPipeline.finish();
+    // L5: match RO scan cancel — abort in-flight work and clear all queued diagnostic photos.
+    setPendingByKey((prev) => {
+      Object.values(prev).forEach((images) => {
+        images.forEach((img) => {
+          if (img.uploadStatus === 'uploading') {
+            discardedPendingIdsRef.current.add(img.id);
+          }
+        });
+        clearPendingPreviews(images);
+      });
+      return {};
+    });
     toast.message('Diagnostic processing cancelled');
-  }, [xentryInFlightRef, xentryPipeline]);
+  }, [clearPendingPreviews, xentryInFlightRef, xentryPipeline]);
 
   const toastProcessResult = useCallback((fileCount: number, ocrTexts: string[]) => {
     const failedTexts = ocrTexts.filter(isXentryAnalysisFailure);

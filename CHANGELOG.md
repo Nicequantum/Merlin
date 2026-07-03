@@ -2,6 +2,19 @@
 
 All notable changes to Merlinus are documented here.
 
+## [3.0.0] — 2026-07-02
+
+### Shop-floor release
+
+- **Prompt v3.0.0** — veteran master-technician personas, anti-robotic tone, full 10-step warranty workflow (`THREE_C_GENERATION_RULES` + `SYSTEM_PROMPT`).
+- **Diagnostic photos** — auto-save, preview, and delete for RO scan and Xentry diagnostic evidence.
+- **Audit Story** — extended Grok scoring timeout (90s), route `maxDuration` 100s, stale-story toast on workflow errors.
+- **Xentry cancel UX (L5)** — `cancelProcessing` clears pending diagnostic photo queue again.
+- **Rebrand** — repository canonical URL `Nicequantum/Merlinus`; seed password no longer documented in README.
+- **ESLint** — zero warnings: Next.js `Image` for photo grids; intentional hook-deps documented.
+
+---
+
 ## [2.1.0] — 2026-07-02
 
 ### Pre-validation polish

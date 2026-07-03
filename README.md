@@ -5,11 +5,11 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
-[![Security](https://img.shields.io/badge/Security-Enterprise_Grade-22c55e?style=for-the-badge)](https://github.com/Nicequantum/viti-ai-clone)
+[![Security](https://img.shields.io/badge/Security-Enterprise_Grade-22c55e?style=for-the-badge)](https://github.com/Nicequantum/Merlinus)
 
 Merlinus is a secure, dealership-specific platform that allows Mercedes-Benz technicians to create accurate, professional warranty narratives using Grok AI. It combines voice input, enterprise-grade security, and a complete audit trail to meet the standards of both individual dealerships and multi-location groups.
 
-**Version:** 2.1.0 · **Prompt version:** 2.1.0 · **Status:** **Ready for Validation** — pre-rollout polish complete ([CHANGELOG](./CHANGELOG.md))
+**Version:** 3.0.0 · **Prompt version:** 3.0.0 · **Status:** **Ready for Validation** — shop-floor release complete ([CHANGELOG](./CHANGELOG.md))
 
 ---
 
@@ -19,7 +19,7 @@ Merlinus is a secure, dealership-specific platform that allows Mercedes-Benz tec
 |------|--------|-------|
 | **Audit trail** | ✅ Ready | SHA-256 hash chain + `promptVersion` on every AI entry |
 | **Voice input** | ✅ Ready | Noise monitoring, push-to-talk, auto-restart, adaptive confidence |
-| **AI story generation** | ✅ Ready | Centralized prompts v2.1.0, rate limits, daily caps |
+| **AI story generation** | ✅ Ready | Centralized prompts v3.0.0, rate limits, daily caps |
 | **PDF export** | ✅ Ready | Branded headers, structured content, audit hash in footer |
 | **Security** | ✅ Ready | AES-256-GCM PII, CSP headers, route auth, input sanitization |
 | **Operations** | ✅ Ready | Maintenance mode, offline banner, health/status endpoints, error boundaries |
@@ -243,8 +243,8 @@ StableTextarea / StableInput
 ### Local development
 
 ```bash
-git clone https://github.com/Nicequantum/viti-ai-clone.git
-cd viti-ai-clone
+git clone https://github.com/Nicequantum/Merlinus.git
+cd Merlinus
 npm install
 cp .env.example .env.local
 npm run db:migrate:deploy
@@ -254,7 +254,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) after configuring environment variables.
 
-**Default seed login (service manager):** D7 `D7HARRIH` / password from `.env.example` (`Oceanic1735!`). Rotate via Settings before production go-live.
+**Default seed login (service manager):** D7 `D7HARRIH` — password from `ADMIN_SEED_PASSWORD` in `.env.local`. **First-login password rotation enforced** via Settings before production go-live.
 
 ### Environment variables
 
@@ -362,7 +362,7 @@ curl -s https://your-dealership-url/api/status | jq '.version, .buildCommit, .ma
 
 ---
 
-**Repository:** [github.com/Nicequantum/viti-ai-clone](https://github.com/Nicequantum/viti-ai-clone)
+**Repository:** [github.com/Nicequantum/Merlinus](https://github.com/Nicequantum/Merlinus)
 
 Built for Mercedes-Benz dealerships that demand both speed and full accountability.
 

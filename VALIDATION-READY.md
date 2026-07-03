@@ -1,14 +1,14 @@
-# Merlinus v2.1.0 — Validation Ready
+# Merlinus v3.0.0 — Validation Ready
 
 **Date:** 2026-07-02  
 **Status:** FINAL READY FOR VALIDATION  
-**Prompt version:** 2.1.0
+**Prompt version:** 3.0.0
 
 ---
 
 ## Summary
 
-Merlinus v2.1.0 completes the pre-validation polish pass. The codebase is clean; staging configuration and shop-floor smoke tests are the remaining gate before go-live.
+Merlinus v3.0.0 completes the shop-floor release and pre-validation polish pass. The codebase is clean; staging configuration and shop-floor smoke tests are the remaining gate before go-live.
 
 ---
 
@@ -32,7 +32,7 @@ All six config failures resolve once Vercel/staging environment variables are se
 
 ---
 
-## What shipped in v2.1.0
+## What shipped in v3.0.0
 
 - Technician docs updated for current UI: **Generate MI 4.3**, **Diagnostic Evidence**, **Audit Story**, certification flow
 - 7 SVG wireframe screenshots in `docs/images/` (replace with dealership captures before print)
@@ -103,7 +103,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for full release notes.
 ```
 ╔══════════════════════════════════════════════════════╗
 ║     FINAL READY FOR VALIDATION                       ║
-║     Merlinus v2.1.0 · Prompt v2.1.0                  ║
+║     Merlinus v3.0.0 · Prompt v3.0.0                  ║
 ║     Code: clean · Tests: 401/401 · Docs: current     ║
 ╚══════════════════════════════════════════════════════╝
 ```

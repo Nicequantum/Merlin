@@ -127,6 +127,7 @@ export function useROStoryWorkflow(
         toast.error(getStoryWorkflowErrorMessage(error, 'Failed to apply Customer Pay template'));
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters object is stable for hook lifetime
     [deps, refs.roRef]
   );
 

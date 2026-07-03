@@ -107,7 +107,7 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.equal(seedDb.includes('password123'), false);
     assert.equal(seedSec.includes('password123'), false);
     assert.equal(seedSec.includes('DEFAULT_TECH_SEED_PASSWORD'), false);
-    assert.ok(seedDb.includes('CANONICAL_SEED_PASSWORD'));
+    assert.ok(seedDb.includes('getCanonicalSeedPassword'));
     assert.ok(seedDb.includes('ensureCanonicalSeedAccount'));
     assert.ok(seedDb.includes('PRIMARY_MANAGER_D7'));
   });

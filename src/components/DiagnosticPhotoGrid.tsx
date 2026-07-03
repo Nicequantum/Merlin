@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useState } from 'react';
 import { AlertCircle, Check, Loader2, Trash2 } from 'lucide-react';
 import { ImageLightbox } from '@/components/ImageLightbox';
@@ -46,10 +47,17 @@ export function DiagnosticPhotoGrid({
               <button
                 type="button"
                 onClick={() => setActiveId(img.id)}
-                className="block w-full focus:outline-none focus:ring-2 focus:ring-benz-accent/50"
+                className="relative block h-20 w-full focus:outline-none focus:ring-2 focus:ring-benz-accent/50"
                 aria-label={`Preview ${img.name}`}
               >
-                <img src={displayUrl} className="w-full h-20 object-cover" alt={img.name} />
+                <Image
+                  src={displayUrl}
+                  alt={img.name}
+                  fill
+                  unoptimized
+                  className="object-cover"
+                  sizes="120px"
+                />
               </button>
 
               {img.uploadStatus === 'uploading' && (

@@ -17,7 +17,7 @@ import {
   SESSION_COOKIE,
   verifySessionToken,
 } from '../../src/lib/auth';
-import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
+import { getCanonicalSeedPassword } from '../../src/lib/seedDatabase';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import {
   captureTechnicianCompliance,
@@ -112,7 +112,7 @@ describe('JWT session refresh (H4)', () => {
 
     const loginSession = await loginTechnician(
       process.env.TECH_SEED_D7?.trim() || 'D7TECH001',
-      process.env.TECH_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD
+      process.env.TECH_SEED_PASSWORD?.trim() || getCanonicalSeedPassword()
     );
     assert.ok(loginSession);
 

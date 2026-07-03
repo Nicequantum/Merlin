@@ -5,6 +5,7 @@
 
 import { getExposedPublicGrokEnvKeys } from '@/lib/grokApiKey.shared';
 import { logger } from '@/lib/logger';
+import { APP_VERSION } from '@/lib/version';
 
 const REQUIRED_ENV_VARS = [
   'DATABASE_URL',
@@ -64,7 +65,7 @@ export function getBuildDate(): string {
 }
 
 export function getAppVersion(): string {
-  return process.env.npm_package_version || '2.1.0';
+  return process.env.npm_package_version?.trim() || APP_VERSION;
 }
 
 export function validateEnvironment(options: { throwOnError?: boolean; production?: boolean } = {}): EnvironmentValidationResult {

@@ -2,7 +2,7 @@
 
 **Audience:** Mercedes-Benz service technicians  
 **Time to read:** 5 minutes  
-**Version:** 2.1.0
+**Version:** 3.0.0
 
 > **Shop-floor cheat sheet:** Print and laminate the [Bay Reference Card](./Bay-Reference-Card.md) — keep it next to your tablet for voice modes and quick fixes.
 
@@ -176,4 +176,4 @@ Voice is optional. **Every field can be typed.** Manual input always works, even
 
 ---
 
-*Merlin v2.1.0 — Mercedes-Benz Warranty Story Generator · Authorized dealership use only*
+*Merlin v3.0.0 — Mercedes-Benz Warranty Story Generator · Authorized dealership use only*

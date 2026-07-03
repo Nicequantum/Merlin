@@ -69,7 +69,7 @@
 ║  Red audit warning?  STOP · tell Service Manager immediately     ║
 ║                                                                  ║
 ║  ─────────────────────────────────────────────────────────────   ║
-║  [DEALERSHIP NAME]  ·  Merlin v2.1.0  ·  [MERLIN URL]           ║
+║  [DEALERSHIP NAME]  ·  Merlin v3.0.0  ·  [MERLIN URL]           ║
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
@@ -139,7 +139,7 @@ Link: `[MERLIN URL or hosted PDF]`
 
 ---
 
-*[DEALERSHIP NAME] · Merlin v2.1.0 · [MERLIN URL]*
+*[DEALERSHIP NAME] · Merlin v3.0.0 · [MERLIN URL]*
 
 ---
 

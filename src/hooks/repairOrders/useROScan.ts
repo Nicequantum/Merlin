@@ -451,6 +451,7 @@ export function useROScan({
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scanInFlightRef is a stable ref
     [
       clearPendingPreviews,
       createROFromExtracted,
@@ -558,6 +559,7 @@ export function useROScan({
     }
     const snapshot = [...pendingROImages];
     await processScanImages(snapshot);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scanInFlightRef is a stable ref
   }, [pendingROImages, processScanImages]);
 
   const clearPendingScan = useCallback(() => {
@@ -586,6 +588,7 @@ export function useROScan({
     clearRoScanDraft();
     roScanPipeline.finish();
     toast.message('Scan cancelled');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scanInFlightRef is a stable ref
   }, [clearPendingPreviews, pendingROImages, roScanPipeline]);
 
   return {

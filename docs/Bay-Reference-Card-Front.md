@@ -131,4 +131,4 @@ Every field accepts keyboard input. Voice is a shortcut — never block the repa
 
 ---
 
-*Merlin v2.1.0 · [DEALERSHIP NAME]*
+*Merlin v3.0.0 · [DEALERSHIP NAME]*

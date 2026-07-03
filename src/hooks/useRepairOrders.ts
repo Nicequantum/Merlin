@@ -263,6 +263,7 @@ export function useRepairOrders({
         toast.error(e instanceof Error ? e.message : 'Delete failed');
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
     [currentRO]
   );
 
@@ -332,6 +333,7 @@ export function useRepairOrders({
         setOpeningROId((current) => (current === id ? null : current));
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
     [flushPendingSave, navigateView]
   );
 
@@ -360,6 +362,7 @@ export function useRepairOrders({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to create repair order');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
   }, [navigateView]);
 
   const isStoryCertificationPending = useCallback(
@@ -458,6 +461,7 @@ export function useRepairOrders({
     );
     setCurrentLineId(saved.repairLines[saved.repairLines.length - 1].id);
     navigateView('line');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
   }, [flushPendingSave, navigateView, persistRO]);
 
   const deleteLineXentryImage = useCallback(
@@ -701,7 +705,7 @@ export function useRepairOrders({
         setIsCertifyingStory(false);
       }
     },
-    [applyROUpdate, flushPendingSave, roRef]
+    [applyROUpdate, flushPendingSave, roRef, session?.technicianId]
   );
 
   const acknowledgeStoryBaseline = useCallback((lineId: string, text: string) => {

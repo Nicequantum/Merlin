@@ -18,7 +18,7 @@ import { POST as postGenerateStory } from '../../src/app/api/repair-orders/[id]/
 import { POST as postScoreStory } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route';
 import { POST as postCertifyStory } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route';
 import { SESSION_COOKIE } from '../../src/lib/auth';
-import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
+import { getCanonicalSeedPassword } from '../../src/lib/seedDatabase';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import {
   JOURNEY_INTEGRATION_D7,
@@ -141,7 +141,7 @@ describe('technician journey (E2E integration)', () => {
 
   test('full journey from login through story certification', async () => {
     const journeyStartedAt = new Date();
-    const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD;
+    const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || getCanonicalSeedPassword();
 
     const loginResponse = await runWithNextRouteContext(
       new Request('http://localhost/api/auth/login', {

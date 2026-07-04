@@ -79,6 +79,10 @@ const REVIEW_JSON_SCHEMA = `{
   "priorityActions": ["<top actionable fix>", ...]
 }`;
 
+/** Minimal retry prompt when the full scorer returns unreadable JSON. */
+export const STORY_SCORE_RETRY_SYSTEM_PROMPT = `Return ONLY one JSON object with integer score 0-100, grade (excellent|strong|needs-work|at-risk), and one-sentence summary. No markdown, no prose outside JSON.
+Example: {"score":82,"grade":"strong","summary":"Solid workflow with minor gaps."}`;
+
 export const STORY_SCORE_SYSTEM_PROMPT = `Mercedes-Benz MI 2.0 warranty story scorer. Prompt version: ${PROMPT_VERSION}
 
 ${MI_SCORE_CRITERIA_BRIEF}
@@ -189,19 +193,41 @@ function clampScore(score: unknown): number | null {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function extractScore(parsed: Record<string, unknown>): number | null {
-  const nestedQuality =
-    parsed.quality && typeof parsed.quality === 'object'
-      ? (parsed.quality as Record<string, unknown>).score
-      : undefined;
+function nestedRecordScore(container: unknown): unknown {
+  if (!container || typeof container !== 'object' || Array.isArray(container)) return undefined;
+  const row = container as Record<string, unknown>;
+  return row.score ?? row.qualityScore ?? row.miScore;
+}
 
+function extractScoreFromRawText(raw: string): number | null {
+  const patterns = [
+    /"score"\s*:\s*(\d{1,3})/i,
+    /"miScore"\s*:\s*(\d{1,3})/i,
+    /"qualityScore"\s*:\s*(\d{1,3})/i,
+    /\bscores?\b[^0-9]{0,24}(\d{1,3})\s*(?:\/\s*100)?/i,
+    /\b(\d{1,3})\s*\/\s*100\b/,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match?.[1]) continue;
+    const score = clampScore(match[1]);
+    if (score !== null) return score;
+  }
+  return null;
+}
+
+function extractScore(parsed: Record<string, unknown>): number | null {
   const candidates = [
     parsed.score,
     parsed.qualityScore,
+    parsed.quality_score,
     parsed.miScore,
+    parsed.mi_score,
     parsed.overall_score,
     parsed.overallScore,
-    nestedQuality,
+    nestedRecordScore(parsed.quality),
+    nestedRecordScore(parsed.assessment),
+    nestedRecordScore(parsed.result),
   ];
 
   for (const candidate of candidates) {
@@ -350,12 +376,32 @@ export function parseStoryQualityResponse(raw: string): StoryQualityResult {
   }
 
   const payload = extractJsonPayload(raw);
-  const parsed = tryParseJsonRecord(payload);
+  let parsed = tryParseJsonRecord(payload);
   if (!parsed) {
-    return buildParseFailureResult('AI quality scorer returned unreadable JSON.');
+    const recoveredScore = extractScoreFromRawText(raw);
+    if (recoveredScore === null) {
+      return buildParseFailureResult('AI quality scorer returned unreadable JSON.');
+    }
+    return {
+      score: recoveredScore,
+      grade: gradeFromScore(recoveredScore),
+      strengths: [],
+      improvements: [],
+      auditRisks: [],
+      technicianDetails: [],
+      summary: 'Quality assessment complete.',
+      parseFailed: false,
+    };
   }
 
-  const score = extractScore(parsed);
+  if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === 'object') {
+    parsed = parsed[0] as Record<string, unknown>;
+  }
+
+  let score = extractScore(parsed);
+  if (score === null) {
+    score = extractScoreFromRawText(raw);
+  }
   if (score === null) {
     return buildParseFailureResult('AI quality scorer response did not include a valid score.');
   }

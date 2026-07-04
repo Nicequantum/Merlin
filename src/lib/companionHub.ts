@@ -98,7 +98,7 @@ export async function drainKvCompanionEvents(
     for (const item of raw) {
       try {
         const event = (typeof item === 'string' ? JSON.parse(item) : item) as CompanionEvent;
-        if (Date.parse(event.timestamp) > sinceMs) parsed.push(event);
+        if (Date.parse(event.timestamp) >= sinceMs) parsed.push(event);
       } catch {
         // skip malformed
       }

@@ -144,6 +144,32 @@ Let me know if you need more detail.`;
     assert.equal(result.score, 0);
   });
 
+  it('recovers score from prose when JSON parsing fails', () => {
+    const result = parseStoryQualityResponse(
+      'Assessment complete. The story scores 84/100 with strong workflow coverage.'
+    );
+    assert.equal(result.score, 84);
+    assert.equal(result.parseFailed, false);
+  });
+
+  it('parses score from array-wrapped JSON responses', () => {
+    const result = parseStoryQualityResponse(
+      JSON.stringify([
+        {
+          score: 79,
+          grade: 'strong',
+          summary: 'Good detail.',
+          strengths: [],
+          improvements: [],
+          auditRisks: [],
+          technicianDetails: [],
+        },
+      ])
+    );
+    assert.equal(result.score, 79);
+    assert.equal(result.parseFailed, false);
+  });
+
   it('parses JSON with trailing commas', () => {
     const result = parseStoryQualityResponse(`{
       "score": 74,

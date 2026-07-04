@@ -62,20 +62,22 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
     },
   });
 
+  const { publishNavigation, publishStatus } = companion;
+
   useEffect(() => {
     if (!enabled) return;
-    companion.publishNavigation({
+    publishNavigation({
       view: ro.view,
       repairOrderId: ro.currentRO?.id ?? null,
       lineId: ro.currentLineId,
     });
-  }, [companion, enabled, ro.view, ro.currentRO?.id, ro.currentLineId]);
+  }, [enabled, publishNavigation, ro.view, ro.currentRO?.id, ro.currentLineId]);
 
   useEffect(() => {
     if (!enabled) return;
     return subscribeCompanionVoice((listening) => {
       if (listening) {
-        companion.publishStatus('listening', {
+        publishStatus('listening', {
           message: 'Listening to voice…',
           repairOrderId: roRef.current.currentRO?.id ?? null,
           lineId: roRef.current.currentLineId,
@@ -83,17 +85,17 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
       } else if (roRef.current.isGeneratingForLine || roRef.current.isScoringForLine) {
         return;
       } else {
-        companion.publishStatus('idle');
+        publishStatus('idle');
       }
     });
-  }, [companion, enabled]);
+  }, [enabled, publishStatus]);
 
   useEffect(() => {
     if (!enabled) return;
     const onLine = ro.view === 'line';
     const activePipeline = onLine ? ocr.xentry : ocr.roScan;
     if (activePipeline.isProcessing) {
-      companion.publishStatus(onLine ? 'processing_xentry' : 'scanning', {
+      publishStatus(onLine ? 'processing_xentry' : 'scanning', {
         message: onLine
           ? 'Processing Xentry photos…'
           : activePipeline.statusMessage || 'Scanning repair order…',
@@ -104,7 +106,7 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
       return;
     }
     if (ro.isGeneratingForLine) {
-      companion.publishStatus('generating', {
+      publishStatus('generating', {
         message: 'Generating warranty story…',
         repairOrderId: ro.currentRO?.id ?? null,
         lineId: ro.currentLineId,
@@ -112,7 +114,7 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
       return;
     }
     if (ro.isScoringForLine) {
-      companion.publishStatus('scoring', {
+      publishStatus('scoring', {
         message: 'Running MI quality audit…',
         repairOrderId: ro.currentRO?.id ?? null,
         lineId: ro.currentLineId,
@@ -120,7 +122,7 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
       return;
     }
     if (ro.isReviewingForLine) {
-      companion.publishStatus('reviewing', {
+      publishStatus('reviewing', {
         message: 'AI review in progress…',
         repairOrderId: ro.currentRO?.id ?? null,
         lineId: ro.currentLineId,
@@ -128,17 +130,17 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
       return;
     }
     if (ro.isCertifyingStory) {
-      companion.publishStatus('certifying', {
+      publishStatus('certifying', {
         message: 'Certifying story…',
         repairOrderId: ro.currentRO?.id ?? null,
         lineId: ro.currentLineId,
       });
       return;
     }
-    companion.publishStatus('idle');
+    publishStatus('idle');
   }, [
-    companion,
     enabled,
+    publishStatus,
     ocr.roScan.isProcessing,
     ocr.roScan.progress,
     ocr.roScan.statusMessage,

@@ -4,6 +4,8 @@ import type { CompanionEvent } from '@/lib/companionSyncTypes';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+/** Keep SSE alive on Vercel — requires Pro for >60s; reconnect handles shorter limits. */
+export const maxDuration = 300;
 
 const HEARTBEAT_MS = 20_000;
 const KV_POLL_MS = 1_000;
@@ -50,7 +52,8 @@ export async function GET(request: Request) {
           const kvPoll = setInterval(() => {
             void drainKvCompanionEvents(technicianId, lastKvPollAt).then((events) => {
               if (closed || events.length === 0) return;
-              lastKvPollAt = events[events.length - 1]!.timestamp;
+              const lastTs = Date.parse(events[events.length - 1]!.timestamp);
+              lastKvPollAt = new Date(lastTs + 1).toISOString();
               for (const event of events) push(event);
             });
           }, KV_POLL_MS);
@@ -77,6 +80,7 @@ export async function GET(request: Request) {
           'Content-Type': 'text/event-stream; charset=utf-8',
           'Cache-Control': 'no-cache, no-transform',
           Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
         },
       });
     },

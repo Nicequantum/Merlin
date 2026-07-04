@@ -69,8 +69,25 @@ export function useCompanionSync({
   const seenIdsRef = useRef(new Set<string>());
   const applyingRemoteRef = useRef(false);
   const lastPublishedNavRef = useRef('');
+  const lastPublishedStatusRef = useRef('');
   const sourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectionGenerationRef = useRef(0);
+
+  const handlersRef = useRef({
+    onNavigation,
+    onRORefresh,
+    onROPatch,
+    onStoryQuality,
+    onStoryCertification,
+  });
+  handlersRef.current = {
+    onNavigation,
+    onRORefresh,
+    onROPatch,
+    onStoryQuality,
+    onStoryCertification,
+  };
 
   const pushActivity = useCallback((entry: CompanionActivityEntry) => {
     setActivities((prev) => [entry, ...prev].slice(0, MAX_ACTIVITY));
@@ -81,12 +98,13 @@ export function useCompanionSync({
       if (event.sourceDeviceId === deviceId || seenIdsRef.current.has(event.id)) return;
       seenIdsRef.current.add(event.id);
 
+      const handlers = handlersRef.current;
       switch (event.type) {
         case 'navigation':
           applyingRemoteRef.current = true;
           try {
             lastPublishedNavRef.current = `${event.view}:${event.repairOrderId}:${event.lineId}`;
-            await onNavigation({
+            await handlers.onNavigation({
               view: event.view,
               repairOrderId: event.repairOrderId,
               lineId: event.lineId,
@@ -97,10 +115,10 @@ export function useCompanionSync({
           break;
         case 'ro.refresh':
           void mutate(companionRoKey(event.repairOrderId));
-          await onRORefresh(event.repairOrderId);
+          await handlers.onRORefresh(event.repairOrderId);
           break;
         case 'ro.patch':
-          onROPatch({
+          handlers.onROPatch({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
             linePatch: event.linePatch,
@@ -123,7 +141,7 @@ export function useCompanionSync({
           break;
         case 'story.quality':
           void mutate(companionRoKey(event.repairOrderId));
-          onStoryQuality({
+          handlers.onStoryQuality({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
             quality: event.quality,
@@ -131,7 +149,7 @@ export function useCompanionSync({
           break;
         case 'story.certification':
           void mutate(companionRoKey(event.repairOrderId));
-          onStoryCertification({
+          handlers.onStoryCertification({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
             certifiedByName: event.certifiedByName,
@@ -143,13 +161,16 @@ export function useCompanionSync({
           break;
       }
     },
-    [deviceId, onNavigation, onRORefresh, onROPatch, onStoryQuality, onStoryCertification, pushActivity]
+    [deviceId, pushActivity]
   );
+
+  const handleEventRef = useRef(handleEvent);
+  handleEventRef.current = handleEvent;
 
   const postEvent = useCallback(
     async (event: Record<string, unknown>) => {
       try {
-        await fetch(PUBLISH_URL, {
+        const response = await fetch(PUBLISH_URL, {
           method: 'POST',
           credentials: 'include',
           headers: {
@@ -158,8 +179,11 @@ export function useCompanionSync({
           },
           body: JSON.stringify({ event: { ...event, sourceDeviceId: deviceId } }),
         });
+        if (!response.ok) {
+          setConnectionState((state) => (state === 'connected' ? 'error' : state));
+        }
       } catch {
-        // companion is best-effort
+        setConnectionState((state) => (state === 'connected' ? 'error' : state));
       }
     },
     [deviceId]
@@ -192,9 +216,12 @@ export function useCompanionSync({
         lineId?: string | null;
       }
     ) => {
+      const publishKey = `${status}:${options?.message ?? ''}:${options?.progress ?? ''}:${options?.repairOrderId ?? ''}:${options?.lineId ?? ''}`;
       setWorkflowStatus(status);
       setStatusMessage(options?.message ?? null);
       setStatusProgress(typeof options?.progress === 'number' ? options.progress : null);
+      if (publishKey === lastPublishedStatusRef.current) return;
+      lastPublishedStatusRef.current = publishKey;
       void postEvent({
         id: crypto.randomUUID(),
         type: 'status',
@@ -251,33 +278,47 @@ export function useCompanionSync({
       return;
     }
 
+    let cancelled = false;
+
     const connect = () => {
+      if (cancelled) return;
+
+      const generation = connectionGenerationRef.current + 1;
+      connectionGenerationRef.current = generation;
+
       if (sourceRef.current) {
         sourceRef.current.close();
+        sourceRef.current = null;
       }
+
       setConnectionState((s) => (s === 'connected' ? 'reconnecting' : 'connecting'));
 
       const source = new EventSource(STREAM_URL, { withCredentials: true });
       sourceRef.current = source;
 
       source.onopen = () => {
+        if (cancelled || connectionGenerationRef.current !== generation) return;
         setConnectionState('connected');
       };
 
       source.onmessage = (message) => {
+        if (cancelled || connectionGenerationRef.current !== generation) return;
         try {
           const payload = JSON.parse(message.data) as CompanionEvent | { type: 'connected' };
           if (payload.type === 'connected') return;
-          void handleEvent(payload as CompanionEvent);
+          void handleEventRef.current(payload as CompanionEvent);
         } catch {
           // ignore malformed SSE payloads
         }
       };
 
       source.onerror = () => {
-        setConnectionState('reconnecting');
+        if (cancelled || connectionGenerationRef.current !== generation) return;
         source.close();
-        sourceRef.current = null;
+        if (sourceRef.current === source) {
+          sourceRef.current = null;
+        }
+        setConnectionState('reconnecting');
         if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = setTimeout(connect, RECONNECT_MS);
       };
@@ -286,12 +327,15 @@ export function useCompanionSync({
     connect();
 
     return () => {
+      cancelled = true;
+      connectionGenerationRef.current += 1;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
       sourceRef.current?.close();
       sourceRef.current = null;
       setConnectionState('disconnected');
     };
-  }, [enabled, handleEvent]);
+  }, [enabled]);
 
   return {
     deviceId,

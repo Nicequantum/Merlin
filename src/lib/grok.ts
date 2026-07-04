@@ -6,6 +6,7 @@ import { DIAGNOSTIC_EXTRACTION_PROMPT } from '@/prompts/diagnosticExtraction';
 import { RO_EXTRACTION_PROMPT } from '@/prompts/roExtraction';
 import {
   STORY_REVIEW_SYSTEM_PROMPT,
+  STORY_SCORE_RETRY_SYSTEM_PROMPT,
   STORY_SCORE_SYSTEM_PROMPT,
   buildStoryReviewUserMessage,
   buildStoryScoreUserMessage,
@@ -55,6 +56,29 @@ export function isGrokConfigured(): boolean {
 }
 
 export type GrokReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+
+function extractGrokMessageContent(apiResponse: unknown): string {
+  const choices = (apiResponse as { choices?: Array<{ message?: { content?: unknown }; text?: unknown }> })
+    ?.choices;
+  const choice = choices?.[0];
+  if (!choice) return '';
+
+  const messageContent = choice.message?.content;
+  if (typeof messageContent === 'string') return messageContent.trim();
+  if (Array.isArray(messageContent)) {
+    const textParts = messageContent
+      .map((part) => {
+        if (!part || typeof part !== 'object') return '';
+        const row = part as { type?: string; text?: string };
+        return row.type === 'text' && typeof row.text === 'string' ? row.text : '';
+      })
+      .filter(Boolean);
+    if (textParts.length) return textParts.join('\n').trim();
+  }
+
+  if (typeof choice.text === 'string') return choice.text.trim();
+  return '';
+}
 
 async function grokChat(
   messages: Array<{
@@ -120,7 +144,7 @@ async function grokChat(
     }
 
     const apiResponse = await response.json();
-    const content = apiResponse.choices?.[0]?.message?.content?.trim() || '';
+    const content = extractGrokMessageContent(apiResponse);
     logPerformance(options.perfLabel || 'grok.chat', Date.now() - startedAt, {
       model,
       maxTokens: options.max_tokens,
@@ -161,14 +185,16 @@ export async function generateWarrantyStory(ro: RepairOrder, line: RepairLine): 
   return story || 'No story generated.';
 }
 
-export async function scoreWarrantyStory(
+async function requestStoryQualityScore(
   ro: RepairOrder,
   line: RepairLine,
-  warrantyStory: string
+  warrantyStory: string,
+  systemPrompt: string,
+  perfLabel: string
 ): Promise<StoryQualityResult> {
   const raw = await grokChat(
     [
-      { role: 'system', content: STORY_SCORE_SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: buildStoryScoreUserMessage(ro, line, warrantyStory) },
     ],
     {
@@ -176,20 +202,45 @@ export async function scoreWarrantyStory(
       temperature: 0.1,
       max_tokens: WARRANTY_STORY_SCORE_MAX_TOKENS,
       timeoutMs: STORY_SCORE_GROK_MS,
-      perfLabel: 'grok.story.score',
+      perfLabel,
       responseFormat: 'json_object',
     }
   );
-  const parsed = parseStoryQualityResponse(raw);
-  if (isStoryQualityParseFailure(parsed)) {
-    logger.error('grok.story.score_parse_failed', {
-      rawLength: raw.length,
-      rawPreview: raw.slice(0, 500),
-      summary: parsed.summary,
-    });
-    throw new Error('AI quality score returned unreadable JSON.');
+  if (!raw.trim()) {
+    logger.warn('grok.story.score_empty_response', { perfLabel, model: GROK_STORY_MODEL });
   }
-  return parsed;
+  return parseStoryQualityResponse(raw);
+}
+
+export async function scoreWarrantyStory(
+  ro: RepairOrder,
+  line: RepairLine,
+  warrantyStory: string
+): Promise<StoryQualityResult> {
+  const first = await requestStoryQualityScore(
+    ro,
+    line,
+    warrantyStory,
+    STORY_SCORE_SYSTEM_PROMPT,
+    'grok.story.score'
+  );
+  if (!isStoryQualityParseFailure(first)) return first;
+
+  logger.warn('grok.story.score_retry', { summary: first.summary });
+  const retry = await requestStoryQualityScore(
+    ro,
+    line,
+    warrantyStory,
+    STORY_SCORE_RETRY_SYSTEM_PROMPT,
+    'grok.story.score_retry'
+  );
+  if (!isStoryQualityParseFailure(retry)) return retry;
+
+  logger.error('grok.story.score_parse_failed', {
+    summary: retry.summary,
+    firstSummary: first.summary,
+  });
+  return retry;
 }
 
 export async function reviewWarrantyStory(

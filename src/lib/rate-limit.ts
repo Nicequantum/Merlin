@@ -177,7 +177,6 @@ function rateLimitUnavailableResponse(): Response {
 function logKvRateLimitError(routeKey: string, request: Request, ip: string, error: unknown): void {
   const errorMessage = error instanceof Error ? error.message : 'unknown';
   const context = {
-    routeKey,
     ip: ip === 'unknown' ? undefined : ip,
     error: errorMessage,
     ...getRateLimitRuntimeSnapshot(request, routeKey),
@@ -228,7 +227,6 @@ export async function checkRateLimit(
   }
 
   logger.error('rate_limit.kv_required', {
-    routeKey,
     ip: ip === 'unknown' ? undefined : ip,
     detail: 'KV_REST_API_URL/TOKEN not configured in production — request blocked',
     ...getRateLimitRuntimeSnapshot(request, routeKey),

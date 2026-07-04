@@ -279,7 +279,7 @@ describe('Third-party audit hardening', () => {
     const certifyRoute = readSrc(
       'src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts'
     );
-    assert.ok(scoreRoute.includes('parseFailed'));
+    assert.ok(scoreRoute.includes('isStoryQualityParseFailure'));
     assert.ok(scoreRoute.includes("action: 'story.score'"));
     assert.equal(scoreRoute.includes('scoreOnly'), false);
     assert.ok(certifyRoute.includes('validateStoryCertificationPrerequisites'));

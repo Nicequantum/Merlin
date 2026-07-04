@@ -296,12 +296,10 @@ export async function checkKvStore(): Promise<DependencyCheck> {
     return { status: 'ok', latencyMs };
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'KV store unreachable';
-    return isProductionEnv()
-      ? {
-          status: 'error',
-          detail: `KV store unreachable — expensive routes fail closed (HTTP 503); other routes use in-memory fallback: ${detail}`,
-        }
-      : { status: 'warn', detail: `KV store unreachable — ${detail}` };
+    return {
+      status: 'warn',
+      detail: `KV store unreachable — using in-memory rate limit fallback: ${detail}`,
+    };
   }
 }
 

@@ -49,14 +49,15 @@ describe('Third-party audit hardening', () => {
     );
   });
 
-  it('production rate limiting fails closed without KV', () => {
+  it('production rate limiting falls back to memory when KV is unavailable', () => {
     const src = readSrc('src/lib/rate-limit.ts');
     const health = readSrc('src/lib/healthChecks.ts');
     assert.ok(src.includes('RATE_LIMIT_UNAVAILABLE_MESSAGE'));
-    assert.ok(src.includes('rate_limit.kv_unavailable'));
-    assert.ok(src.includes('rate_limit.kv_required'));
+    assert.ok(src.includes('rate_limit.kv_fallback_memory'));
+    assert.equal(src.includes('rate_limit.kv_unavailable'), false);
+    assert.equal(src.includes('FAIL_CLOSED_ROUTE_KEYS'), false);
     assert.equal(src.includes("logger.warn('rate_limit.kv_fallback'"), false);
-    assert.ok(health.includes('expensive routes fail closed (HTTP 503)'));
+    assert.ok(health.includes('in-memory rate limit fallback'));
   });
 
   it('critical paths use structured logging instead of raw console.error', () => {

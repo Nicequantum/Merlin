@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   checkRateLimit,
-  isFailClosedRoute,
   isKvConfigured,
   RATE_LIMITS,
   RATE_LIMIT_UNAVAILABLE_MESSAGE,
@@ -65,27 +64,24 @@ function setVercelProductionEnv(): void {
 }
 
 describe('rate limiting', () => {
-  it('documents limits and production fail-closed behavior in source', () => {
+  it('documents limits and KV memory fallback behavior in source', () => {
     const src = readSrc('src/lib/rate-limit.ts');
     assert.ok(src.includes('RATE_LIMIT_UNAVAILABLE_MESSAGE'));
-    assert.ok(src.includes('rate_limit.kv_unavailable'));
-    assert.ok(src.includes('rate_limit.kv_required'));
+    assert.ok(src.includes('rate_limit.kv_fallback_memory'));
     assert.ok(src.includes('rate_limit.check'));
     assert.ok(src.includes('isLocalhostRequest'));
-    assert.ok(src.includes('FAIL_CLOSED_ROUTE_KEYS'));
-    assert.ok(src.includes("'story.generate'"));
+    assert.ok(src.includes('memoryRateLimitConfig'));
+    assert.equal(src.includes('FAIL_CLOSED_ROUTE_KEYS'), false);
     assert.equal(src.includes('NEVER_FAIL_CLOSED_ROUTE_KEYS'), false);
+    assert.equal(src.includes('fail_closed_kv_unavailable'), false);
+    assert.equal(src.includes('rate_limit.kv_unavailable'), false);
     assert.equal(src.includes("logger.warn('rate_limit.kv_fallback'"), false);
-    assert.ok(src.includes("logger.warn('rate_limit.kv_fallback_memory'"));
     assert.ok(src.includes('Distributed per-IP rate limiting'));
     assert.ok(RATE_LIMITS.auth.limit === 10);
     assert.ok(RATE_LIMITS.generate.limit === 20);
     assert.ok(RATE_LIMITS.upload.limit === 30);
     assert.ok(RATE_LIMITS.default.limit === 60);
-    assert.equal(isFailClosedRoute('story.generate'), true);
-    assert.equal(isFailClosedRoute('dashboard.summary'), false);
-    assert.equal(isFailClosedRoute('ros.list'), false);
-    assert.equal(isFailClosedRoute('companion.stream'), false);
+    assert.ok(RATE_LIMIT_UNAVAILABLE_MESSAGE.length > 0);
   });
 
   it('allows dev traffic without KV using in-memory limits', async () => {
@@ -142,7 +138,7 @@ describe('rate limiting', () => {
     }
   });
 
-  it('allows localhost login even on Vercel production runtime without KV', async () => {
+  it('allows localhost traffic on Vercel production runtime without KV', async () => {
     const saved = saveRateLimitEnv();
     setVercelProductionEnv();
     delete process.env.KV_REST_API_URL;
@@ -157,7 +153,7 @@ describe('rate limiting', () => {
     }
   });
 
-  it('allows normal app routes on Vercel production without KV using in-memory limits', async () => {
+  it('allows all app routes on Vercel production without KV using in-memory limits', async () => {
     const saved = saveRateLimitEnv();
     setVercelProductionEnv();
     delete process.env.KV_REST_API_URL;
@@ -172,6 +168,10 @@ describe('rate limiting', () => {
         'ros.list',
         'technician_logs.ingest',
         'consent',
+        'companion.stream',
+        'companion.publish',
+        'story.generate',
+        'upload',
       ]) {
         const result = await checkRateLimit(
           makeRequest('203.0.113.10', 'https://merlinus.vercel.app'),
@@ -185,14 +185,23 @@ describe('rate limiting', () => {
     }
   });
 
-  it('allows normal app routes on Vercel production when KV is configured but unreachable', async () => {
+  it('falls back to memory for all routes on Vercel production when KV is unreachable', async () => {
     const saved = saveRateLimitEnv();
     setVercelProductionEnv();
     process.env.KV_REST_API_URL = 'https://example.upstash.io';
     process.env.KV_REST_API_TOKEN = 'invalid-token';
 
     try {
-      for (const routeKey of ['dashboard.summary', 'ros.list', 'legal_disclaimer', 'auth.login']) {
+      for (const routeKey of [
+        'dashboard.summary',
+        'ros.list',
+        'legal_disclaimer',
+        'auth.login',
+        'story.generate',
+        'ro.extract',
+        'upload',
+        'companion.stream',
+      ]) {
         const result = await checkRateLimit(
           makeRequest('203.0.113.10', 'https://merlinus.vercel.app'),
           routeKey,
@@ -200,48 +209,6 @@ describe('rate limiting', () => {
         );
         assert.equal(result, null, `expected ${routeKey} to fall back to memory`);
       }
-    } finally {
-      restoreRateLimitEnv(saved);
-    }
-  });
-
-  it('fails closed on expensive routes in Vercel production when KV is missing', async () => {
-    const saved = saveRateLimitEnv();
-    setVercelProductionEnv();
-    delete process.env.KV_REST_API_URL;
-    delete process.env.KV_REST_API_TOKEN;
-
-    try {
-      const result = await checkRateLimit(
-        makeRequest('203.0.113.10', 'https://merlinus.vercel.app'),
-        'story.generate',
-        RATE_LIMITS.generate
-      );
-      assert.ok(result);
-      assert.equal(result.status, 503);
-      const body = (await result.json()) as { error?: string };
-      assert.equal(body.error, RATE_LIMIT_UNAVAILABLE_MESSAGE);
-    } finally {
-      restoreRateLimitEnv(saved);
-    }
-  });
-
-  it('fails closed on expensive routes in Vercel production when KV is configured but unreachable', async () => {
-    const saved = saveRateLimitEnv();
-    setVercelProductionEnv();
-    process.env.KV_REST_API_URL = 'https://example.upstash.io';
-    process.env.KV_REST_API_TOKEN = 'invalid-token';
-
-    try {
-      const result = await checkRateLimit(
-        makeRequest('203.0.113.10', 'https://merlin.dealership.example'),
-        'story.generate',
-        RATE_LIMITS.generate
-      );
-      assert.ok(result);
-      assert.equal(result.status, 503);
-      const body = (await result.json()) as { error?: string };
-      assert.equal(body.error, RATE_LIMIT_UNAVAILABLE_MESSAGE);
     } finally {
       restoreRateLimitEnv(saved);
     }

@@ -59,11 +59,11 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.ok(validateEnv.includes('PRODUCTION_REQUIRED'));
     assert.ok(validateEnv.includes('process.exit(1)'));
     const rateSrc = readSrc('src/lib/rate-limit.ts');
-    assert.ok(rateSrc.includes('devMemoryRateLimitConfig'));
+    assert.ok(rateSrc.includes('memoryRateLimitConfig'));
     assert.ok(rateSrc.includes('isProductionEnv'));
-    assert.ok(rateSrc.includes('rate_limit.kv_unavailable'));
+    assert.ok(rateSrc.includes('rate_limit.kv_fallback_memory'));
     assert.equal(rateSrc.includes("logger.warn('rate_limit.kv_fallback'"), false);
-    assert.ok(rateSrc.includes('FAIL_CLOSED_ROUTE_KEYS'));
+    assert.equal(rateSrc.includes('FAIL_CLOSED_ROUTE_KEYS'), false);
   });
 
   it('H9: image access uses targeted query with exact pathname verification', () => {

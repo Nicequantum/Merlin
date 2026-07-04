@@ -38,8 +38,10 @@ describe('enterprise health checks', () => {
   it('authenticated health returns 503 only for critical failures', () => {
     const originalNodeEnv = process.env.NODE_ENV;
     const originalVercelEnv = process.env.VERCEL_ENV;
+    const originalVercel = process.env.VERCEL;
     process.env.NODE_ENV = 'test';
     delete process.env.VERCEL_ENV;
+    delete process.env.VERCEL;
 
     const ciLikeChecks = {
       database: { status: 'ok' as const },
@@ -130,6 +132,7 @@ describe('enterprise health checks', () => {
       200
     );
 
+    process.env.VERCEL = '1';
     process.env.VERCEL_ENV = 'production';
     assert.equal(isProductionEnv(), true);
     assert.equal(
@@ -154,6 +157,11 @@ describe('enterprise health checks', () => {
       delete process.env.VERCEL_ENV;
     } else {
       process.env.VERCEL_ENV = originalVercelEnv;
+    }
+    if (originalVercel === undefined) {
+      delete process.env.VERCEL;
+    } else {
+      process.env.VERCEL = originalVercel;
     }
   });
 

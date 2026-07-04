@@ -99,16 +99,63 @@ describe('rate limiting', () => {
     }
   });
 
-  it('fails closed on Vercel production when KV is not configured', async () => {
+  it('allows local env with VERCEL_ENV=production when KV is unreachable', async () => {
     const saved = {
       nodeEnv: process.env.NODE_ENV,
       vercelEnv: process.env.VERCEL_ENV,
+      vercel: process.env.VERCEL,
       ci: process.env.CI,
       githubActions: process.env.GITHUB_ACTIONS,
       kvUrl: process.env.KV_REST_API_URL,
       kvToken: process.env.KV_REST_API_TOKEN,
     };
     process.env.NODE_ENV = 'production';
+    process.env.VERCEL_ENV = 'production';
+    delete process.env.VERCEL;
+    delete process.env.CI;
+    delete process.env.GITHUB_ACTIONS;
+    process.env.KV_REST_API_URL = 'https://example.upstash.io';
+    process.env.KV_REST_API_TOKEN = 'invalid-token';
+
+    try {
+      const routeKey = `test.pulled.env.${Date.now()}`;
+      const result = await checkRateLimit(makeRequest(), routeKey, RATE_LIMITS.auth);
+      assert.equal(result, null);
+    } finally {
+      process.env.NODE_ENV = saved.nodeEnv;
+      process.env.VERCEL_ENV = saved.vercelEnv;
+      if (saved.vercel === undefined) {
+        delete process.env.VERCEL;
+      } else {
+        process.env.VERCEL = saved.vercel;
+      }
+      if (saved.ci === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = saved.ci;
+      }
+      if (saved.githubActions === undefined) {
+        delete process.env.GITHUB_ACTIONS;
+      } else {
+        process.env.GITHUB_ACTIONS = saved.githubActions;
+      }
+      process.env.KV_REST_API_URL = saved.kvUrl;
+      process.env.KV_REST_API_TOKEN = saved.kvToken;
+    }
+  });
+
+  it('fails closed on Vercel production when KV is not configured', async () => {
+    const saved = {
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV,
+      vercel: process.env.VERCEL,
+      ci: process.env.CI,
+      githubActions: process.env.GITHUB_ACTIONS,
+      kvUrl: process.env.KV_REST_API_URL,
+      kvToken: process.env.KV_REST_API_TOKEN,
+    };
+    process.env.NODE_ENV = 'production';
+    process.env.VERCEL = '1';
     process.env.VERCEL_ENV = 'production';
     delete process.env.CI;
     delete process.env.GITHUB_ACTIONS;
@@ -125,6 +172,11 @@ describe('rate limiting', () => {
     } finally {
       process.env.NODE_ENV = saved.nodeEnv;
       process.env.VERCEL_ENV = saved.vercelEnv;
+      if (saved.vercel === undefined) {
+        delete process.env.VERCEL;
+      } else {
+        process.env.VERCEL = saved.vercel;
+      }
       if (saved.ci === undefined) {
         delete process.env.CI;
       } else {

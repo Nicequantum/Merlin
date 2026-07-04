@@ -10,8 +10,10 @@ import {
   STORY_SCORE_SYSTEM_PROMPT,
   buildStoryReviewUserMessage,
   buildStoryScoreUserMessage,
+  isStoryQualityDetailMissing,
   isStoryQualityParseFailure,
   parseStoryQualityResponse,
+  pickRicherStoryQuality,
   parseStoryReviewResponse,
   type StoryQualityResult,
   type StoryReviewResult,
@@ -43,8 +45,8 @@ const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
 export { GROK_CHAT_MODEL, GROK_STORY_MODEL };
 
-/** JSON quality score responses rarely exceed ~500 tokens. */
-export const WARRANTY_STORY_SCORE_MAX_TOKENS = 650;
+/** Full MI audit JSON (score + strengths + improvements + risks + technicianDetails). */
+export const WARRANTY_STORY_SCORE_MAX_TOKENS = 1_400;
 
 export function isGrokConfigured(): boolean {
   try {
@@ -224,9 +226,15 @@ export async function scoreWarrantyStory(
     STORY_SCORE_SYSTEM_PROMPT,
     'grok.story.score'
   );
-  if (!isStoryQualityParseFailure(first)) return first;
+  const firstOk =
+    !isStoryQualityParseFailure(first) && !isStoryQualityDetailMissing(first);
+  if (firstOk) return first;
 
-  logger.warn('grok.story.score_retry', { summary: first.summary });
+  logger.warn('grok.story.score_retry', {
+    summary: first.summary,
+    reason: isStoryQualityParseFailure(first) ? 'parse_failed' : 'missing_detail',
+    detailCount: first.strengths.length + first.improvements.length + first.auditRisks.length,
+  });
   const retry = await requestStoryQualityScore(
     ro,
     line,
@@ -234,13 +242,22 @@ export async function scoreWarrantyStory(
     STORY_SCORE_RETRY_SYSTEM_PROMPT,
     'grok.story.score_retry'
   );
-  if (!isStoryQualityParseFailure(retry)) return retry;
+  const best = pickRicherStoryQuality(first, retry);
+  const bestOk =
+    !isStoryQualityParseFailure(best) && !isStoryQualityDetailMissing(best);
+  if (bestOk) return best;
 
   logger.error('grok.story.score_parse_failed', {
-    summary: retry.summary,
+    summary: best.summary,
     firstSummary: first.summary,
+    retrySummary: retry.summary,
+    detailCount:
+      best.strengths.length +
+      best.improvements.length +
+      best.auditRisks.length +
+      best.technicianDetails.length,
   });
-  return retry;
+  return best;
 }
 
 export async function reviewWarrantyStory(

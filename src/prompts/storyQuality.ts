@@ -79,16 +79,36 @@ const REVIEW_JSON_SCHEMA = `{
   "priorityActions": ["<top actionable fix>", ...]
 }`;
 
-/** Minimal retry prompt when the full scorer returns unreadable JSON. */
-export const STORY_SCORE_RETRY_SYSTEM_PROMPT = `Return ONLY one JSON object with integer score 0-100, grade (excellent|strong|needs-work|at-risk), and one-sentence summary. No markdown, no prose outside JSON.
-Example: {"score":82,"grade":"strong","summary":"Solid workflow with minor gaps."}`;
+/** Retry prompt — same full schema; emphasizes required coaching arrays. */
+export const STORY_SCORE_RETRY_SYSTEM_PROMPT = `Mercedes-Benz MI 2.0 warranty story scorer (retry). Prompt version: ${PROMPT_VERSION}
+
+${MI_SCORE_CRITERIA_BRIEF}
+
+REQUIRED JSON fields — do NOT return score-only output:
+- strengths: 2-4 specific things the story does well (green / audit strengths)
+- improvements: 2-5 specific edits to raise the score (yellow / polish items)
+- auditRisks: 1-4 MI 2.0 rejection risks still present (red / critical issues)
+- technicianDetails: 2-5 objects with missing, prompt, and field (actionable technician coaching)
+
+Score ONLY against the repair line context provided — do not assume undocumented data exists.
+Grades: excellent 90-100, strong 75-89, needs-work 60-74, at-risk below 60.
+
+Respond with ONLY valid JSON (no markdown):
+${SCORE_JSON_SCHEMA}`;
 
 export const STORY_SCORE_SYSTEM_PROMPT = `Mercedes-Benz MI 2.0 warranty story scorer. Prompt version: ${PROMPT_VERSION}
 
 ${MI_SCORE_CRITERIA_BRIEF}
 
 Score ONLY against the repair line context provided — do not assume undocumented data exists.
-technicianDetails: 2-5 missing technical details with exact add instructions and field (technicianNotes|customerConcern|diagnostic|workflow).
+
+You MUST return a complete structured audit:
+- strengths: 2-4 specific strengths (what is already strong)
+- improvements: 2-5 specific improvements (what to polish to reach 85-95)
+- auditRisks: 1-4 critical MI 2.0 rejection risks (what could fail audit)
+- technicianDetails: 2-5 missing technical details with exact add instructions and field (technicianNotes|customerConcern|diagnostic|workflow)
+
+Empty arrays are invalid. Be specific — cite workflow steps, codes, measurements, or missing evidence from the story.
 Grades: excellent 90-100, strong 75-89, needs-work 60-74, at-risk below 60.
 
 Respond with ONLY valid JSON (no markdown):
@@ -253,7 +273,64 @@ function buildParseFailureResult(reason: string): StoryQualityResult {
 
 function asStringArray(value: unknown, max = 6): string[] {
   if (!Array.isArray(value)) return [];
-  return value.map(String).filter((s) => s.trim().length > 0).slice(0, max);
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        const row = item as Record<string, unknown>;
+        return String(row.text ?? row.detail ?? row.message ?? row.description ?? row.item ?? '').trim();
+      }
+      return String(item).trim();
+    })
+    .filter((s) => s.length > 0)
+    .slice(0, max);
+}
+
+function asStringArrayFromFields(parsed: Record<string, unknown>, keys: string[], max = 6): string[] {
+  for (const key of keys) {
+    const values = asStringArray(parsed[key], max);
+    if (values.length > 0) return values;
+  }
+  return [];
+}
+
+function extractTechnicianDetails(parsed: Record<string, unknown>): TechnicianDetailPrompt[] {
+  const candidates = [
+    parsed.technicianDetails,
+    parsed.technician_details,
+    parsed.details,
+    parsed.actionableFeedback,
+    parsed.coaching,
+  ];
+  for (const candidate of candidates) {
+    const details = parseTechnicianDetails(candidate);
+    if (details.length > 0) return details;
+  }
+  return [];
+}
+
+export function storyQualityDetailCount(result: StoryQualityResult): number {
+  return (
+    result.strengths.length +
+    result.improvements.length +
+    result.auditRisks.length +
+    result.technicianDetails.length
+  );
+}
+
+/** True when score parsed but green/yellow/red coaching sections are all missing. */
+export function isStoryQualityDetailMissing(result: StoryQualityResult): boolean {
+  if (isStoryQualityParseFailure(result)) return false;
+  return storyQualityDetailCount(result) === 0;
+}
+
+export function pickRicherStoryQuality(
+  primary: StoryQualityResult,
+  secondary: StoryQualityResult
+): StoryQualityResult {
+  if (isStoryQualityParseFailure(primary) && !isStoryQualityParseFailure(secondary)) return secondary;
+  if (!isStoryQualityParseFailure(primary) && isStoryQualityParseFailure(secondary)) return primary;
+  return storyQualityDetailCount(secondary) > storyQualityDetailCount(primary) ? secondary : primary;
 }
 
 function asGrade(value: unknown, score: number): StoryQualityGrade {
@@ -382,16 +459,9 @@ export function parseStoryQualityResponse(raw: string): StoryQualityResult {
     if (recoveredScore === null) {
       return buildParseFailureResult('AI quality scorer returned unreadable JSON.');
     }
-    return {
-      score: recoveredScore,
-      grade: gradeFromScore(recoveredScore),
-      strengths: [],
-      improvements: [],
-      auditRisks: [],
-      technicianDetails: [],
-      summary: 'Quality assessment complete.',
-      parseFailed: false,
-    };
+  return buildParseFailureResult(
+      'AI quality scorer returned unreadable JSON — score could not be fully structured.'
+    );
   }
 
   if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === 'object') {
@@ -406,13 +476,60 @@ export function parseStoryQualityResponse(raw: string): StoryQualityResult {
     return buildParseFailureResult('AI quality scorer response did not include a valid score.');
   }
 
+  const feedback =
+    parsed.feedback && typeof parsed.feedback === 'object' && !Array.isArray(parsed.feedback)
+      ? (parsed.feedback as Record<string, unknown>)
+      : null;
+
+  const strengths = asStringArrayFromFields(parsed, [
+    'strengths',
+    'strength',
+    'positives',
+    'whatWasStrong',
+    'green',
+    'strongPoints',
+  ]);
+  const improvements = asStringArrayFromFields(parsed, [
+    'improvements',
+    'improvement',
+    'suggestions',
+    'areasForImprovement',
+    'yellow',
+    'polish',
+    'improve',
+  ]);
+  const auditRisks = asStringArrayFromFields(parsed, [
+    'auditRisks',
+    'audit_risks',
+    'risks',
+    'criticalIssues',
+    'rejectionRisks',
+    'red',
+    'critical',
+  ]);
+
   return {
     score,
     grade: asGrade(parsed.grade, score),
-    strengths: asStringArray(parsed.strengths),
-    improvements: asStringArray(parsed.improvements),
-    auditRisks: asStringArray(parsed.auditRisks),
-    technicianDetails: parseTechnicianDetails(parsed.technicianDetails),
+    strengths:
+      strengths.length > 0
+        ? strengths
+        : feedback
+          ? asStringArrayFromFields(feedback, ['strengths', 'structure', 'clarity'])
+          : [],
+    improvements:
+      improvements.length > 0
+        ? improvements
+        : feedback
+          ? asStringArrayFromFields(feedback, ['improvements', 'workflow', 'technicalDetail'])
+          : [],
+    auditRisks:
+      auditRisks.length > 0
+        ? auditRisks
+        : feedback
+          ? asStringArrayFromFields(feedback, ['auditRisks', 'fabricationRisk', 'risks'])
+          : [],
+    technicianDetails: extractTechnicianDetails(parsed),
     summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : 'Quality assessment complete.',
     parseFailed: false,
   };

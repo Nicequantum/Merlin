@@ -38,10 +38,14 @@ describe('desktop companion sync', () => {
     assert.equal(bridge.includes('[companion, enabled'), false);
   });
 
-  it('scores warranty stories with retry instead of throwing on parse failure', () => {
+  it('scores warranty stories with full-structure retry instead of throwing on parse failure', () => {
     const grok = readSrc('src/lib/grok.ts');
+    const prompts = readSrc('src/prompts/storyQuality.ts');
     assert.ok(grok.includes('STORY_SCORE_RETRY_SYSTEM_PROMPT'));
+    assert.ok(grok.includes('isStoryQualityDetailMissing'));
     assert.ok(grok.includes('grok.story.score_retry'));
+    assert.ok(prompts.includes('strengths: 2-4 specific strengths'));
+    assert.ok(prompts.includes('auditRisks: 1-4 critical MI 2.0 rejection risks'));
     assert.equal(grok.includes("throw new Error('AI quality score returned unreadable JSON.')"), false);
   });
 });

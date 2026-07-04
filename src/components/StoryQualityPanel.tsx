@@ -148,6 +148,16 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
 
       {expanded && (
         <div className="mt-4 space-y-4 benz-divider pt-4">
+          {quality.strengths.length === 0 &&
+            quality.improvements.length === 0 &&
+            quality.auditRisks.length === 0 &&
+            quality.technicianDetails.length === 0 && (
+              <p className="text-sm text-benz-secondary leading-snug">
+                Detailed MI feedback did not load. Tap Audit Story again to refresh the green, yellow, and red
+                coaching sections.
+              </p>
+            )}
+
           {quality.technicianDetails.length > 0 && (
             <div className="benz-alert-info rounded-xl p-3.5 border">
               <div className="text-xs uppercase tracking-wider font-semibold text-benz-blue mb-2 flex items-center gap-1.5">

@@ -6,8 +6,10 @@ import {
   STORY_SCORE_SYSTEM_PROMPT,
   extractJsonPayload,
   gradeFromScore,
+  isStoryQualityDetailMissing,
   isStoryQualityParseFailure,
   parseStoryQualityResponse,
+  pickRicherStoryQuality,
   parseStoryReviewResponse,
 } from '@/prompts/storyQuality';
 
@@ -144,12 +146,58 @@ Let me know if you need more detail.`;
     assert.equal(result.score, 0);
   });
 
-  it('recovers score from prose when JSON parsing fails', () => {
+  it('flags prose-only score responses as parse failures to trigger structured retry', () => {
     const result = parseStoryQualityResponse(
       'Assessment complete. The story scores 84/100 with strong workflow coverage.'
     );
-    assert.equal(result.score, 84);
-    assert.equal(result.parseFailed, false);
+    assert.equal(isStoryQualityParseFailure(result), true);
+    assert.equal(result.parseFailed, true);
+  });
+
+  it('parses alternate field names for strengths, improvements, and audit risks', () => {
+    const result = parseStoryQualityResponse(
+      JSON.stringify({
+        score: 68,
+        grade: 'needs-work',
+        summary: 'Workflow gaps weaken audit defense.',
+        positives: ['Natural paragraph flow', 'Technician voice is clear'],
+        suggestions: ['Add final Quick Test confirmation', 'Tighten cause paragraph'],
+        criticalIssues: ['Missing verification drive mileage'],
+        technician_details: [
+          {
+            missing: 'Source voltage reading',
+            prompt: 'Add the battery source voltage measured during diagnosis.',
+            field: 'technicianNotes',
+          },
+        ],
+      })
+    );
+    assert.equal(result.score, 68);
+    assert.equal(result.strengths.length, 2);
+    assert.equal(result.improvements.length, 2);
+    assert.equal(result.auditRisks.length, 1);
+    assert.equal(result.technicianDetails.length, 1);
+    assert.equal(isStoryQualityDetailMissing(result), false);
+  });
+
+  it('pickRicherStoryQuality prefers the result with coaching detail', () => {
+    const sparse = parseStoryQualityResponse(
+      JSON.stringify({ score: 72, grade: 'needs-work', summary: 'Sparse.' })
+    );
+    const rich = parseStoryQualityResponse(
+      JSON.stringify({
+        score: 70,
+        grade: 'needs-work',
+        summary: 'Detailed.',
+        strengths: ['Good flow'],
+        improvements: ['Add Quick Test'],
+        auditRisks: ['Missing mileage'],
+        technicianDetails: [],
+      })
+    );
+    const picked = pickRicherStoryQuality(sparse, rich);
+    assert.equal(picked.improvements.length, 1);
+    assert.equal(picked.auditRisks.length, 1);
   });
 
   it('parses score from array-wrapped JSON responses', () => {

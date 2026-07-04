@@ -2,10 +2,10 @@
  * Distributed per-IP rate limiting for API routes (KV INCR + EXPIRE sliding window).
  *
  * Vercel production (`VERCEL` = 1 and `VERCEL_ENV` = production):
- * - Requires `KV_REST_API_URL` + `KV_REST_API_TOKEN` (enforced at build via validate-env.mjs).
- * - Missing or unreachable KV fails closed with HTTP 503 — no in-memory fallback.
+ * - Missing KV: in-memory limits (per-instance) — app routes stay available until KV is wired up.
+ * - KV configured but unreachable: fail closed on non-auth routes (HTTP 503); auth bootstrap falls back.
  *
- * Local dev / CI / `next start` (no `VERCEL=1`, including pulled `VERCEL_ENV=production`):
+ * Local dev / CI / `next start`:
  * - Without KV: per-instance in-memory limits (halved vs production values).
  * - With KV configured but transient errors: memory fallback with warning log.
  *
@@ -162,7 +162,7 @@ export function getRateLimitRuntimeSnapshot(request: Request, routeKey: string) 
 function logRateLimitDecision(
   routeKey: string,
   request: Request,
-  decision: 'kv' | 'memory' | 'kv_fallback_memory' | 'fail_closed_kv_required' | 'fail_closed_kv_unavailable'
+  decision: 'kv' | 'memory' | 'kv_fallback_memory' | 'fail_closed_kv_unavailable'
 ): void {
   logger.info('rate_limit.check', {
     decision,
@@ -205,33 +205,30 @@ export async function checkRateLimit(
   const ip = getClientIp(request);
   const key = `ratelimit:${routeKey}:${ip === 'unknown' ? 'unknown' : ip}`;
 
-  if (isKvConfigured()) {
-    try {
-      const result = await checkKvRateLimit(key, config);
-      logRateLimitDecision(routeKey, request, 'kv');
-      return result;
-    } catch (error) {
-      logKvRateLimitError(routeKey, request, ip, error);
-      if (shouldFailClosedWithoutKv(request, routeKey)) {
-        logRateLimitDecision(routeKey, request, 'fail_closed_kv_unavailable');
-        return rateLimitUnavailableResponse();
-      }
-      logRateLimitDecision(routeKey, request, 'kv_fallback_memory');
-      return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
+  if (!isKvConfigured()) {
+    if (shouldFailClosedWithoutKv(request, routeKey)) {
+      logger.warn('rate_limit.kv_required', {
+        ip: ip === 'unknown' ? undefined : ip,
+        detail: 'KV_REST_API_URL/TOKEN not configured in production — using in-memory rate limits',
+        ...getRateLimitRuntimeSnapshot(request, routeKey),
+      });
     }
-  }
-
-  if (!shouldFailClosedWithoutKv(request, routeKey)) {
     logRateLimitDecision(routeKey, request, 'memory');
     return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
   }
 
-  logger.error('rate_limit.kv_required', {
-    ip: ip === 'unknown' ? undefined : ip,
-    detail: 'KV_REST_API_URL/TOKEN not configured in production — request blocked',
-    ...getRateLimitRuntimeSnapshot(request, routeKey),
-  });
-  logRateLimitDecision(routeKey, request, 'fail_closed_kv_required');
-  return rateLimitUnavailableResponse();
+  try {
+    const result = await checkKvRateLimit(key, config);
+    logRateLimitDecision(routeKey, request, 'kv');
+    return result;
+  } catch (error) {
+    logKvRateLimitError(routeKey, request, ip, error);
+    if (shouldFailClosedWithoutKv(request, routeKey)) {
+      logRateLimitDecision(routeKey, request, 'fail_closed_kv_unavailable');
+      return rateLimitUnavailableResponse();
+    }
+    logRateLimitDecision(routeKey, request, 'kv_fallback_memory');
+    return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
+  }
 }
 

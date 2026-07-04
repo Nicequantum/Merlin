@@ -272,9 +272,9 @@ export async function checkKvStore(): Promise<DependencyCheck> {
   if (!isKvConfigured()) {
     return isProductionEnv()
       ? {
-          status: 'error',
+          status: 'warn',
           detail:
-            'KV_REST_API_URL/TOKEN not configured — production rate limiting fails closed (HTTP 503)',
+            'KV_REST_API_URL/TOKEN not configured — production uses in-memory rate limit fallback',
         }
       : {
           status: 'warn',
@@ -297,7 +297,10 @@ export async function checkKvStore(): Promise<DependencyCheck> {
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'KV store unreachable';
     return isProductionEnv()
-      ? { status: 'error', detail }
+      ? {
+          status: 'error',
+          detail: `KV store unreachable — production rate limiting fails closed (HTTP 503): ${detail}`,
+        }
       : { status: 'warn', detail: `KV store unreachable — ${detail}` };
   }
 }

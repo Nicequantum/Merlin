@@ -3,7 +3,9 @@
   "private": true,
   "version": "2.0.0",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev-with-companion.mjs",
+    "dev:next": "next dev",
+    "companion:ws": "node server/companion-ws.mjs",
     "validate:env": "node scripts/validate-env.mjs",
     "validate:pre-deploy": "node scripts/validate-pre-deploy.mjs",
     "validate:pre-rollout": "tsx --import ./tests/setup/preload.mjs scripts/pre-rollout-validation.ts",
@@ -42,6 +44,7 @@
     "server-only": "^0.0.1",
     "sonner": "^2.0.5",
     "tesseract.js": "^5.1.1",
+    "ws": "^8.21.0",
     "zod": "^3.25.67"
   },
   "devDependencies": {

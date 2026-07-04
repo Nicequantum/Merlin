@@ -4,6 +4,7 @@ import { encryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { scoreWarrantyStory } from '@/lib/grok';
+import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { isStoryQualityParseFailure } from '@/prompts/storyQuality';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
@@ -114,6 +115,19 @@ export async function POST(
           scoreOnly: true,
           promptVersion: PROMPT_VERSION,
         },
+      });
+
+      void broadcastCompanionEvent(session.technicianId, {
+        type: 'story.quality',
+        repairOrderId: id,
+        lineId,
+        quality,
+      });
+      void broadcastCompanionEvent(session.technicianId, {
+        type: 'activity',
+        label: `MI audit score: ${quality.score}/100`,
+        repairOrderId: id,
+        lineId,
       });
 
       return { quality };

@@ -14,6 +14,8 @@ import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ROView } from '@/components/ROView';
 import { SettingsView } from '@/components/SettingsView';
 import { ViewErrorBoundary } from '@/components/ViewErrorBoundary';
+import { CompanionSyncBridge } from '@/components/CompanionSyncBridge';
+import { useDesktopCompanion } from '@/hooks/useDesktopCompanion';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { clientLog } from '@/lib/clientLog';
@@ -54,6 +56,11 @@ const AdvisorDashboard = dynamic(
   { loading: () => <LoadingScreen label="Loading advisor dashboard" /> }
 );
 
+const DesktopCompanionLayout = dynamic(
+  () => import('@/components/desktop/DesktopCompanionLayout').then((m) => m.DesktopCompanionLayout),
+  { loading: () => <LoadingScreen label="Loading desktop companion" /> }
+);
+
 function runAction(label: string, action: () => void | Promise<void>): void {
   void Promise.resolve(action()).catch((error: unknown) => {
     clientLog.error('ui.action_failed', { label, error });
@@ -78,6 +85,7 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
   });
 
   const isServiceAdvisor = session.role === 'service_advisor';
+  const isDesktop = useDesktopCompanion();
 
   useEffect(() => {
     if (isServiceAdvisor || ro.loading || ro.listError) return;
@@ -161,9 +169,16 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
     (ro.allROs.find((item) => item.id === ro.openingROId)?.roNumber || 'repair order');
 
   const wideLayout = ro.view === 'home' && isManager;
+  const showDesktopCompanion =
+    isDesktop && ro.currentRO && (ro.view === 'ro' || ro.view === 'line');
+  const companionMode = showDesktopCompanion;
 
   return (
-    <div className={`app-container${wideLayout ? ' benz-app-wide' : ''}`}>
+    <CompanionSyncBridge session={session} enabled ro={ro} ocr={ocr}>
+      {(companion) => (
+    <div
+      className={`app-container${wideLayout ? ' benz-app-wide' : ''}${companionMode ? ' benz-companion-mode' : ''}`}
+    >
       <MaintenanceBanner />
       <LoadingOverlay
         visible={!!ro.openingROId}
@@ -238,8 +253,31 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
         />
       )}
 
+      {showDesktopCompanion && ro.currentRO && (
+        <div className="benz-desktop-only">
+          <ViewErrorBoundary viewName="the desktop companion">
+            <DesktopCompanionLayout
+              view={ro.view}
+              ro={ro.currentRO}
+              line={ro.view === 'line' ? (ro.currentLine ?? null) : null}
+              technicianName={session.name}
+              storyQuality={ro.storyQualityForLine}
+              storyReview={ro.storyReviewForLine}
+              storyQualityStale={ro.storyQualityStaleForLine}
+              storyCertification={ro.storyCertificationForLine}
+              connectionState={companion.connectionState}
+              workflowStatus={companion.workflowStatus}
+              statusMessage={companion.statusMessage}
+              statusProgress={companion.statusProgress}
+              activities={companion.activities}
+            />
+          </ViewErrorBoundary>
+        </div>
+      )}
+
       {ro.view === 'ro' && ro.currentRO && (
         <ViewErrorBoundary viewName="the repair order">
+          <div className={showDesktopCompanion ? 'benz-tablet-only' : undefined}>
           <ROView
             ro={ro.currentRO}
             isProcessingOCR={ocr.isProcessingOCR}
@@ -262,11 +300,13 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
               runAction('Delete repair order', () => ro.deleteRO(ro.currentRO!.id))
             }
           />
+          </div>
         </ViewErrorBoundary>
       )}
 
       {ro.view === 'line' && ro.currentRO && ro.currentLine && (
         <ViewErrorBoundary viewName="the repair line">
+          <div className={showDesktopCompanion ? 'benz-tablet-only' : undefined}>
           <LineView
             ro={ro.currentRO}
             line={ro.currentLine}
@@ -285,7 +325,22 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
             cdkSanitizedNotice={ro.cdkSanitizedForLine}
             onClearCdkSanitizedNotice={() => ro.clearCdkSanitizedNotice(ro.currentLine!.id)}
             onBack={() => ro.setView('ro')}
-            onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
+            onUpdateLine={(updates) => {
+              const lineId = ro.currentLine!.id;
+              const roId = ro.currentRO!.id;
+              ro.updateLine(lineId, updates);
+              if (updates.warrantyStory !== undefined || updates.technicianNotes !== undefined || updates.customerConcern !== undefined) {
+                companion.publishROPatch({
+                  repairOrderId: roId,
+                  lineId,
+                  linePatch: updates,
+                });
+                companion.publishActivity('Updated line fields', {
+                  repairOrderId: roId,
+                  lineId,
+                });
+              }
+            }}
             onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
             onDeleteXentryImage={(imageId) =>
               runAction('Delete diagnostic photo', () =>
@@ -302,29 +357,50 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
                 toast.error('Story generation is unavailable — refresh and try again');
                 return;
               }
+              companion.publishActivity('Generating warranty story', {
+                repairOrderId: ro.currentRO!.id,
+                lineId,
+              });
               runAction('Generate warranty story', () => ro.generateStory(lineId));
             }}
-            onScoreStory={(storyText) =>
-              runAction('Audit warranty story', () => ro.scoreStory(ro.currentLine!.id, storyText))
-            }
-            onReviewStory={(storyText) =>
-              runAction('Review warranty story', () => ro.reviewStory(ro.currentLine!.id, storyText))
-            }
-            onApplyCustomerPayTemplate={(templateId) =>
+            onScoreStory={(storyText) => {
+              companion.publishActivity('Running MI audit', {
+                repairOrderId: ro.currentRO!.id,
+                lineId: ro.currentLine!.id,
+              });
+              runAction('Audit warranty story', () => ro.scoreStory(ro.currentLine!.id, storyText));
+            }}
+            onReviewStory={(storyText) => {
+              companion.publishActivity('Running AI review', {
+                repairOrderId: ro.currentRO!.id,
+                lineId: ro.currentLine!.id,
+              });
+              runAction('Review warranty story', () => ro.reviewStory(ro.currentLine!.id, storyText));
+            }}
+            onApplyCustomerPayTemplate={(templateId) => {
+              companion.publishActivity('Applied Customer Pay template', {
+                repairOrderId: ro.currentRO!.id,
+                lineId: ro.currentLine!.id,
+              });
               runAction('Apply Customer Pay template', () =>
                 ro.applyCustomerPayTemplate(ro.currentLine!.id, templateId)
-              )
-            }
+              );
+            }}
             onClearCustomerPayMode={() =>
               runAction('Clear Customer Pay mode', () => ro.clearCustomerPayMode(ro.currentLine!.id))
             }
             onAcknowledgeStoryBaseline={(text) => ro.acknowledgeStoryBaseline(ro.currentLine!.id, text)}
-            onCertifyAndSaveStory={(storyText, certifiedByName) =>
+            onCertifyAndSaveStory={(storyText, certifiedByName) => {
+              companion.publishActivity('Certifying story', {
+                repairOrderId: ro.currentRO!.id,
+                lineId: ro.currentLine!.id,
+              });
               runAction('Certify and save story', () =>
                 ro.certifyAndSaveStory(ro.currentLine!.id, storyText, certifiedByName)
-              )
-            }
+              );
+            }}
           />
+          </div>
         </ViewErrorBoundary>
       )}
 
@@ -359,5 +435,7 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
 
       <AppFooter />
     </div>
+      )}
+    </CompanionSyncBridge>
   );
 }

@@ -45,6 +45,7 @@ import { removeImageAtIndex } from '@/hooks/repairOrders/roImageUtils';
 import { analyzeXentryImage } from '@/hooks/repairOrders/roXentryAnalysis';
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
 import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
+import { applyCompanionROPatch } from '@/lib/companionMerge';
 import { uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
@@ -935,6 +936,76 @@ export function useRepairOrders({
     [flushPendingSave, navigateView]
   );
 
+  const mergeCompanionPatch = useCallback(
+    (payload: Parameters<typeof applyCompanionROPatch>[1]) => {
+      const latest = roRef.current;
+      if (!latest) return;
+      const merged = applyCompanionROPatch(latest, payload);
+      if (!merged) return;
+      roRef.current = merged;
+      setCurrentRO(merged);
+      setAllROs((prev) => prev.map((r) => (r.id === merged.id ? merged : r)));
+    },
+    [setAllROs]
+  );
+
+  const applyCompanionStoryQuality = useCallback(
+    (lineId: string, quality: StoryQualityResult) => {
+      setStoryQualityByLine((prev) => ({ ...prev, [lineId]: quality }));
+      const latest = roRef.current;
+      if (!latest) return;
+      const merged = {
+        ...latest,
+        repairLines: latest.repairLines.map((line) =>
+          line.id === lineId ? { ...line, storyQualityAudit: quality } : line
+        ),
+      };
+      roRef.current = merged;
+      setCurrentRO(merged);
+      setAllROs((prev) => prev.map((r) => (r.id === merged.id ? merged : r)));
+    },
+    [setAllROs]
+  );
+
+  const applyCompanionCertification = useCallback(
+    (
+      lineId: string,
+      payload: { certifiedByName: string; certifiedAt: string; warrantyStory: string; storyHash?: string }
+    ) => {
+      setStoryCertificationByLine((prev) => ({
+        ...prev,
+        [lineId]: {
+          certifiedByName: payload.certifiedByName,
+          certifiedAt: payload.certifiedAt,
+          storyText: payload.warrantyStory.trim(),
+        },
+      }));
+      const latest = roRef.current;
+      if (!latest) return;
+      const merged = {
+        ...latest,
+        repairLines: latest.repairLines.map((line) =>
+          line.id === lineId
+            ? {
+                ...line,
+                warrantyStory: payload.warrantyStory,
+                storyCertification: {
+                  certifiedByName: payload.certifiedByName,
+                  certifiedAt: payload.certifiedAt,
+                  storyHash: payload.storyHash ?? '',
+                  certifiedByTechnicianId: session?.technicianId ?? '',
+                },
+              }
+            : line
+        ),
+      };
+      roRef.current = merged;
+      setCurrentRO(merged);
+      setAllROs((prev) => prev.map((r) => (r.id === merged.id ? merged : r)));
+    },
+    [session?.technicianId, setAllROs]
+  );
+
   return {
     view,
     setView: navigateView,
@@ -1008,5 +1079,8 @@ export function useRepairOrders({
     reviewStory,
     certifyAndSaveStory,
     acknowledgeStoryBaseline,
+    mergeCompanionPatch,
+    applyCompanionStoryQuality,
+    applyCompanionCertification,
   };
 }

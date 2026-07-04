@@ -12,6 +12,7 @@ import { buildStoryCertificationDbFields } from '@/lib/storyCertification';
 import { hashWarrantyStory } from '@/lib/storyHash';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
+import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { recordTechnicianCertifiedStory } from '@/lib/technicianCertifiedStory';
 import { certifyStorySchema, parseRequestBody, parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 
@@ -154,6 +155,22 @@ export async function POST(
         certifiedByName,
         promptVersion: PROMPT_VERSION,
         auditLogId: typeof auditLogId === 'string' ? auditLogId : undefined,
+      });
+
+      void broadcastCompanionEvent(session.technicianId, {
+        type: 'story.certification',
+        repairOrderId: id,
+        lineId,
+        certifiedByName,
+        certifiedAt: certifiedAt.toISOString(),
+        warrantyStory,
+      });
+      void broadcastCompanionEvent(session.technicianId, {
+        type: 'activity',
+        label: 'Story certified and saved',
+        detail: certifiedByName,
+        repairOrderId: id,
+        lineId,
       });
 
       return { warrantyStory, certifiedAt: certifiedAt.toISOString(), certifiedByName, storyHash };

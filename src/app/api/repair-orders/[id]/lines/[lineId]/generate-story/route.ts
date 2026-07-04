@@ -13,6 +13,7 @@ import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { logPerformance } from '@/lib/perf';
 import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
+import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 import { parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
@@ -117,6 +118,18 @@ export async function POST(
           model: pipelineAudit.model,
           promptChars: pipelineAudit.totalPromptChars,
         },
+      });
+
+      void broadcastCompanionEvent(session.technicianId, {
+        type: 'ro.refresh',
+        repairOrderId: id,
+        reason: 'story.generate',
+      });
+      void broadcastCompanionEvent(session.technicianId, {
+        type: 'activity',
+        label: 'Generated warranty story',
+        repairOrderId: id,
+        lineId,
       });
 
       return { warrantyStory, quality: null, cdkSanitized };

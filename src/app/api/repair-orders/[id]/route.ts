@@ -22,6 +22,7 @@ import {
 } from '@/lib/repairOrderAccess';
 import { enrichRepairOrderCertification } from '@/lib/repairOrderCertificationEnrichment';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
+import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -309,6 +310,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           });
         }
       }
+
+      void broadcastCompanionEvent(session.technicianId, {
+        type: 'ro.refresh',
+        repairOrderId: id,
+        reason: 'ro.update',
+      });
 
       return { repairOrder: dbToRepairOrder(updated) };
     },

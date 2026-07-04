@@ -97,6 +97,7 @@ All rollout and go-live materials live in [`docs/`](./docs/). See the [**Documen
 - Client-side image compression with private blob storage
 - Role-based access control with instant session revocation
 - Stable UI built for tablet and desktop use in dealerships
+- **Real-time Desktop Companion** — Technicians can use tablet for input while viewing and copying on desktop in real time
 
 ---
 

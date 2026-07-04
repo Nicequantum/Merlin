@@ -5,6 +5,7 @@ import { Mic, MicOff } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
+import { setCompanionVoiceListening } from '@/lib/companionVoiceBridge';
 import type { TranscriptMeta } from '@/lib/voice';
 
 interface VoiceInputButtonProps {
@@ -39,7 +40,9 @@ export function VoiceInputButton({
   }, [refreshPermission, stopListening]);
 
   useEffect(() => {
-    onListeningChange?.(isListening || listeningState === 'restarting');
+    const active = isListening || listeningState === 'restarting';
+    onListeningChange?.(active);
+    setCompanionVoiceListening(active);
   }, [isListening, listeningState, onListeningChange]);
 
   useEffect(() => {

@@ -26,12 +26,13 @@ export interface RateLimitConfig {
   windowMs: number;
 }
 
-/** Auth bootstrap routes must never fail closed — login/logout cannot be blocked when KV is absent. */
+/** Auth and compliance bootstrap routes must never fail closed when KV is absent or unreachable. */
 const NEVER_FAIL_CLOSED_ROUTE_KEYS = new Set([
   'auth.login',
   'auth.logout',
   'auth.me',
   'setup.seed',
+  'legal_disclaimer',
 ]);
 
 /** Per-IP request ceilings (requests per `windowMs`). Override per route via `checkRateLimit` options. */

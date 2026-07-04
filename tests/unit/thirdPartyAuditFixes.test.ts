@@ -56,7 +56,7 @@ describe('Third-party audit hardening', () => {
     assert.ok(src.includes('rate_limit.kv_unavailable'));
     assert.ok(src.includes('rate_limit.kv_required'));
     assert.equal(src.includes("logger.warn('rate_limit.kv_fallback'"), false);
-    assert.ok(health.includes('fails closed (HTTP 503)'));
+    assert.ok(health.includes('expensive routes fail closed (HTTP 503)'));
   });
 
   it('critical paths use structured logging instead of raw console.error', () => {

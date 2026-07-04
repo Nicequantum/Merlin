@@ -63,6 +63,7 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.ok(rateSrc.includes('isProductionEnv'));
     assert.ok(rateSrc.includes('rate_limit.kv_unavailable'));
     assert.equal(rateSrc.includes("logger.warn('rate_limit.kv_fallback'"), false);
+    assert.ok(rateSrc.includes('FAIL_CLOSED_ROUTE_KEYS'));
   });
 
   it('H9: image access uses targeted query with exact pathname verification', () => {

@@ -299,7 +299,7 @@ export async function checkKvStore(): Promise<DependencyCheck> {
     return isProductionEnv()
       ? {
           status: 'error',
-          detail: `KV store unreachable — production rate limiting fails closed (HTTP 503): ${detail}`,
+          detail: `KV store unreachable — expensive routes fail closed (HTTP 503); other routes use in-memory fallback: ${detail}`,
         }
       : { status: 'warn', detail: `KV store unreachable — ${detail}` };
   }

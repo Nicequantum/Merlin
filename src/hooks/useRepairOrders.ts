@@ -776,11 +776,13 @@ export function useRepairOrders({
       if (!latest) return;
       const merged = applyCompanionROPatch(latest, payload);
       if (!merged) return;
-      roRef.current = merged;
-      setCurrentRO(merged);
-      setAllROs((prev) =>
-        prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
-      );
+      flushSync(() => {
+        roRef.current = merged;
+        setCurrentRO(merged);
+        setAllROs((prev) =>
+          prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
+        );
+      });
     },
     [setAllROs]
   );
@@ -788,9 +790,9 @@ export function useRepairOrders({
   const applyCompanionStoryQuality = useCallback(
     (lineId: string, quality: StoryQualityResult) => {
       const scoredStory = quality.scoredAgainstStory?.trim() ?? '';
-      setStoryQualityByLine((prev) => ({ ...prev, [lineId]: quality }));
       const latest = roRef.current;
       if (!latest) return;
+
       const merged = {
         ...latest,
         repairLines: latest.repairLines.map((line) => {
@@ -805,11 +807,15 @@ export function useRepairOrders({
           return next;
         }),
       };
-      roRef.current = merged;
-      setCurrentRO(merged);
-      setAllROs((prev) =>
-        prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
-      );
+
+      flushSync(() => {
+        setStoryQualityByLine((prev) => ({ ...prev, [lineId]: quality }));
+        roRef.current = merged;
+        setCurrentRO(merged);
+        setAllROs((prev) =>
+          prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
+        );
+      });
     },
     [setAllROs]
   );
@@ -820,16 +826,9 @@ export function useRepairOrders({
       payload: { certifiedByName: string; certifiedAt: string; warrantyStory: string; storyHash?: string }
     ) => {
       const certifiedStory = payload.warrantyStory.trim();
-      setStoryCertificationByLine((prev) => ({
-        ...prev,
-        [lineId]: {
-          certifiedByName: payload.certifiedByName,
-          certifiedAt: payload.certifiedAt,
-          storyText: certifiedStory,
-        },
-      }));
       const latest = roRef.current;
       if (!latest) return;
+
       const merged = {
         ...latest,
         repairLines: latest.repairLines.map((line) =>
@@ -847,11 +846,22 @@ export function useRepairOrders({
             : line
         ),
       };
-      roRef.current = merged;
-      setCurrentRO(merged);
-      setAllROs((prev) =>
-        prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
-      );
+
+      flushSync(() => {
+        setStoryCertificationByLine((prev) => ({
+          ...prev,
+          [lineId]: {
+            certifiedByName: payload.certifiedByName,
+            certifiedAt: payload.certifiedAt,
+            storyText: certifiedStory,
+          },
+        }));
+        roRef.current = merged;
+        setCurrentRO(merged);
+        setAllROs((prev) =>
+          prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
+        );
+      });
     },
     [session?.technicianId, setAllROs]
   );

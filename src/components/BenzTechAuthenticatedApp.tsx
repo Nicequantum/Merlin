@@ -428,7 +428,7 @@ export function BenzTechAuthenticatedApp({
               runAction('Generate warranty story', () => ro.generateStory(lineId));
             }}
             onScoreStory={(storyText) => {
-              companion.publishActivity('Running MI audit', {
+              companion.publishActivity('Running MI Quality Audit…', {
                 repairOrderId: ro.currentRO!.id,
                 lineId: ro.currentLine!.id,
               });

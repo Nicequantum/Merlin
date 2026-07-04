@@ -146,7 +146,7 @@ export async function POST(
       });
       void broadcastCompanionEvent(session.technicianId, {
         type: 'activity',
-        label: `MI audit score: ${quality.score}/100`,
+        label: `Audit complete (score: ${quality.score})`,
         repairOrderId: id,
         lineId,
       });

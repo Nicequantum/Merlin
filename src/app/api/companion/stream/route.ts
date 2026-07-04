@@ -9,6 +9,8 @@ export const maxDuration = 300;
 
 const HEARTBEAT_MS = 20_000;
 const KV_POLL_MS = 1_000;
+/** Replay recent cross-instance events when a companion window connects. */
+const KV_REPLAY_WINDOW_MS = 120_000;
 
 function sseEncode(event: CompanionEvent | { type: 'connected' }): string {
   return `data: ${JSON.stringify(event)}\n\n`;
@@ -22,7 +24,7 @@ export async function GET(request: Request) {
       const encoder = new TextEncoder();
       let closed = false;
       const seenIds = new Set<string>();
-      let lastKvPollAt = new Date().toISOString();
+      let lastKvPollAt = new Date(Date.now() - KV_REPLAY_WINDOW_MS).toISOString();
 
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -41,6 +43,13 @@ export async function GET(request: Request) {
           };
 
           controller.enqueue(encoder.encode(sseEncode({ type: 'connected' })));
+
+          void drainKvCompanionEvents(technicianId, lastKvPollAt).then((events) => {
+            if (closed || events.length === 0) return;
+            const lastTs = Date.parse(events[events.length - 1]!.timestamp);
+            lastKvPollAt = new Date(lastTs + 1).toISOString();
+            for (const event of events) push(event);
+          });
 
           const unsubscribe = subscribeCompanionEvents(technicianId, push);
 

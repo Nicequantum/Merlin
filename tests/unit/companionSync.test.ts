@@ -40,9 +40,21 @@ describe('desktop companion sync', () => {
 
   it('mirrors audit and certification SSE events into live activity', () => {
     const hook = readSrc('src/hooks/useCompanionSync.ts');
-    assert.ok(hook.includes('MI audit score:'));
-    assert.ok(hook.includes('Story certified and saved'));
-    assert.ok(hook.includes("event.sourceDeviceId === 'server'"));
+    assert.ok(hook.includes('Audit complete (score:'));
+    assert.ok(hook.includes("'Story certified'"));
+    assert.ok(hook.includes("event.type === 'navigation' && event.sourceDeviceId === deviceId"));
+  });
+
+  it('replays recent companion events when SSE connects', () => {
+    const route = readSrc('src/app/api/companion/stream/route.ts');
+    assert.ok(route.includes('KV_REPLAY_WINDOW_MS'));
+    assert.ok(route.includes('drainKvCompanionEvents(technicianId, lastKvPollAt)'));
+  });
+
+  it('ensures RO and line context before applying companion story events', () => {
+    const bridge = readSrc('src/components/CompanionSyncBridge.tsx');
+    assert.ok(bridge.includes('ensureCompanionLineContext'));
+    assert.ok(bridge.includes('await ensureCompanionLineContext(repairOrderId, lineId)'));
   });
 
   it('merges companion story state from active line and persisted audit fields', () => {

@@ -200,7 +200,7 @@ export async function POST(
       });
       void broadcastCompanionEvent(session.technicianId, {
         type: 'activity',
-        label: 'Story certified and saved',
+        label: 'Story certified',
         detail: certifiedByName,
         repairOrderId: id,
         lineId,

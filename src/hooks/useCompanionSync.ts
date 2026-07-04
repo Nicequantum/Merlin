@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { mutate } from 'swr';
+import { flushSync } from 'react-dom';
 import { getCompanionDeviceId } from '@/lib/companionDeviceId';
 import { COMPANION_DEVICE_HEADER } from '@/lib/companionPublish';
 import type {
@@ -16,10 +16,6 @@ const STREAM_URL = '/api/companion/stream';
 const PUBLISH_URL = '/api/companion/publish';
 const MAX_ACTIVITY = 40;
 const RECONNECT_MS = 2_000;
-
-export function companionRoKey(repairOrderId: string): string {
-  return `/api/repair-orders/${repairOrderId}`;
-}
 
 interface CompanionHandlers {
   onNavigation: (payload: {
@@ -37,7 +33,7 @@ interface CompanionHandlers {
     repairOrderId: string;
     lineId: string;
     quality: StoryQualityResult;
-  }) => void;
+  }) => void | Promise<void>;
   onStoryCertification: (payload: {
     repairOrderId: string;
     lineId: string;
@@ -45,7 +41,7 @@ interface CompanionHandlers {
     certifiedAt: string;
     warrantyStory: string;
     storyHash?: string;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 interface UseCompanionSyncOptions extends CompanionHandlers {
@@ -90,15 +86,27 @@ export function useCompanionSync({
     onStoryCertification,
   };
 
+  const rememberEventId = useCallback((id: string) => {
+    seenIdsRef.current.add(id);
+  }, []);
+
   const pushActivity = useCallback((entry: CompanionActivityEntry) => {
-    setActivities((prev) => [entry, ...prev].slice(0, MAX_ACTIVITY));
+    flushSync(() => {
+      setActivities((prev) => {
+        if (prev.some((item) => item.id === entry.id)) return prev;
+        return [entry, ...prev].slice(0, MAX_ACTIVITY);
+      });
+    });
   }, []);
 
   const shouldIgnoreEvent = useCallback(
     (event: CompanionEvent) => {
       if (seenIdsRef.current.has(event.id)) return true;
       if (event.sourceDeviceId === 'server') return false;
-      return event.sourceDeviceId === deviceId;
+      // Only navigation echoes loop on the publishing device — all other events
+      // must reach companion windows that share a browser device id.
+      if (event.type === 'navigation' && event.sourceDeviceId === deviceId) return true;
+      return false;
     },
     [deviceId]
   );
@@ -124,7 +132,6 @@ export function useCompanionSync({
           }
           break;
         case 'ro.refresh':
-          void mutate(companionRoKey(event.repairOrderId));
           await handlers.onRORefresh(event.repairOrderId);
           break;
         case 'ro.patch':
@@ -159,23 +166,21 @@ export function useCompanionSync({
           });
           break;
         case 'story.quality':
-          void mutate(companionRoKey(event.repairOrderId));
-          handlers.onStoryQuality({
+          await handlers.onStoryQuality({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
             quality: event.quality,
           });
           pushActivity({
             id: `${event.id}:audit`,
-            label: `MI audit score: ${event.quality.score}/100`,
+            label: `Audit complete (score: ${event.quality.score})`,
             timestamp: event.timestamp,
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
           });
           break;
         case 'story.certification':
-          void mutate(companionRoKey(event.repairOrderId));
-          handlers.onStoryCertification({
+          await handlers.onStoryCertification({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
             certifiedByName: event.certifiedByName,
@@ -185,7 +190,7 @@ export function useCompanionSync({
           });
           pushActivity({
             id: `${event.id}:cert`,
-            label: 'Story certified and saved',
+            label: 'Story certified',
             detail: event.certifiedByName,
             timestamp: event.timestamp,
             repairOrderId: event.repairOrderId,
@@ -257,8 +262,10 @@ export function useCompanionSync({
       setStatusProgress(typeof options?.progress === 'number' ? options.progress : null);
       if (publishKey === lastPublishedStatusRef.current) return;
       lastPublishedStatusRef.current = publishKey;
+      const id = crypto.randomUUID();
+      rememberEventId(id);
       void postEvent({
-        id: crypto.randomUUID(),
+        id,
         type: 'status',
         status,
         message: options?.message,
@@ -267,7 +274,7 @@ export function useCompanionSync({
         lineId: options?.lineId,
       });
     },
-    [postEvent]
+    [postEvent, rememberEventId]
   );
 
   const publishActivity = useCallback(
@@ -276,6 +283,7 @@ export function useCompanionSync({
       options?: { detail?: string; repairOrderId?: string | null; lineId?: string | null }
     ) => {
       const id = crypto.randomUUID();
+      rememberEventId(id);
       void postEvent({
         id,
         type: 'activity',
@@ -293,7 +301,7 @@ export function useCompanionSync({
         lineId: options?.lineId,
       });
     },
-    [postEvent, pushActivity]
+    [postEvent, pushActivity, rememberEventId]
   );
 
   const publishROPatch = useCallback(

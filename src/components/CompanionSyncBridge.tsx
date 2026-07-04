@@ -23,6 +23,16 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
   const roRef = useRef(ro);
   roRef.current = ro;
 
+  const ensureCompanionLineContext = async (repairOrderId: string, lineId?: string | null) => {
+    const api = roRef.current;
+    if (api.currentRO?.id !== repairOrderId) {
+      await api.openROById(repairOrderId);
+    }
+    if (lineId && (api.view !== 'line' || api.currentLineId !== lineId)) {
+      await api.navigateToLine(lineId);
+    }
+  };
+
   const companion = useCompanionSync({
     enabled,
     onNavigation: async ({ view, repairOrderId, lineId }) => {
@@ -50,10 +60,19 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
     onROPatch: (payload) => {
       roRef.current.mergeCompanionPatch(payload);
     },
-    onStoryQuality: ({ lineId, quality }) => {
+    onStoryQuality: async ({ repairOrderId, lineId, quality }) => {
+      await ensureCompanionLineContext(repairOrderId, lineId);
       roRef.current.applyCompanionStoryQuality(lineId, quality);
     },
-    onStoryCertification: ({ lineId, certifiedByName, certifiedAt, warrantyStory, storyHash }) => {
+    onStoryCertification: async ({
+      repairOrderId,
+      lineId,
+      certifiedByName,
+      certifiedAt,
+      warrantyStory,
+      storyHash,
+    }) => {
+      await ensureCompanionLineContext(repairOrderId, lineId);
       roRef.current.applyCompanionCertification(lineId, {
         certifiedByName,
         certifiedAt,
@@ -116,7 +135,7 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
     }
     if (ro.isScoringForLine) {
       publishStatus('scoring', {
-        message: 'Running MI quality audit…',
+        message: 'Running MI Quality Audit…',
         repairOrderId: ro.currentRO?.id ?? null,
         lineId: ro.currentLineId,
       });

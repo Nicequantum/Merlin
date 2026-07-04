@@ -18,19 +18,13 @@ interface CompanionSyncBridgeProps {
   children: (companion: ReturnType<typeof useCompanionSync>) => React.ReactNode;
 }
 
-/** Wires WebSocket companion sync to repair-order state without changing tablet UI. */
+/** Wires SSE companion sync to repair-order state without changing tablet UI. */
 export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: CompanionSyncBridgeProps) {
   const roRef = useRef(ro);
   roRef.current = ro;
 
   const companion = useCompanionSync({
     enabled,
-    technicianId: session.technicianId,
-    getNavigationState: () => ({
-      view: roRef.current.view,
-      repairOrderId: roRef.current.currentRO?.id ?? null,
-      lineId: roRef.current.currentLineId,
-    }),
     onNavigation: async ({ view, repairOrderId, lineId }) => {
       const api = roRef.current;
       if (view === 'home') {
@@ -70,7 +64,11 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
 
   useEffect(() => {
     if (!enabled) return;
-    companion.publishNavigation();
+    companion.publishNavigation({
+      view: ro.view,
+      repairOrderId: ro.currentRO?.id ?? null,
+      lineId: ro.currentLineId,
+    });
   }, [companion, enabled, ro.view, ro.currentRO?.id, ro.currentLineId]);
 
   useEffect(() => {

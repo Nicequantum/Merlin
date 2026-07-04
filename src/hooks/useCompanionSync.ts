@@ -1,22 +1,27 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { mutate } from 'swr';
 import { getCompanionDeviceId } from '@/lib/companionDeviceId';
+import { COMPANION_DEVICE_HEADER } from '@/lib/companionPublish';
 import type {
   CompanionActivityEntry,
   CompanionConnectionState,
   CompanionEvent,
   CompanionWorkflowStatus,
 } from '@/lib/companionSyncTypes';
-import type { AppView, RepairLine, RepairOrder, StoryQualityResult } from '@/types';
+import type { AppView, RepairLine, StoryQualityResult } from '@/types';
 
+const STREAM_URL = '/api/companion/stream';
+const PUBLISH_URL = '/api/companion/publish';
 const MAX_ACTIVITY = 40;
-const MAX_SEEN_EVENTS = 200;
-const RECONNECT_BASE_MS = 800;
-const RECONNECT_MAX_MS = 12_000;
-const PING_INTERVAL_MS = 25_000;
+const RECONNECT_MS = 2_000;
 
-interface CompanionSyncHandlers {
+export function companionRoKey(repairOrderId: string): string {
+  return `/api/repair-orders/${repairOrderId}`;
+}
+
+interface CompanionHandlers {
   onNavigation: (payload: {
     view: AppView;
     repairOrderId: string | null;
@@ -27,7 +32,6 @@ interface CompanionSyncHandlers {
     repairOrderId: string;
     lineId?: string;
     linePatch?: Partial<RepairLine>;
-    roPatch?: Partial<Pick<RepairOrder, 'roNumber' | 'complaints' | 'vehicle' | 'customer'>>;
   }) => void;
   onStoryQuality: (payload: {
     repairOrderId: string;
@@ -43,20 +47,12 @@ interface CompanionSyncHandlers {
   }) => void;
 }
 
-interface UseCompanionSyncOptions extends CompanionSyncHandlers {
+interface UseCompanionSyncOptions extends CompanionHandlers {
   enabled: boolean;
-  technicianId: string;
-  getNavigationState: () => {
-    view: AppView;
-    repairOrderId: string | null;
-    lineId: string | null;
-  };
 }
 
 export function useCompanionSync({
   enabled,
-  technicianId,
-  getNavigationState,
   onNavigation,
   onRORefresh,
   onROPatch,
@@ -70,40 +66,20 @@ export function useCompanionSync({
   const [statusProgress, setStatusProgress] = useState<number | null>(null);
   const [activities, setActivities] = useState<CompanionActivityEntry[]>([]);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttemptRef = useRef(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const seenEventIdsRef = useRef<Set<string>>(new Set());
-  const lastSeqRef = useRef(0);
+  const seenIdsRef = useRef(new Set<string>());
   const applyingRemoteRef = useRef(false);
   const lastPublishedNavRef = useRef('');
-  const mountedRef = useRef(true);
-
-  const rememberEvent = useCallback((id: string) => {
-    const seen = seenEventIdsRef.current;
-    seen.add(id);
-    if (seen.size > MAX_SEEN_EVENTS) {
-      const iter = seen.values();
-      for (let i = 0; i < 50; i++) {
-        const next = iter.next();
-        if (next.done) break;
-        seen.delete(next.value);
-      }
-    }
-  }, []);
+  const sourceRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pushActivity = useCallback((entry: CompanionActivityEntry) => {
     setActivities((prev) => [entry, ...prev].slice(0, MAX_ACTIVITY));
   }, []);
 
-  const handleIncomingEvent = useCallback(
+  const handleEvent = useCallback(
     async (event: CompanionEvent) => {
-      if (!event?.id || event.sourceDeviceId === deviceId) return;
-      if (seenEventIdsRef.current.has(event.id)) return;
-      if (event.seq && event.seq <= lastSeqRef.current) return;
-      if (event.seq) lastSeqRef.current = event.seq;
-      rememberEvent(event.id);
+      if (event.sourceDeviceId === deviceId || seenIdsRef.current.has(event.id)) return;
+      seenIdsRef.current.add(event.id);
 
       switch (event.type) {
         case 'navigation':
@@ -120,6 +96,7 @@ export function useCompanionSync({
           }
           break;
         case 'ro.refresh':
+          void mutate(companionRoKey(event.repairOrderId));
           await onRORefresh(event.repairOrderId);
           break;
         case 'ro.patch':
@@ -127,7 +104,6 @@ export function useCompanionSync({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
             linePatch: event.linePatch,
-            roPatch: event.roPatch,
           });
           break;
         case 'status':
@@ -146,6 +122,7 @@ export function useCompanionSync({
           });
           break;
         case 'story.quality':
+          void mutate(companionRoKey(event.repairOrderId));
           onStoryQuality({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
@@ -153,6 +130,7 @@ export function useCompanionSync({
           });
           break;
         case 'story.certification':
+          void mutate(companionRoKey(event.repairOrderId));
           onStoryCertification({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
@@ -165,82 +143,59 @@ export function useCompanionSync({
           break;
       }
     },
-    [
-      deviceId,
-      onNavigation,
-      onRORefresh,
-      onROPatch,
-      onStoryQuality,
-      onStoryCertification,
-      pushActivity,
-      rememberEvent,
-    ]
+    [deviceId, onNavigation, onRORefresh, onROPatch, onStoryQuality, onStoryCertification, pushActivity]
   );
 
-  const sendEvent = useCallback(
-    (event: Omit<CompanionEvent, 'seq' | 'timestamp'>) => {
-      const socket = wsRef.current;
-      if (!socket || socket.readyState !== WebSocket.OPEN) return;
-      socket.send(
-        JSON.stringify({
-          type: 'event',
-          event: {
-            ...event,
-            technicianId,
-            sourceDeviceId: deviceId,
-            timestamp: new Date().toISOString(),
+  const postEvent = useCallback(
+    async (event: Record<string, unknown>) => {
+      try {
+        await fetch(PUBLISH_URL, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            [COMPANION_DEVICE_HEADER]: deviceId,
           },
-        })
-      );
+          body: JSON.stringify({ event: { ...event, sourceDeviceId: deviceId } }),
+        });
+      } catch {
+        // companion is best-effort
+      }
     },
-    [deviceId, technicianId]
+    [deviceId]
   );
 
-  const publish = useCallback(
-    (event: Omit<CompanionEvent, 'seq' | 'timestamp' | 'technicianId' | 'sourceDeviceId'>) => {
-      sendEvent({
-        ...event,
-        technicianId,
-        sourceDeviceId: deviceId,
-      } as CompanionEvent);
+  const publishNavigation = useCallback(
+    (state: { view: AppView; repairOrderId: string | null; lineId: string | null }) => {
+      if (applyingRemoteRef.current) return;
+      const key = `${state.view}:${state.repairOrderId}:${state.lineId}`;
+      if (key === lastPublishedNavRef.current) return;
+      lastPublishedNavRef.current = key;
+      void postEvent({
+        id: crypto.randomUUID(),
+        type: 'navigation',
+        view: state.view,
+        repairOrderId: state.repairOrderId,
+        lineId: state.lineId,
+      });
     },
-    [deviceId, sendEvent, technicianId]
+    [postEvent]
   );
-
-  const publishNavigation = useCallback(() => {
-    if (applyingRemoteRef.current) return;
-    const { view, repairOrderId, lineId } = getNavigationState();
-    const key = `${view}:${repairOrderId}:${lineId}`;
-    if (key === lastPublishedNavRef.current) return;
-    lastPublishedNavRef.current = key;
-    const id = crypto.randomUUID();
-    publish({
-      id,
-      type: 'navigation',
-      view,
-      repairOrderId,
-      lineId,
-    } as CompanionEvent);
-    pushActivity({
-      id,
-      label:
-        view === 'line'
-          ? 'Opened repair line'
-          : view === 'ro'
-            ? 'Opened repair order'
-            : 'Changed view',
-      timestamp: new Date().toISOString(),
-      repairOrderId,
-      lineId,
-    });
-  }, [getNavigationState, publish, pushActivity]);
 
   const publishStatus = useCallback(
-    (status: CompanionWorkflowStatus, options?: { message?: string; progress?: number; repairOrderId?: string | null; lineId?: string | null }) => {
+    (
+      status: CompanionWorkflowStatus,
+      options?: {
+        message?: string;
+        progress?: number;
+        repairOrderId?: string | null;
+        lineId?: string | null;
+      }
+    ) => {
       setWorkflowStatus(status);
       setStatusMessage(options?.message ?? null);
       setStatusProgress(typeof options?.progress === 'number' ? options.progress : null);
-      publish({
+      void postEvent({
         id: crypto.randomUUID(),
         type: 'status',
         status,
@@ -248,22 +203,25 @@ export function useCompanionSync({
         progress: options?.progress,
         repairOrderId: options?.repairOrderId,
         lineId: options?.lineId,
-      } as CompanionEvent);
+      });
     },
-    [publish]
+    [postEvent]
   );
 
   const publishActivity = useCallback(
-    (label: string, options?: { detail?: string; repairOrderId?: string | null; lineId?: string | null }) => {
+    (
+      label: string,
+      options?: { detail?: string; repairOrderId?: string | null; lineId?: string | null }
+    ) => {
       const id = crypto.randomUUID();
-      publish({
+      void postEvent({
         id,
         type: 'activity',
         label,
         detail: options?.detail,
         repairOrderId: options?.repairOrderId,
         lineId: options?.lineId,
-      } as CompanionEvent);
+      });
       pushActivity({
         id,
         label,
@@ -273,122 +231,67 @@ export function useCompanionSync({
         lineId: options?.lineId,
       });
     },
-    [publish, pushActivity]
+    [postEvent, pushActivity]
   );
 
   const publishROPatch = useCallback(
-    (payload: {
-      repairOrderId: string;
-      lineId?: string;
-      linePatch?: Partial<RepairLine>;
-      roPatch?: Partial<Pick<RepairOrder, 'roNumber' | 'complaints' | 'vehicle' | 'customer'>>;
-    }) => {
-      publish({
+    (payload: { repairOrderId: string; lineId?: string; linePatch?: Partial<RepairLine> }) => {
+      void postEvent({
         id: crypto.randomUUID(),
         type: 'ro.patch',
         ...payload,
-      } as CompanionEvent);
+      });
     },
-    [publish]
+    [postEvent]
   );
 
-  const clearTimers = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    if (pingTimerRef.current) {
-      clearInterval(pingTimerRef.current);
-      pingTimerRef.current = null;
-    }
-  }, []);
-
-  const connect = useCallback(async () => {
-    if (!enabled || !mountedRef.current) return;
-    clearTimers();
-    setConnectionState(reconnectAttemptRef.current > 0 ? 'reconnecting' : 'connecting');
-
-    try {
-      const response = await fetch('/api/companion/ws-token', { credentials: 'include' });
-      if (!response.ok) throw new Error('Failed to obtain companion token');
-      const { token, wsUrl } = (await response.json()) as { token: string; wsUrl: string };
-      if (!wsUrl) throw new Error('Companion WebSocket URL is not configured');
-
-      const socket = new WebSocket(wsUrl);
-      wsRef.current = socket;
-
-      socket.onopen = () => {
-        socket.send(JSON.stringify({ type: 'auth', token }));
-      };
-
-      socket.onmessage = (message) => {
-        let payload: { type?: string; event?: CompanionEvent };
-        try {
-          payload = JSON.parse(String(message.data));
-        } catch {
-          return;
-        }
-        if (payload.type === 'auth.ok') {
-          reconnectAttemptRef.current = 0;
-          setConnectionState('connected');
-          pingTimerRef.current = setInterval(() => {
-            if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ type: 'ping' }));
-            }
-          }, PING_INTERVAL_MS);
-          return;
-        }
-        if (payload.type === 'pong') return;
-        if (payload.event) {
-          void handleIncomingEvent(payload.event);
-        }
-      };
-
-      socket.onclose = () => {
-        wsRef.current = null;
-        clearTimers();
-        if (!mountedRef.current || !enabled) {
-          setConnectionState('disconnected');
-          return;
-        }
-        setConnectionState('reconnecting');
-        const delay = Math.min(
-          RECONNECT_MAX_MS,
-          RECONNECT_BASE_MS * 2 ** reconnectAttemptRef.current
-        );
-        reconnectAttemptRef.current += 1;
-        reconnectTimerRef.current = setTimeout(() => {
-          void connect();
-        }, delay);
-      };
-
-      socket.onerror = () => {
-        setConnectionState('error');
-      };
-    } catch {
-      setConnectionState('error');
-      const delay = Math.min(
-        RECONNECT_MAX_MS,
-        RECONNECT_BASE_MS * 2 ** reconnectAttemptRef.current
-      );
-      reconnectAttemptRef.current += 1;
-      reconnectTimerRef.current = setTimeout(() => {
-        void connect();
-      }, delay);
-    }
-  }, [clearTimers, enabled, handleIncomingEvent]);
-
   useEffect(() => {
-    mountedRef.current = true;
-    if (enabled) void connect();
+    if (!enabled) {
+      setConnectionState('disconnected');
+      return;
+    }
+
+    const connect = () => {
+      if (sourceRef.current) {
+        sourceRef.current.close();
+      }
+      setConnectionState((s) => (s === 'connected' ? 'reconnecting' : 'connecting'));
+
+      const source = new EventSource(STREAM_URL, { withCredentials: true });
+      sourceRef.current = source;
+
+      source.onopen = () => {
+        setConnectionState('connected');
+      };
+
+      source.onmessage = (message) => {
+        try {
+          const payload = JSON.parse(message.data) as CompanionEvent | { type: 'connected' };
+          if (payload.type === 'connected') return;
+          void handleEvent(payload as CompanionEvent);
+        } catch {
+          // ignore malformed SSE payloads
+        }
+      };
+
+      source.onerror = () => {
+        setConnectionState('reconnecting');
+        source.close();
+        sourceRef.current = null;
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = setTimeout(connect, RECONNECT_MS);
+      };
+    };
+
+    connect();
+
     return () => {
-      mountedRef.current = false;
-      clearTimers();
-      wsRef.current?.close();
-      wsRef.current = null;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      sourceRef.current?.close();
+      sourceRef.current = null;
       setConnectionState('disconnected');
     };
-  }, [clearTimers, connect, enabled]);
+  }, [enabled, handleEvent]);
 
   return {
     deviceId,
@@ -397,11 +300,9 @@ export function useCompanionSync({
     statusMessage,
     statusProgress,
     activities,
-    publish,
     publishNavigation,
     publishStatus,
     publishActivity,
     publishROPatch,
-    isApplyingRemote: () => applyingRemoteRef.current,
   };
 }

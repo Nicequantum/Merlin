@@ -23,8 +23,9 @@ const PUBLISH_URL = '/api/companion/publish';
 const POLL_URL = '/api/companion/poll';
 const MAX_ACTIVITY = 40;
 const RECONNECT_MS = 2_000;
-const POLL_MS = 1_500;
+const POLL_MS = 1_000;
 const POLL_LOOKBACK_MS = 120_000;
+const RO_SNAPSHOT_MS = 2_000;
 
 interface CompanionHandlers {
   onNavigation: (payload: {
@@ -83,7 +84,7 @@ export function useCompanionSync({
   const connectionGenerationRef = useRef(0);
   const lastPollAtRef = useRef(new Date(Date.now() - POLL_LOOKBACK_MS).toISOString());
   const canAutoPublish = companionRolePublishes(role);
-  const shouldPoll = companionRoleSubscribes(role);
+  const isSubscriber = companionRoleSubscribes(role);
 
   const handlersRef = useRef({
     onNavigation,
@@ -112,6 +113,23 @@ export function useCompanionSync({
       });
     });
   }, []);
+
+  const recordActivity = useCallback(
+    (
+      label: string,
+      options?: { detail?: string; repairOrderId?: string | null; lineId?: string | null }
+    ) => {
+      pushActivity({
+        id: crypto.randomUUID(),
+        label,
+        detail: options?.detail,
+        timestamp: new Date().toISOString(),
+        repairOrderId: options?.repairOrderId,
+        lineId: options?.lineId,
+      });
+    },
+    [pushActivity]
+  );
 
   const shouldIgnoreEvent = useCallback(
     (event: CompanionEvent) => {
@@ -367,7 +385,7 @@ export function useCompanionSync({
   );
 
   useEffect(() => {
-    if (!enabled || !shouldPoll) return;
+    if (!enabled) return;
 
     let cancelled = false;
 
@@ -381,6 +399,11 @@ export function useCompanionSync({
         const events = payload.events ?? [];
         for (const event of events) {
           await handleEventRef.current(event);
+          const eventMs = Date.parse(event.timestamp);
+          const cursorMs = Date.parse(lastPollAtRef.current);
+          if (!Number.isNaN(eventMs) && eventMs >= cursorMs) {
+            lastPollAtRef.current = new Date(eventMs + 1).toISOString();
+          }
         }
       } catch (error) {
         clientLog.warn('companion.poll_failed', { error });
@@ -393,7 +416,7 @@ export function useCompanionSync({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [enabled, shouldPoll]);
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) {
@@ -471,5 +494,8 @@ export function useCompanionSync({
     publishStatus,
     publishActivity,
     publishROPatch,
+    recordActivity,
+    isSubscriber,
+    roSnapshotIntervalMs: RO_SNAPSHOT_MS,
   };
 }

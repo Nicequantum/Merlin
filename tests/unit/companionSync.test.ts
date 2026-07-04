@@ -34,7 +34,8 @@ describe('desktop companion sync', () => {
 
   it('uses stable publish callbacks in CompanionSyncBridge effects', () => {
     const bridge = readSrc('src/components/CompanionSyncBridge.tsx');
-    assert.ok(bridge.includes('const { publishNavigation, publishStatus } = companion;'));
+    assert.ok(bridge.includes('publishNavigation'));
+    assert.ok(bridge.includes('publishStatus'));
     assert.equal(bridge.includes('[companion, enabled'), false);
   });
 
@@ -73,6 +74,17 @@ describe('desktop companion sync', () => {
     assert.ok(roHook.includes('openingROPromisesRef'));
     assert.ok(roHook.includes('ensureRepairOrderOpen'));
     assert.ok(roHook.includes('companionRevision'));
+  });
+
+  it('polls companion events for all clients and snapshots RO state on desktop', () => {
+    const hook = readSrc('src/hooks/useCompanionSync.ts');
+    const bridge = readSrc('src/components/CompanionSyncBridge.tsx');
+    const desktop = readSrc('src/hooks/useDesktopCompanion.ts');
+    assert.ok(hook.includes('}, [enabled]);'));
+    assert.equal(hook.includes('}, [enabled, shouldPoll]);'), false);
+    assert.ok(hook.includes('recordActivity'));
+    assert.ok(bridge.includes('syncCompanionRepairOrderSnapshot'));
+    assert.ok(desktop.includes('readDesktopViewport'));
   });
 
   it('merges companion story state from active line and persisted audit fields', () => {

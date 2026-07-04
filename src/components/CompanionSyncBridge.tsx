@@ -5,6 +5,7 @@ import { subscribeCompanionVoice } from '@/lib/companionVoiceBridge';
 import { useCompanionSync } from '@/hooks/useCompanionSync';
 import type { useOcrProgress } from '@/hooks/useOcrProgress';
 import type { useRepairOrders } from '@/hooks/useRepairOrders';
+import { companionSnapshotHasChanges } from '@/lib/companionSnapshot';
 import {
   companionRolePublishes,
   type CompanionSyncRole,
@@ -24,14 +25,16 @@ interface CompanionSyncBridgeProps {
 }
 
 /** Wires SSE companion sync to repair-order state without changing tablet UI. */
-export function CompanionSyncBridge({ session, enabled, role, ro, ocr, children }: CompanionSyncBridgeProps) {
-  const roRef = useRef(ro);
-  roRef.current = ro;
+export function CompanionSyncBridge({ enabled, role, ro, ocr, children }: CompanionSyncBridgeProps) {
+  const roApiRef = useRef(ro);
+  roApiRef.current = ro;
   const autoPublish = companionRolePublishes(role);
 
+  const getRoApi = () => roApiRef.current;
+
   const ensureCompanionLineContext = async (repairOrderId: string, lineId?: string | null) => {
-    await roRef.current.ensureRepairOrderOpen(repairOrderId);
-    const api = roRef.current;
+    await getRoApi().ensureRepairOrderOpen(repairOrderId);
+    const api = getRoApi();
     if (lineId && (api.view !== 'line' || api.currentLineId !== lineId)) {
       await api.navigateToLine(lineId);
     }
@@ -41,7 +44,7 @@ export function CompanionSyncBridge({ session, enabled, role, ro, ocr, children 
     enabled,
     role,
     onNavigation: async ({ view, repairOrderId, lineId }) => {
-      const api = roRef.current;
+      const api = getRoApi();
       if (view === 'home') {
         api.setView('home');
         return;
@@ -49,21 +52,21 @@ export function CompanionSyncBridge({ session, enabled, role, ro, ocr, children 
       if (!repairOrderId) return;
       await api.ensureRepairOrderOpen(repairOrderId);
       if (view === 'line' && lineId) {
-        await api.navigateToLine(lineId);
+        await getRoApi().navigateToLine(lineId);
       } else if (view === 'ro') {
-        api.setView('ro');
+        getRoApi().setView('ro');
       }
     },
     onRORefresh: async (repairOrderId) => {
-      await roRef.current.ensureRepairOrderOpen(repairOrderId);
+      await getRoApi().ensureRepairOrderOpen(repairOrderId);
     },
     onROPatch: async (payload) => {
-      await roRef.current.ensureRepairOrderOpen(payload.repairOrderId);
-      roRef.current.mergeCompanionPatch(payload);
+      await getRoApi().ensureRepairOrderOpen(payload.repairOrderId);
+      getRoApi().mergeCompanionPatch(payload);
     },
     onStoryQuality: async ({ repairOrderId, lineId, quality }) => {
       await ensureCompanionLineContext(repairOrderId, lineId);
-      roRef.current.applyCompanionStoryQuality(lineId, quality);
+      getRoApi().applyCompanionStoryQuality(lineId, quality);
     },
     onStoryCertification: async ({
       repairOrderId,
@@ -74,7 +77,7 @@ export function CompanionSyncBridge({ session, enabled, role, ro, ocr, children 
       storyHash,
     }) => {
       await ensureCompanionLineContext(repairOrderId, lineId);
-      roRef.current.applyCompanionCertification(lineId, {
+      getRoApi().applyCompanionCertification(lineId, {
         certifiedByName,
         certifiedAt,
         warrantyStory,
@@ -83,7 +86,8 @@ export function CompanionSyncBridge({ session, enabled, role, ro, ocr, children 
     },
   });
 
-  const { publishNavigation, publishStatus } = companion;
+  const { publishNavigation, publishStatus, recordActivity, isSubscriber, roSnapshotIntervalMs } =
+    companion;
 
   useEffect(() => {
     if (!enabled || !autoPublish) return;
@@ -97,13 +101,14 @@ export function CompanionSyncBridge({ session, enabled, role, ro, ocr, children 
   useEffect(() => {
     if (!enabled || !autoPublish) return;
     return subscribeCompanionVoice((listening) => {
+      const api = getRoApi();
       if (listening) {
         publishStatus('listening', {
           message: 'Listening to voice…',
-          repairOrderId: roRef.current.currentRO?.id ?? null,
-          lineId: roRef.current.currentLineId,
+          repairOrderId: api.currentRO?.id ?? null,
+          lineId: api.currentLineId,
         });
-      } else if (roRef.current.isGeneratingForLine || roRef.current.isScoringForLine) {
+      } else if (api.isGeneratingForLine || api.isScoringForLine) {
         return;
       } else {
         publishStatus('idle');
@@ -176,6 +181,62 @@ export function CompanionSyncBridge({ session, enabled, role, ro, ocr, children 
     ro.isReviewingForLine,
     ro.isScoringForLine,
     ro.view,
+  ]);
+
+  useEffect(() => {
+    if (!enabled || !isSubscriber) return;
+
+    const repairOrderId = ro.currentRO?.id;
+    const onCompanionView = ro.view === 'ro' || ro.view === 'line';
+    if (!repairOrderId || !onCompanionView) return;
+
+    let cancelled = false;
+
+    const syncSnapshot = async () => {
+      if (cancelled) return;
+      const api = getRoApi();
+      if (!api.currentRO || api.currentRO.id !== repairOrderId) return;
+
+      const delta = await api.syncCompanionRepairOrderSnapshot(repairOrderId, {
+        lineId: api.currentLineId,
+      });
+      if (!delta || !companionSnapshotHasChanges(delta)) return;
+
+      for (const audit of delta.auditCompleted) {
+        recordActivity(`Audit complete (score: ${audit.score})`, {
+          repairOrderId,
+          lineId: audit.lineId,
+        });
+      }
+      for (const certified of delta.newlyCertified) {
+        recordActivity('Story certified', {
+          detail: certified.certifiedByName,
+          repairOrderId,
+          lineId: certified.lineId,
+        });
+      }
+      for (const lineId of delta.storyUpdated) {
+        recordActivity('Warranty story updated', { repairOrderId, lineId });
+      }
+      for (const lineId of delta.notesUpdated) {
+        recordActivity('Line notes updated', { repairOrderId, lineId });
+      }
+    };
+
+    void syncSnapshot();
+    const timer = setInterval(() => void syncSnapshot(), roSnapshotIntervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [
+    enabled,
+    isSubscriber,
+    recordActivity,
+    ro.currentLineId,
+    ro.currentRO?.id,
+    ro.view,
+    roSnapshotIntervalMs,
   ]);
 
   return <>{children(companion)}</>;

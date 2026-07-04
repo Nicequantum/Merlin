@@ -48,6 +48,11 @@ import type { VisionPipelineControls, VisionPipelineId } from '@/hooks/visionPip
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
 import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
 import { applyCompanionROPatch } from '@/lib/companionMerge';
+import {
+  companionSnapshotHasChanges,
+  diffCompanionRepairOrder,
+  type CompanionSnapshotDelta,
+} from '@/lib/companionSnapshot';
 import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import { uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
@@ -367,12 +372,62 @@ export function useRepairOrders({
     [flushPendingSave, navigateView]
   );
 
+  const bumpCompanionRevision = useCallback(() => {
+    setCompanionRevision((value) => value + 1);
+  }, []);
+
   const ensureRepairOrderOpen = useCallback(
     async (repairOrderId: string) => {
       if (roRef.current?.id === repairOrderId) return;
       await openROById(repairOrderId);
     },
     [openROById]
+  );
+
+  const syncCompanionRepairOrderSnapshot = useCallback(
+    async (
+      repairOrderId: string,
+      options?: { lineId?: string | null }
+    ): Promise<CompanionSnapshotDelta | null> => {
+      if (roRef.current?.id !== repairOrderId) return null;
+
+      const previous = roRef.current;
+      try {
+        const { repairOrder } = await api.getRepairOrder(repairOrderId);
+        const normalized = ensureComplaintIds(repairOrder);
+        const delta = diffCompanionRepairOrder(previous, normalized);
+        if (!companionSnapshotHasChanges(delta)) {
+          return null;
+        }
+        const preservedLineId = options?.lineId ?? currentLineIdRef.current;
+        const { qualityByLine, reviewByLine } = hydrateStoryQualityFromRO(normalized);
+        const { certificationByLine, lastGeneratedByLine } = hydrateStoryWorkflowFromRO(normalized);
+
+        flushSync(() => {
+          roRef.current = normalized;
+          setCurrentRO(normalized);
+          if (preservedLineId && normalized.repairLines.some((line) => line.id === preservedLineId)) {
+            setCurrentLineId(preservedLineId);
+          }
+          setStoryQualityByLine(qualityByLine);
+          setStoryReviewByLine(reviewByLine);
+          setStoryCertificationByLine(certificationByLine);
+          setLastGeneratedStoryByLine(lastGeneratedByLine);
+          setAllROs((prev) =>
+            prev.map((entry) =>
+              entry.id === normalized.id ? repairOrderToSummary(normalized) : entry
+            )
+          );
+          bumpCompanionRevision();
+        });
+
+        return delta;
+      } catch (error) {
+        clientLog.warn('companion.snapshot_sync_failed', { repairOrderId, error });
+        return null;
+      }
+    },
+    [bumpCompanionRevision, setAllROs]
   );
 
   const openRO = useCallback(
@@ -795,10 +850,6 @@ export function useRepairOrders({
     [flushPendingSave, navigateView]
   );
 
-  const bumpCompanionRevision = useCallback(() => {
-    setCompanionRevision((value) => value + 1);
-  }, []);
-
   const mergeCompanionPatch = useCallback(
     (payload: Parameters<typeof applyCompanionROPatch>[1]) => {
       const latest = roRef.current;
@@ -980,6 +1031,7 @@ export function useRepairOrders({
     applyCompanionStoryQuality,
     applyCompanionCertification,
     ensureRepairOrderOpen,
+    syncCompanionRepairOrderSnapshot,
     companionRevision,
   };
 }

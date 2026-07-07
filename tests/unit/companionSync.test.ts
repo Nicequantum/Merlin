@@ -92,18 +92,42 @@ describe('desktop companion sync', () => {
     const state = readSrc('src/lib/companionLineStoryState.ts');
     assert.ok(layout.includes('deriveCompanionLineStoryState'));
     assert.ok(layout.includes('activeLineId'));
+    assert.ok(layout.includes('showRepairLineList'));
     assert.ok(state.includes('resolveQualityForLine'));
     assert.ok(state.includes('resolveCertificationForLine'));
+  });
+
+  it('navigates desktop companion to line view atomically and clears line on RO back', () => {
+    const roHook = readSrc('src/hooks/useRepairOrders.ts');
+    const bridge = readSrc('src/components/CompanionSyncBridge.tsx');
+    const app = readSrc('src/components/BenzTechAuthenticatedApp.tsx');
+    assert.ok(roHook.includes('const navigateToRO = useCallback'));
+    assert.ok(roHook.includes("setView('line')"));
+    assert.ok(roHook.includes('setCurrentLineId(null)'));
+    assert.ok(roHook.includes("setView(restoredLineId ? 'line' : 'ro')"));
+    assert.ok(bridge.includes('navigateToRO'));
+    assert.ok(app.includes('navigateToRO'));
+    assert.equal(bridge.includes("setView('ro')"), false);
+  });
+
+  it('does not overwrite companion line story when applying remote audit quality', () => {
+    const roHook = readSrc('src/hooks/useRepairOrders.ts');
+    assert.equal(roHook.includes('next.warrantyStory = scoredStory'), false);
+    assert.ok(roHook.includes('storyQualityAudit: quality'));
   });
 
   it('scores warranty stories with full-structure retry instead of throwing on parse failure', () => {
     const grok = readSrc('src/lib/grok.ts');
     const prompts = readSrc('src/prompts/storyQuality.ts');
+    const workflow = readSrc('src/hooks/repairOrders/useROStoryWorkflow.ts');
     assert.ok(grok.includes('STORY_SCORE_RETRY_SYSTEM_PROMPT'));
     assert.ok(grok.includes('isStoryQualityDetailMissing'));
     assert.ok(grok.includes('grok.story.score_retry'));
     assert.ok(prompts.includes('strengths: 2-4 specific strengths'));
     assert.ok(prompts.includes('auditRisks: 1-4 critical MI 2.0 rejection risks'));
+    assert.ok(prompts.includes('Submitted story is authoritative'));
+    assert.ok(prompts.includes('authoritative — score only this text as submitted'));
+    assert.ok(workflow.includes('scoredAgainstStory: storyText'));
     assert.equal(grok.includes("throw new Error('AI quality score returned unreadable JSON.')"), false);
   });
 });

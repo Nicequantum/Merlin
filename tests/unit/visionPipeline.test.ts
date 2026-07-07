@@ -67,8 +67,10 @@ describe('Vision pipeline mutex (C1/C4)', () => {
     const src = readSrc('src/hooks/useRepairOrders.ts');
     assert.match(src, /const navigateView = useCallback\(\s*\n\s*async \(next: AppView\)/);
     assert.match(src, /await flushPendingSave\(\)/);
-    assert.match(src, /await navigateView\('ro'\)/);
-    assert.match(src, /await navigateView\('line'\)/);
+    assert.match(src, /const navigateToLine = useCallback/);
+    assert.match(src, /flushPendingSave\(\{ maxWaitMs: 2_500 \}\)/);
+    assert.match(src, /setView\(restoredLineId \? 'line' : 'ro'\)/);
+    assert.match(src, /setView\('line'\)/);
   });
 
   it('view guard blocks redirect while Xentry batch is in flight (H5)', () => {

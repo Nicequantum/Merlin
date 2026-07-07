@@ -298,8 +298,7 @@ export function useROStoryWorkflow(
           return;
         }
 
-        const baseline = (quality.scoredAgainstStory ?? storyText).trim();
-        const persistedQuality = { ...quality, scoredAgainstStory: baseline };
+        const persistedQuality = { ...quality, scoredAgainstStory: storyText };
         setters.setStoryCertificationByLine((prev) => {
           if (!prev[lineId]) return prev;
           const next = { ...prev };

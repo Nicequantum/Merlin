@@ -53,7 +53,7 @@ import {
   diffCompanionRepairOrder,
   type CompanionSnapshotDelta,
 } from '@/lib/companionSnapshot';
-import { isStoryQualityCurrent } from '@/lib/storyQualityState';
+
 import { uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
@@ -349,7 +349,15 @@ export function useRepairOrders({
             }
             return [summary, ...prev];
           });
-          await navigateView('ro');
+          const restoredLineId =
+            preservedLineId &&
+            normalized.repairLines.some((repairLine) => repairLine.id === preservedLineId)
+              ? preservedLineId
+              : null;
+          flushSync(() => {
+            setCurrentLineId(restoredLineId);
+            setView(restoredLineId ? 'line' : 'ro');
+          });
         } catch (e) {
           toast.error(e instanceof Error ? e.message : 'Failed to load repair order');
           throw e;
@@ -843,11 +851,24 @@ export function useRepairOrders({
 
   const navigateToLine = useCallback(
     async (lineId: string) => {
-      await flushPendingSave();
-      setCurrentLineId(lineId);
-      await navigateView('line');
+      await flushPendingSave({ maxWaitMs: 2_500 });
+      flushSync(() => {
+        setCurrentLineId(lineId);
+        setView('line');
+      });
     },
-    [flushPendingSave, navigateView]
+    [flushPendingSave]
+  );
+
+  const navigateToRO = useCallback(
+    async () => {
+      await flushPendingSave({ maxWaitMs: 2_500 });
+      flushSync(() => {
+        setCurrentLineId(null);
+        setView('ro');
+      });
+    },
+    [flushPendingSave]
   );
 
   const mergeCompanionPatch = useCallback(
@@ -876,23 +897,14 @@ export function useRepairOrders({
 
   const applyCompanionStoryQuality = useCallback(
     (lineId: string, quality: StoryQualityResult) => {
-      const scoredStory = quality.scoredAgainstStory?.trim() ?? '';
       const latest = roRef.current;
       if (!latest) return;
 
       const merged = {
         ...latest,
-        repairLines: latest.repairLines.map((line) => {
-          if (line.id !== lineId) return line;
-          const next = { ...line, storyQualityAudit: quality };
-          if (scoredStory) {
-            const currentStory = line.warrantyStory?.trim() ?? '';
-            if (!currentStory || !isStoryQualityCurrent(quality, currentStory)) {
-              next.warrantyStory = scoredStory;
-            }
-          }
-          return next;
-        }),
+        repairLines: latest.repairLines.map((line) =>
+          line.id === lineId ? { ...line, storyQualityAudit: quality } : line
+        ),
       };
 
       flushSync(() => {
@@ -998,6 +1010,7 @@ export function useRepairOrders({
     loadMorePrevious,
     flushPendingSave,
     navigateToLine,
+    navigateToRO,
     deleteRO,
     openRO,
     openROById,

@@ -54,7 +54,7 @@ export function CompanionSyncBridge({ enabled, role, ro, ocr, children }: Compan
       if (view === 'line' && lineId) {
         await getRoApi().navigateToLine(lineId);
       } else if (view === 'ro') {
-        getRoApi().setView('ro');
+        await getRoApi().navigateToRO();
       }
     },
     onRORefresh: async (repairOrderId) => {

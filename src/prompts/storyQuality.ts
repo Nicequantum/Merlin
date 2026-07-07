@@ -90,7 +90,10 @@ REQUIRED JSON fields — do NOT return score-only output:
 - auditRisks: 1-4 MI 2.0 rejection risks still present (red / critical issues)
 - technicianDetails: 2-5 objects with missing, prompt, and field (actionable technician coaching)
 
-Score ONLY against the repair line context provided — do not assume undocumented data exists.
+Score only against repair line context — do not assume undocumented data exists.
+
+Submitted story is authoritative. Post-audit edits fixing earlier gaps are improvements, not fabrication, unless they contradict context.
+
 Grades: excellent 90-100, strong 75-89, needs-work 60-74, at-risk below 60.
 
 Respond with ONLY valid JSON (no markdown):
@@ -100,7 +103,9 @@ export const STORY_SCORE_SYSTEM_PROMPT = `Mercedes-Benz MI 2.0 warranty story sc
 
 ${MI_SCORE_CRITERIA_BRIEF}
 
-Score ONLY against the repair line context provided — do not assume undocumented data exists.
+Score only against repair line context — do not assume undocumented data exists.
+
+Submitted story is authoritative. Post-audit edits fixing earlier gaps are improvements, not fabrication, unless they contradict context.
 
 You MUST return a complete structured audit:
 - strengths: 2-4 specific strengths (what is already strong)
@@ -108,7 +113,7 @@ You MUST return a complete structured audit:
 - auditRisks: 1-4 critical MI 2.0 rejection risks (what could fail audit)
 - technicianDetails: 2-5 missing technical details with exact add instructions and field (technicianNotes|customerConcern|diagnostic|workflow)
 
-Empty arrays are invalid. Be specific — cite workflow steps, codes, measurements, or missing evidence from the story.
+Empty arrays are invalid. Cite workflow steps, codes, measurements, or missing evidence from the story.
 Grades: excellent 90-100, strong 75-89, needs-work 60-74, at-risk below 60.
 
 Respond with ONLY valid JSON (no markdown):
@@ -163,12 +168,13 @@ Workflow steps required: ${workflowList}`;
 export function buildStoryScoreUserMessage(ro: RepairOrder, line: RepairLine, warrantyStory: string): string {
   return `${buildLineContext(ro, line)}
 
-WARRANTY STORY TO SCORE:
+WARRANTY STORY TO SCORE (authoritative — score only this text as submitted):
 ---
 ${warrantyStory}
 ---
 
-Score this story for MI 2.0 audit survival. List specific missing technical details in technicianDetails.`;
+Score this story for MI 2.0 audit survival. Treat the story above as the sole source of truth; post-audit corrections that address earlier gaps should raise the score unless they contradict repair line context.
+List specific missing technical details in technicianDetails.`;
 }
 
 export function buildStoryReviewUserMessage(ro: RepairOrder, line: RepairLine, warrantyStory: string): string {

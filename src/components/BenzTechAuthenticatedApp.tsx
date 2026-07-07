@@ -295,7 +295,9 @@ export function BenzTechAuthenticatedApp({
               key={`companion-${ro.currentRO.id}-${ro.companionRevision}`}
               view={ro.view}
               ro={ro.currentRO}
-              line={ro.view === 'line' ? (ro.currentLine ?? null) : null}
+              line={
+                ro.view === 'line' || ro.currentLineId ? (ro.currentLine ?? null) : null
+              }
               activeLineId={ro.currentLineId}
               technicianName={session.name}
               storyQuality={ro.storyQualityForLine}
@@ -384,7 +386,7 @@ export function BenzTechAuthenticatedApp({
             lastGeneratedStoryText={ro.lastGeneratedStoryForLine}
             cdkSanitizedNotice={ro.cdkSanitizedForLine}
             onClearCdkSanitizedNotice={() => ro.clearCdkSanitizedNotice(ro.currentLine!.id)}
-            onBack={() => ro.setView('ro')}
+            onBack={() => ro.navigateToRO()}
             onUpdateLine={(updates) => {
               const lineId = ro.currentLine!.id;
               const roId = ro.currentRO!.id;

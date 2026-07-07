@@ -107,6 +107,7 @@ export function DesktopCompanionLayout({
   };
 
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ');
+  const showRepairLineList = view === 'ro' && !activeLineId;
 
   return (
     <div className="benz-companion-layout">
@@ -149,7 +150,7 @@ export function DesktopCompanionLayout({
 
       <div className="benz-companion-body">
         <main className="benz-companion-main">
-          {view === 'ro' && !line && (
+          {showRepairLineList && (
             <div className="benz-card p-5 mb-4">
               <div className="benz-section-title mb-2">Repair Lines</div>
               <p className="text-sm text-benz-secondary mb-4">

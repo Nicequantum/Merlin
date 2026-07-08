@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ApiError } from '@/lib/api';
 import { GENERIC_ERROR } from '@/lib/errors';
-import { formatScanApiError, isRetriableScanMessage, isStrongGrokExtraction } from '@/lib/scanPipeline';
+import {
+  enrichScannedRepairLinesWithCustomerPayTemplates,
+  filterScannedComplaintsForProcessing,
+  formatScanApiError,
+  isRetriableScanMessage,
+  isStrongGrokExtraction,
+  matchCustomerPayTemplateFromScanText,
+} from '@/lib/scanPipeline';
+import { emptyExtractedData } from '@/utils/diagnosticParser';
 
 describe('scan pipeline errors', () => {
   it('surfaces ApiError messages to technicians', () => {
@@ -54,5 +62,81 @@ describe('scan pipeline errors', () => {
       }),
       false
     );
+  });
+});
+
+describe('scan pipeline service lines', () => {
+  it('retains B-service lines for warranty narrative support', () => {
+    const filtered = filterScannedComplaintsForProcessing(
+      ['Check engine light on', 'Front brake job customer pay'],
+      ['A', 'B']
+    );
+    assert.deepEqual(filtered.complaintLabels, ['A', 'B']);
+    assert.equal(filtered.complaints.length, 2);
+  });
+
+  it('matches customer pay templates from scanned line text', () => {
+    const match = matchCustomerPayTemplateFromScanText('B. Front brake job — rotors and pads');
+    assert.equal(match?.templateTitle, 'Front Brake Job');
+    assert.match(match?.preWrittenStory ?? '', /^Performed a complete front brake service/);
+  });
+
+  it('does not match ambiguous warranty concerns', () => {
+    assert.equal(matchCustomerPayTemplateFromScanText('Customer states vibration at highway speed'), null);
+  });
+
+  it('applies pre-written narratives only to matching unscanned lines', () => {
+    const lines = enrichScannedRepairLinesWithCustomerPayTemplates(
+      [
+        {
+          id: 'line-1',
+          lineNumber: 1,
+          description: 'A. Check engine light',
+          customerConcern: 'Check engine light',
+          technicianNotes: '',
+          xentryImages: [],
+          extractedData: emptyExtractedData(),
+        },
+        {
+          id: 'line-2',
+          lineNumber: 2,
+          description: 'B. Front brake job',
+          customerConcern: 'Front brake job',
+          technicianNotes: '',
+          xentryImages: [],
+          extractedData: emptyExtractedData(),
+        },
+      ],
+      ['Check engine light', 'Front brake job'],
+      ['A', 'B']
+    );
+
+    assert.equal(lines[0].isCustomerPay, undefined);
+    assert.equal(lines[0].warrantyStory, undefined);
+    assert.equal(lines[1].isCustomerPay, true);
+    assert.match(lines[1].warrantyStory ?? '', /^Performed a complete front brake service/);
+  });
+
+  it('does not overwrite an existing warranty story', () => {
+    const existingStory = 'Existing warranty narrative.';
+    const lines = enrichScannedRepairLinesWithCustomerPayTemplates(
+      [
+        {
+          id: 'line-1',
+          lineNumber: 1,
+          description: 'B. Front brake job',
+          customerConcern: 'Front brake job',
+          technicianNotes: '',
+          xentryImages: [],
+          extractedData: emptyExtractedData(),
+          warrantyStory: existingStory,
+        },
+      ],
+      ['Front brake job'],
+      ['B']
+    );
+
+    assert.equal(lines[0].warrantyStory, existingStory);
+    assert.equal(lines[0].isCustomerPay, undefined);
   });
 });

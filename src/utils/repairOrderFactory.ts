@@ -1,3 +1,7 @@
+import {
+  enrichScannedRepairLinesWithCustomerPayTemplates,
+  filterScannedComplaintsForProcessing,
+} from '@/lib/scanPipeline';
 import type { RepairLine, RepairOrder, VehicleInfo } from '../types';
 import { emptyExtractedData } from './diagnosticParser';
 
@@ -74,22 +78,27 @@ export function createRepairOrderFromScan(params: {
   complaintLabels?: string[];
   serviceAdvisorName?: string;
 }): RepairOrder {
-  const labels =
-    params.complaintLabels && params.complaintLabels.length === params.complaints.length
-      ? params.complaintLabels
-      : params.complaints.map((_, i) => String.fromCharCode(65 + i));
-  const repairLines =
-    params.complaints.length > 0
-      ? params.complaints.map((complaint, i) => defaultRepairLine(complaint, i + 1, labels[i]))
-      : [defaultRepairLine()];
+  const filtered = filterScannedComplaintsForProcessing(
+    params.complaints,
+    params.complaintLabels
+  );
+  const labels = filtered.complaintLabels;
+  const complaints = filtered.complaints;
+  const repairLines = enrichScannedRepairLinesWithCustomerPayTemplates(
+    complaints.length > 0
+      ? complaints.map((complaint, i) => defaultRepairLine(complaint, i + 1, labels[i]))
+      : [defaultRepairLine()],
+    complaints,
+    labels
+  );
 
   return {
     id: 'ro-' + Date.now(),
     roNumber: params.roNumber,
     vehicle: { ...params.vehicle, engine: params.vehicle.engine || '' },
     customer: { name: params.customerName },
-    complaints: params.complaints,
-    complaintLabels: params.complaintLabels,
+    complaints,
+    complaintLabels: labels,
     serviceAdvisorName: params.serviceAdvisorName,
     xentryImages: [],
     xentryOcrTexts: [],

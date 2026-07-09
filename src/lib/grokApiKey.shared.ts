@@ -31,4 +31,33 @@ export function getGrokApiKey(): string {
   return key;
 }
 
+/** Apex national platform — optional shared secret for /api/grok/proxy inbound auth. */
+export function getGrokProxyApiKey(): string | null {
+  return process.env.GROK_PROXY_API_KEY?.trim() || null;
+}
+
+export function isGrokProxyConfigured(): boolean {
+  return Boolean(getGrokProxyApiKey());
+}
+
+/**
+ * Apex national platform — optional base URL for the centralized Grok proxy host.
+ * When unset, server-side callers default to same-origin `/api/grok/proxy`.
+ */
+export function getGrokProxyBaseUrl(): string | null {
+  const configured = process.env.GROK_PROXY_URL?.trim();
+  return configured ? configured.replace(/\/$/, '') : null;
+}
+
+/** Upstream xAI key used by the Apex proxy route when forwarding to api.x.ai. */
+export function getGrokProxyUpstreamApiKey(): string {
+  try {
+    return getGrokApiKey();
+  } catch {
+    const proxyKey = getGrokProxyApiKey();
+    if (proxyKey) return proxyKey;
+    throw new Error('GROK_API_KEY or GROK_PROXY_API_KEY is required for Grok proxy upstream calls');
+  }
+}
+
 export { PUBLIC_GROK_ENV_KEYS };

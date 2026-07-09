@@ -1,6 +1,9 @@
-import 'server-only';
-
-import { getGrokApiKey } from '@/lib/grokApiKey';
+import {
+  getGrokApiKey,
+  getGrokProxyApiKey,
+  getGrokProxyBaseUrl,
+  isGrokProxyConfigured,
+} from '@/lib/grokApiKey.shared';
 import { GROK_CHAT_MODEL, GROK_STORY_MODEL } from '@/lib/grokModels';
 import { DIAGNOSTIC_EXTRACTION_PROMPT } from '@/prompts/diagnosticExtraction';
 import { RO_EXTRACTION_PROMPT } from '@/prompts/roExtraction';
@@ -52,7 +55,32 @@ export { GROK_CHAT_MODEL, GROK_STORY_MODEL };
 /** Full MI audit JSON (score + strengths + improvements + risks + technicianDetails). */
 export const WARRANTY_STORY_SCORE_MAX_TOKENS = 1_400;
 
+function assertGrokServerRuntime(caller: string): void {
+  if (typeof window !== 'undefined') {
+    throw new Error(`${caller} is only available on the server`);
+  }
+}
+
+/** Merlinus/Tiverton — direct xAI. Apex dealer nodes — optional centralized proxy when configured. */
+function shouldUseApexGrokProxy(): boolean {
+  return isGrokProxyConfigured();
+}
+
+function resolveApexGrokProxyEndpoint(): string {
+  const configuredBase = getGrokProxyBaseUrl();
+  if (configuredBase) {
+    return `${configuredBase}/api/grok/proxy`;
+  }
+  const vercelHost = process.env.VERCEL_URL?.trim();
+  const base =
+    process.env.MERLIN_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    (vercelHost ? `https://${vercelHost}` : 'http://localhost:3000');
+  return `${base.replace(/\/$/, '')}/api/grok/proxy`;
+}
+
 export function isGrokConfigured(): boolean {
+  if (isGrokProxyConfigured()) return true;
   try {
     getGrokApiKey();
     return true;
@@ -86,43 +114,129 @@ function extractGrokMessageContent(apiResponse: unknown): string {
   return '';
 }
 
-async function grokChat(
-  messages: Array<{
-    role: string;
-    content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
-  }>,
-  options: {
-    temperature: number;
-    max_tokens: number;
-    timeoutMs?: number;
-    perfLabel?: string;
-    model?: string;
-    /** Only sent for grok-4.x models — grok-3 ignores reasoning. */
-    reasoningEffort?: GrokReasoningEffort;
-    /** Request JSON object output from the chat API when supported. */
-    responseFormat?: 'json_object';
-  }
-): Promise<string> {
-  const timeoutMs = options.timeoutMs ?? 55_000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const startedAt = Date.now();
+type GrokChatOptions = {
+  temperature: number;
+  max_tokens: number;
+  timeoutMs?: number;
+  perfLabel?: string;
+  model?: string;
+  /** Only sent for grok-4.x models — grok-3 ignores reasoning. */
+  reasoningEffort?: GrokReasoningEffort;
+  /** Request JSON object output from the chat API when supported. */
+  responseFormat?: 'json_object';
+};
+
+type GrokChatMessage = {
+  role: string;
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+};
+
+function buildGrokChatRequestBody(
+  messages: GrokChatMessage[],
+  options: GrokChatOptions
+): { requestBody: Record<string, unknown>; model: string; reasoningEffort: GrokReasoningEffort } {
   const model = options.model ?? GROK_CHAT_MODEL;
   const reasoningEffort = options.reasoningEffort ?? 'none';
-
   const requestBody: Record<string, unknown> = {
     model,
     messages,
     temperature: options.temperature,
     max_tokens: options.max_tokens,
   };
-  // Only reasoning-capable grok-4 models accept this param; non-reasoning variants must omit it.
   if (model.includes('grok-4') && !model.includes('non-reasoning')) {
     requestBody.reasoning_effort = reasoningEffort;
   }
   if (options.responseFormat === 'json_object') {
     requestBody.response_format = { type: 'json_object' };
   }
+  return { requestBody, model, reasoningEffort };
+}
+
+async function parseGrokChatResponse(
+  response: Response,
+  context: { perfLabel?: string; model: string; reasoningEffort: GrokReasoningEffort; maxTokens: number }
+): Promise<string> {
+  if (!response.ok) {
+    const errBody = await response.text();
+    const detail = parseGrokApiErrorBody(errBody);
+    logger.warn('grok.api_error', {
+      status: response.status,
+      bodyLength: errBody.length,
+      detail: detail || undefined,
+      perfLabel: context.perfLabel,
+      model: context.model,
+    });
+    const suffix = detail ? ` — ${detail}` : '';
+    throw new Error(`Grok API error: ${response.status}${suffix}`);
+  }
+
+  const apiResponse = await response.json();
+  return extractGrokMessageContent(apiResponse);
+}
+
+/** Apex national platform — route Grok chat through the centralized proxy when configured. */
+async function grokChatViaApexProxy(
+  messages: GrokChatMessage[],
+  options: GrokChatOptions,
+  requestBody: Record<string, unknown>,
+  context: { model: string; reasoningEffort: GrokReasoningEffort; timeoutMs: number; startedAt: number }
+): Promise<string> {
+  const proxyKey = getGrokProxyApiKey();
+  if (!proxyKey) {
+    throw new Error('GROK_PROXY_API_KEY is not configured');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), context.timeoutMs);
+
+  try {
+    const response = await fetch(resolveApexGrokProxyEndpoint(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${proxyKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+    const content = await parseGrokChatResponse(response, {
+      perfLabel: options.perfLabel,
+      model: context.model,
+      reasoningEffort: context.reasoningEffort,
+      maxTokens: options.max_tokens,
+    });
+    logPerformance(options.perfLabel || 'grok.chat.proxy', Date.now() - context.startedAt, {
+      model: context.model,
+      maxTokens: options.max_tokens,
+      reasoningEffort: context.model.includes('grok-4') ? context.reasoningEffort : 'n/a',
+      outcome: 'ok',
+      transport: 'apex_proxy',
+    });
+    return content;
+  } catch (error) {
+    logPerformance(options.perfLabel || 'grok.chat.proxy', Date.now() - context.startedAt, {
+      model: context.model,
+      outcome: 'error',
+      error: error instanceof Error ? error.message : 'unknown',
+      transport: 'apex_proxy',
+    });
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Grok proxy timed out after ${Math.round(context.timeoutMs / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Merlinus/Tiverton default — direct xAI chat completions using GROK_API_KEY. */
+async function grokChatDirect(
+  options: GrokChatOptions,
+  requestBody: Record<string, unknown>,
+  context: { model: string; reasoningEffort: GrokReasoningEffort; timeoutMs: number; startedAt: number }
+): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), context.timeoutMs);
 
   try {
     const response = await fetch(GROK_API_URL, {
@@ -134,43 +248,47 @@ async function grokChat(
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      const detail = parseGrokApiErrorBody(errBody);
-      logger.warn('grok.api_error', {
-        status: response.status,
-        bodyLength: errBody.length,
-        detail: detail || undefined,
-        perfLabel: options.perfLabel,
-        model,
-      });
-      const suffix = detail ? ` — ${detail}` : '';
-      throw new Error(`Grok API error: ${response.status}${suffix}`);
-    }
-
-    const apiResponse = await response.json();
-    const content = extractGrokMessageContent(apiResponse);
-    logPerformance(options.perfLabel || 'grok.chat', Date.now() - startedAt, {
-      model,
+    const content = await parseGrokChatResponse(response, {
+      perfLabel: options.perfLabel,
+      model: context.model,
+      reasoningEffort: context.reasoningEffort,
       maxTokens: options.max_tokens,
-      reasoningEffort: model.includes('grok-4') ? reasoningEffort : 'n/a',
+    });
+    logPerformance(options.perfLabel || 'grok.chat', Date.now() - context.startedAt, {
+      model: context.model,
+      maxTokens: options.max_tokens,
+      reasoningEffort: context.model.includes('grok-4') ? context.reasoningEffort : 'n/a',
       outcome: 'ok',
+      transport: 'direct',
     });
     return content;
   } catch (error) {
-    logPerformance(options.perfLabel || 'grok.chat', Date.now() - startedAt, {
-      model,
+    logPerformance(options.perfLabel || 'grok.chat', Date.now() - context.startedAt, {
+      model: context.model,
       outcome: 'error',
       error: error instanceof Error ? error.message : 'unknown',
+      transport: 'direct',
     });
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Grok API timed out after ${Math.round(timeoutMs / 1000)}s`);
+      throw new Error(`Grok API timed out after ${Math.round(context.timeoutMs / 1000)}s`);
     }
     throw error;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function grokChat(messages: GrokChatMessage[], options: GrokChatOptions): Promise<string> {
+  assertGrokServerRuntime('grokChat');
+  const timeoutMs = options.timeoutMs ?? 55_000;
+  const startedAt = Date.now();
+  const { requestBody, model, reasoningEffort } = buildGrokChatRequestBody(messages, options);
+  const context = { model, reasoningEffort, timeoutMs, startedAt };
+
+  if (shouldUseApexGrokProxy()) {
+    return grokChatViaApexProxy(messages, options, requestBody, context);
+  }
+  return grokChatDirect(options, requestBody, context);
 }
 
 export interface GenerateDynamicCustomerPayNarrativeInput {
